@@ -1,22 +1,18 @@
 use egui::IconData;
+use screen_size::get_primary_screen_size;
 use std::sync::Arc;
+
 mod function;
 mod pages;
-use function::player;
-use function::MyEguiApp;
-use function::Size;
+use function::App;
 
 fn main() {
-    // // 创建 MyEguiApp 实例
-    let mut screen_size = Size::new();
-    screen_size.calculate();
-    // 访问 screen_size
-    let _ = std::thread::spawn(|| {
-        let _ = player("assets/sounds/Launch.wav".to_string());
-    });
+    let (mut width, mut height): (u64, u64) = (1280, 720);
+    if let Ok((try_catch_width, try_catch_height)) = get_primary_screen_size() {
+        (width, height) = (try_catch_width, try_catch_height);
+    }
     let mut options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([screen_size.width as f32, screen_size.width as f32]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([width as f32, height as f32]),
         ..Default::default()
     };
     let img = image::load_from_memory_with_format(
@@ -33,8 +29,8 @@ fn main() {
         height: h,
     }));
     let _ = eframe::run_native(
-        "Rust Constructor v0.1.0",
+        "Rust Constructor v0.2.0",
         options,
-        Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(App::new(cc)))),
     );
 }
