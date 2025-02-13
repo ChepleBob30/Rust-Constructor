@@ -10,6 +10,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::time::Instant;
 
+#[allow(dead_code)]
 pub fn write_to_json<P: AsRef<std::path::Path>>(path: P, config: &Config) {
     let json_value = config.to_json_value();
     let serialized = json_value.dump(); // 将 JSON 值序列化为字符串
@@ -81,12 +82,14 @@ fn load_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Config {
     pub version: String,
     pub wallpaper: String,
 }
 
+#[allow(dead_code)]
 impl Config {
     fn to_json_value(&self) -> JsonValue {
         object! {
@@ -184,6 +187,7 @@ pub enum Page {
     Update,
     NewFeatureShow,
 }
+
 #[allow(dead_code)]
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -463,7 +467,6 @@ impl App {
         );
     }
 
-    #[allow(dead_code)]
     pub fn add_text(
         &mut self,
         send_message: bool,
