@@ -1,4 +1,4 @@
-//! Rust Constructor v1.0.0
+//! Rust Constructor v1.0.1
 //! Developer: Cheple_Bob
 //! A Rust GUI frame that depends on egui.
 use egui::IconData;

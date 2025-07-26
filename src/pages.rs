@@ -1,4 +1,4 @@
-//! pages.rs is the core part of the page of the Targeted Vector, mainly the page content.
+//! pages.rs is the core part of the page of the Rust Constructor, mainly the page content.
 use crate::function::{
     general_click_feedback, kira_play_wav, App, SeverityLevel,
 };

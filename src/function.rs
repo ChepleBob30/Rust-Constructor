@@ -1,4 +1,4 @@
-//! function.rs is the functional module of the Targeted Vector, including function declarations, struct definitions, and some auxiliary content.
+//! function.rs is the functional module of the Rust Constructor, including function declarations, struct definitions, and some auxiliary content.
 use anyhow::Context;
 use eframe::emath::Rect;
 use eframe::epaint::textures::TextureOptions;
@@ -913,7 +913,9 @@ impl App {
             .iter()
             .position(|x| x.name == name)
             .unwrap_or(0);
-        self.resource_page[id].enter_page_updated
+        let return_value = self.resource_page[id].enter_page_updated;
+        self.resource_page[id].enter_page_updated = true;
+        return_value
     }
 
     pub fn new_page_update(&mut self, name: &str) {
