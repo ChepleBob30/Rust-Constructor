@@ -1,21 +1,23 @@
 # Rust Constructor
 
-## 一个强大的跨平台GUI框架
+## 一个强大的跨平台GUI框架, 用Rust开发GUI项目最简单的方式
 
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github 星星](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![版本](https://img.shields.io/badge/版本-v1.0.1-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v1.1.0-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | [简体中文](./README_zh.md)
 
 ---
 
+Rust Constructor是开源项目，但与egui开发组无直接关系！
+
 ## 目录
 
-- [创造Rust Constructor的目的](#创造Rust Constructor的目的)
-- [如何给Rust Constructor做贡献](#如何给Rust Constructor做贡献)
+- [创造Rust Constructor的目的](#创造rust-constructor的目的)
+- [如何给Rust Constructor做贡献](#如何给rust-constructor做贡献)
 - [常见问题](#常见问题)
 - [许可证](#许可证)
 - [尾声](#尾声)

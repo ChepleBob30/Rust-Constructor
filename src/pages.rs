@@ -1,7 +1,5 @@
 //! pages.rs is the core part of the page of the Rust Constructor, mainly the page content.
-use crate::function::{
-    general_click_feedback, kira_play_wav, App, SeverityLevel,
-};
+use crate::function::{general_click_feedback, kira_play_wav, App, SeverityLevel};
 use chrono::{Local, Timelike};
 use eframe::egui;
 use egui::{Color32, CornerRadius, Frame, Pos2, Shadow, Stroke};
@@ -57,7 +55,7 @@ impl eframe::App for App {
                     self.add_var("enable_debug_mode", false);
                     self.add_var("debug_fps_window", false);
                     self.add_var("debug_resource_list_window", false);
-                    self.add_var("debug_render_resource_list_window", false);
+                    self.add_var("debug_render_list_window", false);
                     self.add_var("debug_problem_window", false);
                     self.add_var("cut_to", false);
                     self.add_split_time("cut_to_animation", false);
@@ -231,13 +229,13 @@ impl eframe::App for App {
                                 ui.label(format!("{} {}: {:.2}{}", game_text["debug_frame"][self.config.language as usize].clone(), i + 1, t * 1000.0, game_text["debug_game_millisecond"][self.config.language as usize].clone()));
                             });
                     });
-                    egui::Window::new("render_resource_list")
+                    egui::Window::new("render_list")
                     .frame(self.frame)
                     .title_bar(false)
-                    .open(&mut self.var_b("debug_render_resource_list_window"))
+                    .open(&mut self.var_b("debug_render_list_window"))
                     .show(ctx, |ui| {
                         ui.vertical_centered(|ui| {
-                            ui.heading(game_text["debug_render_resource_list"][self.config.language as usize].clone());
+                            ui.heading(game_text["debug_render_list"][self.config.language as usize].clone());
                         });
                         ui.separator();
                         egui::ScrollArea::vertical()
@@ -274,7 +272,28 @@ impl eframe::App for App {
                                     .for_each(|t| {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.label(format!("{}: {}", game_text["debug_resource_page_data_forced_update"][self.config.language as usize].clone(), t.forced_update));
+                                        ui.colored_label(Color32::BLACK, format!("{}: {}", game_text["debug_resource_page_data_forced_update"][self.config.language as usize].clone(), t.forced_update));
+                                        ui.separator();
+                                    });
+                                self.resource_font
+                                    .iter()
+                                    .rev()
+                                    .take(self.resource_font.len())
+                                    .cloned()
+                                    .for_each(|t| {
+                                        ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
+                                        ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
+                                        ui.colored_label(Color32::MAGENTA, format!("{}: {}", game_text["debug_resource_font_path"][self.config.language as usize].clone(), t.path));
+                                        ui.colored_label(Color32::MAGENTA, format!("{}: ", game_text["debug_resource_font_test"][self.config.language as usize].clone()));
+                                        let mut test_text = String::new();
+                                        for i in 0..self.config.amount_languages {
+                                            test_text = format!("{}\n{}({}): {}", test_text, game_text["debug_amount_languages"][i as usize], game_text[&format!("debug_language_{}", i)][self.config.language as usize], game_text["debug_hello_world"][i as usize]);
+                                        };
+                                        ui.colored_label(
+                                            Color32::MAGENTA,
+                                            egui::RichText::new(test_text)
+                                                .family(egui::FontFamily::Name(t.name.into())) // 使用资源中定义的字体名称
+                                        );
                                         ui.separator();
                                     });
                                 self.resource_image
@@ -507,10 +526,10 @@ impl eframe::App for App {
                                     let flip = !self.var_b("debug_resource_list_window");
                                     self.modify_var("debug_resource_list_window", flip);
                                 };
-                                if ui.button(game_text["debug_render_resource_list"][self.config.language as usize].clone()).clicked() {
+                                if ui.button(game_text["debug_render_list"][self.config.language as usize].clone()).clicked() {
                                     general_click_feedback();
-                                    let flip = !self.var_b("debug_render_resource_list_window");
-                                    self.modify_var("debug_render_resource_list_window", flip);
+                                    let flip = !self.var_b("debug_render_list_window");
+                                    self.modify_var("debug_render_list_window", flip);
                                 };
                                 if ui.button(game_text["debug_problem_report"][self.config.language as usize].clone()).clicked()
                                 {
@@ -542,6 +561,11 @@ impl eframe::App for App {
                                 );
                                 ui.label(
                                     egui::WidgetText::from(format!("{}: {:.2}{}", game_text["debug_game_total_time"][self.config.language as usize].clone(), self.timer.total_time, game_text["debug_game_second"][self.config.language as usize].clone()))
+                                        .color(egui::Color32::GRAY)
+                                        .background_color(egui::Color32::from_black_alpha(220)),
+                                );
+                                ui.label(
+                                    egui::WidgetText::from(format!("{}: {}", game_text["debug_game_current_default_font"][self.config.language as usize].clone(), self.resource_font[(self.resource_font.len() - 1) as usize].name))
                                         .color(egui::Color32::GRAY)
                                         .background_color(egui::Color32::from_black_alpha(220)),
                                 );

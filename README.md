@@ -1,16 +1,18 @@
 # Rust Constructor
 
-## A powerful cross-platform GUI framework
+## A powerful cross-platform GUI framework, the easiest way to develop GUI projects in Rust
 
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github Stars](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![Version](https://img.shields.io/badge/Version-v1.0.1-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v1.1.0-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | [简体中文](./README_zh.md)
 
 ---
+
+Rust Constructor is an open-source project, but it has no direct connection with the development team of egui!
 
 ## Contents
 

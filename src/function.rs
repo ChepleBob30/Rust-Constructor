@@ -1,21 +1,13 @@
 //! function.rs is the functional module of the Rust Constructor, including function declarations, struct definitions, and some auxiliary content.
 use anyhow::Context;
-use eframe::emath::Rect;
-use eframe::epaint::textures::TextureOptions;
-use eframe::epaint::Stroke;
-use egui::{Color32, FontId, Frame, PointerButton, Pos2, Ui, Vec2};
+use eframe::{emath::Rect, epaint::textures::TextureOptions, epaint::Stroke};
+use egui::{Color32, FontData, FontDefinitions, FontId, Frame, PointerButton, Pos2, Ui, Vec2};
 use json::JsonValue;
-use kira::manager::backend::cpal;
-use kira::manager::AudioManager;
-use kira::sound::static_sound::StaticSoundData;
-use std::collections::HashMap;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use std::path::PathBuf;
-use std::time::Instant;
-use std::vec::Vec;
+use kira::{manager::backend::cpal, manager::AudioManager, sound::static_sound::StaticSoundData};
+use std::{
+    collections::HashMap, fs, fs::File, io::Read, path::Path, path::PathBuf, sync::Arc,
+    time::Instant, vec::Vec,
+};
 
 // 创建格式化的JSON文件
 #[allow(dead_code)]
@@ -136,25 +128,6 @@ pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, s
     }
 
     Ok(matches)
-}
-
-fn load_fonts(ctx: &egui::Context) {
-    let mut fonts = egui::FontDefinitions::default();
-    fonts.font_data.insert(
-        "my_font".to_owned(),
-        egui::FontData::from_static(include_bytes!("../Resources/assets/fonts/Text.ttf")).into(),
-    );
-    fonts
-        .families
-        .get_mut(&egui::FontFamily::Proportional)
-        .unwrap()
-        .insert(0, "my_font".to_owned());
-    fonts
-        .families
-        .get_mut(&egui::FontFamily::Monospace)
-        .unwrap()
-        .push("my_font".to_owned());
-    ctx.set_fonts(fonts);
 }
 
 #[derive(Debug, Clone)]
@@ -508,6 +481,31 @@ pub struct Variable {
     pub value: Value,
 }
 
+#[derive(Clone, Debug)]
+pub struct Font {
+    pub name: String,
+    pub discern_type: String,
+    pub font_definitions: FontDefinitions,
+    pub path: String,
+}
+
+impl RustConstructorResource for Font {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
+        render_list.push(RenderResource {
+            discern_type: self.expose_type().to_string(),
+            name: self.name.to_string(),
+        });
+    }
+}
+
 impl RustConstructorResource for SplitTime {
     fn name(&self) -> &str {
         &self.name
@@ -633,18 +631,18 @@ pub struct App {
     pub resource_text: Vec<Text>,
     pub resource_rect: Vec<CustomRect>,
     pub resource_scroll_background: Vec<ScrollBackground>,
-    pub timer: Timer,
-    pub variables: Vec<Variable>,
+    pub resource_message_box: Vec<MessageBox>,
     pub resource_image_texture: Vec<ImageTexture>,
     pub resource_switch: Vec<Switch>,
+    pub resource_font: Vec<Font>,
+    pub timer: Timer,
+    pub variables: Vec<Variable>,
     pub frame_times: Vec<f32>,
     pub last_frame_time: Option<f64>,
-    pub resource_message_box: Vec<MessageBox>,
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        load_fonts(&cc.egui_ctx);
+    pub fn new() -> Self {
         let mut config = Config {
             language: 0,
             amount_languages: 0,
@@ -701,6 +699,7 @@ impl App {
             resource_text: Vec::new(),
             resource_rect: Vec::new(),
             resource_scroll_background: Vec::new(),
+            resource_font: Vec::new(),
             timer: Timer {
                 start_time: 0.0,
                 total_time: 0.0,
@@ -730,6 +729,9 @@ impl App {
     }
 
     pub fn launch_page_preload(&mut self, ctx: &egui::Context) {
+        self.add_fonts("Title", "Resources/assets/fonts/Title.otf");
+        self.add_fonts("Content", "Resources/assets/fonts/Content.ttf");
+        self.register_all_fonts(ctx);
         self.add_image_texture(
             "Error",
             "Resources/assets/images/error.png",
@@ -836,6 +838,120 @@ impl App {
             true,
             ctx,
         );
+    }
+
+    pub fn add_fonts(&mut self, font_name: &str, font_path: &str) {
+        let mut fonts = FontDefinitions::default();
+        if let Ok(font_read_data) = std::fs::read(font_path) {
+            let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
+            fonts.font_data.insert(
+                font_name.to_owned(),
+                Arc::new(FontData::from_owned(
+                    Arc::try_unwrap(font_data).ok().unwrap(),
+                )),
+            );
+
+            // 将字体添加到字体列表中
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, font_name.to_owned());
+
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, font_name.to_owned());
+
+            self.resource_font.push(Font {
+                name: font_name.to_string(),
+                discern_type: "Font".to_string(),
+                font_definitions: fonts,
+                path: font_path.to_string(),
+            });
+        } else {
+            if self.config.rc_strict_mode {
+                panic!("{}: \"{}\"",
+                        self.game_text.game_text["error_font_read_failed"]
+                            [self.config.language as usize],
+                        font_path)
+            } else {
+                self.problem_report(
+                    &format!(
+                        "{}: \"{}\"",
+                        self.game_text.game_text["error_font_read_failed"]
+                            [self.config.language as usize],
+                        font_path
+                    ),
+                    SeverityLevel::SevereWarning,
+                    &self.game_text.game_text["error_font_read_failed_annotation"]
+                        [self.config.language as usize]
+                        .clone(),
+                );
+            };
+        };
+        // 应用字体定义
+        // ctx.set_fonts(fonts);
+    }
+
+    pub fn font(&mut self, name: &str) -> FontDefinitions {
+        if !self.resource_font.iter().any(|x| x.name == name) {
+            if self.config.rc_strict_mode {
+                panic!("{}: \"{}\"",
+                        self.game_text.game_text["error_font_get_failed"]
+                            [self.config.language as usize],
+                        name)
+            } else {
+                self.problem_report(
+                    &format!(
+                        "{}: \"{}\"",
+                        self.game_text.game_text["error_font_get_failed"]
+                            [self.config.language as usize],
+                        name
+                    ),
+                    SeverityLevel::SevereWarning,
+                    &self.game_text.game_text["error_font_get_failed_annotation"]
+                        [self.config.language as usize]
+                        .clone(),
+                );
+            };
+        };
+        self.resource_font[self.resource_font.iter().position(|x| x.name == name).unwrap_or(0)].font_definitions.clone()
+    }
+
+    pub fn register_all_fonts(&mut self, ctx: &egui::Context) {
+        let mut font_definitions = egui::FontDefinitions::default();
+
+        for font_resource in &self.resource_font.clone() {
+            let font_name = font_resource.name.clone();
+            // 获取字体数据（返回 FontDefinitions）
+            let font_def = self.font(&font_name);
+            // 从 font_def 中提取对应字体的 Arc<FontData>
+            if let Some(font_data) = font_def.font_data.get(&font_name) {
+                font_definitions.font_data.insert(font_name.clone(), Arc::clone(font_data));
+                font_definitions
+                    .families
+                    .entry(egui::FontFamily::Name(font_name.clone().into()))
+                    .or_default()
+                    .push(font_name.clone());
+            };
+
+            // 将字体添加到字体列表中
+            font_definitions
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, font_name.to_owned());
+
+            font_definitions
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, font_name.to_owned());
+        };
+
+        ctx.set_fonts(font_definitions);
     }
 
     pub fn fade(
@@ -2274,11 +2390,15 @@ impl App {
                     click_method: PointerButton::Primary,
                     action: true,
                 }],
-                vec![format!(
-                    "{}: \"{}\"",
-                    self.game_text.game_text["close_message_box"][self.config.language as usize],
-                    box_itself_title_content_image_name[0]
-                ), "".to_string()],
+                vec![
+                    format!(
+                        "{}: \"{}\"",
+                        self.game_text.game_text["close_message_box"]
+                            [self.config.language as usize],
+                        box_itself_title_content_image_name[0]
+                    ),
+                    "".to_string(),
+                ],
             );
         } else if self.config.rc_strict_mode {
             panic!(
@@ -2559,7 +2679,13 @@ impl App {
                 self.resource_text.remove(
                     self.resource_text
                         .iter()
-                        .position(|x| x.name == format!("MessageBox_{}_Close_hint", self.resource_message_box[i].name))
+                        .position(|x| {
+                            x.name
+                                == format!(
+                                    "MessageBox_{}_Close_hint",
+                                    self.resource_message_box[i].name
+                                )
+                        })
                         .unwrap_or(0),
                 );
                 self.resource_rect.remove(
@@ -2597,7 +2723,11 @@ impl App {
                         .split_time
                         .iter()
                         .position(|x| {
-                            x.name == format!("MessageBox_{}_Close_hint_fade_animation", self.resource_message_box[i].name)
+                            x.name
+                                == format!(
+                                    "MessageBox_{}_Close_hint_fade_animation",
+                                    self.resource_message_box[i].name
+                                )
                         })
                         .unwrap_or(0),
                 );
@@ -2606,7 +2736,11 @@ impl App {
                         .split_time
                         .iter()
                         .position(|x| {
-                            x.name == format!("MessageBox_{}_Close_start_hover_time", self.resource_message_box[i].name)
+                            x.name
+                                == format!(
+                                    "MessageBox_{}_Close_start_hover_time",
+                                    self.resource_message_box[i].name
+                                )
                         })
                         .unwrap_or(0),
                 );
@@ -2633,7 +2767,9 @@ impl App {
         if enable_hover_click_image_and_use_overlay[1] {
             count += 1;
         };
-        if appearance.len() as u32 != count * switch_amounts_state || hint_text.len() as u32 != switch_amounts_state {
+        if appearance.len() as u32 != count * switch_amounts_state
+            || hint_text.len() as u32 != switch_amounts_state
+        {
             if self.config.rc_strict_mode {
                 panic!(
                     "{}{}:{}",
@@ -2649,8 +2785,11 @@ impl App {
                         name_switch_and_image_name[0],
                         self.game_text.game_text["error_switch_vec_mismatch"]
                             [self.config.language as usize],
-                        if appearance.len() as u32 != count * switch_amounts_state { count * switch_amounts_state - appearance.len() as u32 }
-                        else { switch_amounts_state - hint_text.len() as u32 }
+                        if appearance.len() as u32 != count * switch_amounts_state {
+                            count * switch_amounts_state - appearance.len() as u32
+                        } else {
+                            switch_amounts_state - hint_text.len() as u32
+                        }
                     ),
                     SeverityLevel::MildWarning,
                     &self.game_text.game_text["error_switch_vec_mismatch_annotation"]
@@ -2662,10 +2801,10 @@ impl App {
                         texture: "Error".to_string(),
                         color: [255, 255, 255, 255],
                     });
-                };
+                }
                 for _ in 0..count * switch_amounts_state - hint_text.len() as u32 {
                     hint_text.push("Error".to_string());
-                };
+                }
             };
         };
         let id = self
@@ -2687,17 +2826,11 @@ impl App {
                 [0, 0, 0, 0],
             );
             self.add_split_time(
-                &format!(
-                    "{}_start_hover_time",
-                    name_switch_and_image_name[0]
-                ),
+                &format!("{}_start_hover_time", name_switch_and_image_name[0]),
                 false,
             );
             self.add_split_time(
-                &format!(
-                    "{}_hint_fade_animation",
-                    name_switch_and_image_name[0]
-                ),
+                &format!("{}_hint_fade_animation", name_switch_and_image_name[0]),
                 false,
             );
         };
@@ -2772,15 +2905,15 @@ impl App {
                             true,
                         );
                     } else if self.timer.total_time
-                            - self.split_time(&format!(
-                                "{}_start_hover_time",
-                                self.resource_switch[id].name
-                            ))[1]
-                            >= 2_f32 || self.resource_text[text_id].rgba[3] != 0
-                        {
-                            self.resource_text[text_id].rgba[3] = 255;
-                            self.resource_text[text_id].origin_position =
-                                [mouse_pos.x, mouse_pos.y];
+                        - self.split_time(&format!(
+                            "{}_start_hover_time",
+                            self.resource_switch[id].name
+                        ))[1]
+                        >= 2_f32
+                        || self.resource_text[text_id].rgba[3] != 0
+                    {
+                        self.resource_text[text_id].rgba[3] = 255;
+                        self.resource_text[text_id].origin_position = [mouse_pos.x, mouse_pos.y];
                     };
                     hovered = true;
                     let mut clicked = vec![];
@@ -3014,7 +3147,8 @@ impl App {
         };
         self.resource_text[text_id].background_rgb[3] = self.resource_text[text_id].rgba[3];
         self.resource_switch[id].last_time_hovered = hovered;
-        self.resource_text[text_id].text_content = self.resource_switch[id].hint_text[self.resource_switch[id].state as usize].clone();
+        self.resource_text[text_id].text_content =
+            self.resource_switch[id].hint_text[self.resource_switch[id].state as usize].clone();
         self.image(ui, &self.resource_switch[id].switch_image_name.clone(), ctx);
         self.text(ui, &self.resource_switch[id].hint_text_name.clone(), ctx);
         activated[1] = self.resource_switch[id].state as usize;
