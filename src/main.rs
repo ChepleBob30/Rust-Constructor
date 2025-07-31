@@ -1,11 +1,11 @@
-//! Rust Constructor v1.1.0
+//! Rust Constructor v1.2.0
 //! Developer: Cheple_Bob
 //! A powerful cross-platform GUI framework, the easiest way to develop GUI projects in Rust.
 use egui::IconData;
-use function::read_from_json;
 use function::App;
 use function::Config;
 use function::GameText;
+use function::read_from_json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -60,7 +60,11 @@ fn main() {
         ..Default::default()
     };
 
-    println!("{}\n{} https://github.com/ChepleBob30/Rust-Constructor :)", gametext.game_text["debug_game_version"][config.language as usize], gametext.game_text["hello"][config.language as usize]);
+    println!(
+        "{}\n{} https://github.com/ChepleBob30/Rust-Constructor :)",
+        gametext.game_text["debug_game_version"][config.language as usize],
+        gametext.game_text["hello"][config.language as usize]
+    );
 
     eframe::run_native(
     "Rust Constructor",

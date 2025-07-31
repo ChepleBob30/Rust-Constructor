@@ -1,9 +1,10 @@
 //! pages.rs is the core part of the page of the Rust Constructor, mainly the page content.
-use crate::function::{general_click_feedback, kira_play_wav, App, SeverityLevel};
+use crate::function::{App, SeverityLevel, general_click_feedback, play_wav};
 use chrono::{Local, Timelike};
 use eframe::egui;
 use egui::{Color32, CornerRadius, Frame, Pos2, Shadow, Stroke};
-use std::vec::Vec;
+use std::{process::exit, thread, vec::Vec};
+use tray_icon::menu::MenuEvent;
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -48,6 +49,30 @@ impl eframe::App for App {
         };
         let game_text = self.game_text.game_text.clone();
         self.update_timer();
+        if self.tray_icon_created {
+            if let Ok(MenuEvent { id }) = MenuEvent::receiver().try_recv() {
+                #[cfg(target_os = "macos")]
+                match id.0.as_str() {
+                    "3" => {
+                        thread::spawn(|| {
+                            play_wav("Resources/assets/sounds/Notification.wav").unwrap();
+                        });
+                    }
+                    "4" => exit(0),
+                    _ => {}
+                }
+                #[cfg(target_os = "windows")]
+                match id.0.as_str() {
+                    "1001" => {
+                        thread::spawn(|| {
+                            play_wav("Resources/assets/sounds/Notification.wav").unwrap();
+                        });
+                    }
+                    "1002" => exit(0),
+                    _ => {}
+                }
+            };
+        };
         match &*self.page.clone() {
             "Launch" => {
                 if !self.check_updated(&self.page.clone()) {
@@ -186,7 +211,7 @@ impl eframe::App for App {
                             .clone(),
                     );
                     std::thread::spawn(|| {
-                        kira_play_wav("Resources/assets/sounds/Error.wav").unwrap();
+                        play_wav("Resources/assets/sounds/Error.wav").unwrap();
                     });
                     self.switch_page("Error");
                 };
@@ -202,7 +227,7 @@ impl eframe::App for App {
             .show(ctx, |ui| {
                 if ctx.input(|i| i.key_pressed(egui::Key::F3)) && self.config.enable_debug_mode {
                     std::thread::spawn(|| {
-                        kira_play_wav("Resources/assets/sounds/Notification.wav").unwrap();
+                        play_wav("Resources/assets/sounds/Notification.wav").unwrap();
                     });
                     let enable_debug_mode = self.var_b("enable_debug_mode");
                     self.modify_var("enable_debug_mode", !enable_debug_mode);
@@ -565,7 +590,7 @@ impl eframe::App for App {
                                         .background_color(egui::Color32::from_black_alpha(220)),
                                 );
                                 ui.label(
-                                    egui::WidgetText::from(format!("{}: {}", game_text["debug_game_current_default_font"][self.config.language as usize].clone(), self.resource_font[(self.resource_font.len() - 1) as usize].name))
+                                    egui::WidgetText::from(format!("{}: {}", game_text["debug_game_current_default_font"][self.config.language as usize].clone(), self.resource_font[self.resource_font.len() - 1].name))
                                         .color(egui::Color32::GRAY)
                                         .background_color(egui::Color32::from_black_alpha(220)),
                                 );

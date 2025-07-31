@@ -1,17 +1,46 @@
 //! function.rs is the functional module of the Rust Constructor, including function declarations, struct definitions, and some auxiliary content.
 use anyhow::Context;
-use eframe::{emath::Rect, epaint::textures::TextureOptions, epaint::Stroke};
+use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
 use egui::{Color32, FontData, FontDefinitions, FontId, Frame, PointerButton, Pos2, Ui, Vec2};
 use json::JsonValue;
-use kira::{manager::backend::cpal, manager::AudioManager, sound::static_sound::StaticSoundData};
-use std::{
-    collections::HashMap, fs, fs::File, io::Read, path::Path, path::PathBuf, sync::Arc,
-    time::Instant, vec::Vec,
+use kira::{
+    manager::{AudioManager, backend::cpal},
+    sound::static_sound::StaticSoundData,
 };
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+    vec::Vec,
+};
+use tray_icon::{
+    Icon, TrayIconBuilder,
+    menu::{
+        Menu, MenuItem, PredefinedMenuItem,
+        accelerator::{Accelerator, Modifiers},
+    },
+};
+
+// import for macos status bar.
+
+// #[cfg(target_os = "macos")]
+// use objc2::sel;
+// #[cfg(target_os = "macos")]
+// use objc2_app_kit::{NSStatusItem};
+
+pub fn load_icon_from_file(path: &str) -> Result<Icon, Box<dyn std::error::Error>> {
+    let image = image::open(path)?.into_rgba8();
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+    Ok(Icon::from_rgba(rgba, width, height)?)
+}
 
 // 创建格式化的JSON文件
 #[allow(dead_code)]
-pub fn create_pretty_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
+pub fn create_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
     let parent_dir = path
         .as_ref()
         .parent()
@@ -38,7 +67,7 @@ pub fn copy_and_reformat_json<P: AsRef<Path>>(src: P, dest: P) -> anyhow::Result
     let parsed = json::parse(&content)?;
 
     // 使用格式化写入新文件
-    create_pretty_json(dest, parsed)?;
+    create_json(dest, parsed)?;
 
     Ok(())
 }
@@ -74,12 +103,11 @@ pub fn read_from_json<P: AsRef<Path>>(path: P) -> anyhow::Result<JsonValue> {
     json::parse(&content).with_context(|| format!("解析 JSON 失败: {}", path.as_ref().display()))
 }
 
-pub fn kira_play_wav(path: &str) -> anyhow::Result<f64> {
+pub fn play_wav(path: &str) -> anyhow::Result<f64> {
     let mut manager: kira::manager::AudioManager<cpal::CpalBackend> =
         AudioManager::new(kira::manager::AudioManagerSettings::default())?;
     let sound_data = StaticSoundData::from_file(path, Default::default())?;
     let duration = sound_data.duration().as_secs_f64();
-
     manager.play(sound_data)?;
     std::thread::sleep(std::time::Duration::from_secs_f64(duration));
     Ok(duration)
@@ -87,7 +115,7 @@ pub fn kira_play_wav(path: &str) -> anyhow::Result<f64> {
 
 pub fn general_click_feedback() {
     std::thread::spawn(|| {
-        kira_play_wav("Resources/assets/sounds/Click.wav").unwrap();
+        play_wav("Resources/assets/sounds/Click.wav").unwrap();
     });
 }
 
@@ -639,6 +667,8 @@ pub struct App {
     pub variables: Vec<Variable>,
     pub frame_times: Vec<f32>,
     pub last_frame_time: Option<f64>,
+    pub tray_icon: Option<tray_icon::TrayIcon>,
+    pub tray_icon_created: bool,
 }
 
 impl App {
@@ -713,8 +743,70 @@ impl App {
             frame_times: Vec::new(),
             last_frame_time: None,
             resource_message_box: Vec::new(),
+            tray_icon: None,
+            tray_icon_created: false,
         }
     }
+
+    // Dangerous!
+
+    // #[cfg(target_os = "macos")]
+    // pub fn create_macos_status_bar(&mut self) {
+    //     // 不再使用线程，因为需要访问 self
+    //     unsafe {
+    //         use objc2::{MainThreadMarker, MainThreadOnly};
+    //         use objc2_foundation::{NSString};
+    //         use objc2_app_kit::{NSApp, NSMenu, NSMenuItem};
+
+    //         // 获取主应用菜单
+    //         let main_menu = NSMenu::new(MainThreadMarker::new().unwrap());
+
+    //         // 创建 RC 菜单标题
+    //         let rc_menu_title = NSString::from_str("RC");
+    //         let rc_menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(
+    //             NSMenuItem::alloc(MainThreadMarker::new().unwrap()),
+    //             &rc_menu_title,
+    //             None,
+    //             &NSString::from_str(""),
+    //         );
+
+    //         // 创建 RC 菜单
+    //         let rc_menu = NSMenu::new(MainThreadMarker::new().unwrap());
+
+    //         // 创建"播放提示音效"菜单项，不设置 action，稍后通过其他方式处理
+    //         let play_sound_title = NSString::from_str("播放提示音效");
+    //         let play_sound_item = NSMenuItem::initWithTitle_action_keyEquivalent(
+    //             NSMenuItem::alloc(MainThreadMarker::new().unwrap()),
+    //             &play_sound_title,
+    //             Some(sel!(play_sound)), // 暂时不设置 action
+    //             &NSString::from_str(""),
+    //         );
+    //         rc_menu.addItem(&play_sound_item);
+
+    //         // 添加分隔符
+    //         let separator = NSMenuItem::separatorItem(MainThreadMarker::new().unwrap());
+    //         rc_menu.addItem(&separator);
+
+    //         // 创建"退出"菜单项
+    //         let quit_title = NSString::from_str("退出");
+    //         let quit_item = NSMenuItem::initWithTitle_action_keyEquivalent(
+    //             NSMenuItem::alloc(MainThreadMarker::new().unwrap()),
+    //             &quit_title,
+    //             Some(sel!(terminate:)),
+    //             &NSString::from_str(""),
+    //         );
+    //         rc_menu.addItem(&quit_item);
+
+    //         // 将 RC 菜单设置到 RC 菜单项
+    //         rc_menu_item.setSubmenu(Some(&rc_menu));
+
+    //         // 将 RC 菜单项添加到主菜单
+    //         main_menu.addItem(&rc_menu_item);
+
+    //         // 将主菜单设置为应用的主菜单
+    //         NSApp(MainThreadMarker::new().unwrap()).setMainMenu(Some(&main_menu));
+    //     }
+    // }
 
     pub fn switch_page(&mut self, page: &str) {
         self.page = page.to_string();
@@ -729,6 +821,39 @@ impl App {
     }
 
     pub fn launch_page_preload(&mut self, ctx: &egui::Context) {
+        let icon = load_icon_from_file("Resources/assets/images/tray_icon.png").unwrap();
+        // 创建菜单
+        let tray_menu = Menu::new();
+        let show_window_item = MenuItem::new("播放提示音效！", true, None);
+        let quit_item = MenuItem::new(
+            "退出",
+            true,
+            Some(Accelerator::new(
+                Some(Modifiers::SUPER),
+                tray_icon::menu::accelerator::Code::KeyQ,
+            )),
+        );
+        tray_menu
+            .append_items(&[
+                &show_window_item,
+                &PredefinedMenuItem::separator(),
+                &quit_item,
+            ])
+            .unwrap();
+        match TrayIconBuilder::new()
+            .with_menu(Box::new(tray_menu))
+            .with_tooltip("Rust Constructor")
+            .with_icon(icon)
+            .build()
+        {
+            Ok(tray_icon) => {
+                self.tray_icon = Some(tray_icon);
+                self.tray_icon_created = true;
+            }
+            Err(e) => {
+                eprintln!("Failed to create tray icon: {}", e);
+            }
+        };
         self.add_fonts("Title", "Resources/assets/fonts/Title.otf");
         self.add_fonts("Content", "Resources/assets/fonts/Content.ttf");
         self.register_all_fonts(ctx);
@@ -777,7 +902,7 @@ impl App {
             0.0,
         );
         std::thread::spawn(|| {
-            kira_play_wav("Resources/assets/sounds/Launch.wav").unwrap();
+            play_wav("Resources/assets/sounds/Launch.wav").unwrap();
         });
         self.add_rect(
             "Error_Pages_Background",
@@ -870,26 +995,25 @@ impl App {
                 font_definitions: fonts,
                 path: font_path.to_string(),
             });
+        } else if self.config.rc_strict_mode {
+            panic!(
+                "{}: \"{}\"",
+                self.game_text.game_text["error_font_read_failed"][self.config.language as usize],
+                font_path
+            )
         } else {
-            if self.config.rc_strict_mode {
-                panic!("{}: \"{}\"",
-                        self.game_text.game_text["error_font_read_failed"]
-                            [self.config.language as usize],
-                        font_path)
-            } else {
-                self.problem_report(
-                    &format!(
-                        "{}: \"{}\"",
-                        self.game_text.game_text["error_font_read_failed"]
-                            [self.config.language as usize],
-                        font_path
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_font_read_failed_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            };
+            self.problem_report(
+                &format!(
+                    "{}: \"{}\"",
+                    self.game_text.game_text["error_font_read_failed"]
+                        [self.config.language as usize],
+                    font_path
+                ),
+                SeverityLevel::SevereWarning,
+                &self.game_text.game_text["error_font_read_failed_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            );
         };
         // 应用字体定义
         // ctx.set_fonts(fonts);
@@ -898,10 +1022,12 @@ impl App {
     pub fn font(&mut self, name: &str) -> FontDefinitions {
         if !self.resource_font.iter().any(|x| x.name == name) {
             if self.config.rc_strict_mode {
-                panic!("{}: \"{}\"",
-                        self.game_text.game_text["error_font_get_failed"]
-                            [self.config.language as usize],
-                        name)
+                panic!(
+                    "{}: \"{}\"",
+                    self.game_text.game_text["error_font_get_failed"]
+                        [self.config.language as usize],
+                    name
+                )
             } else {
                 self.problem_report(
                     &format!(
@@ -917,7 +1043,13 @@ impl App {
                 );
             };
         };
-        self.resource_font[self.resource_font.iter().position(|x| x.name == name).unwrap_or(0)].font_definitions.clone()
+        self.resource_font[self
+            .resource_font
+            .iter()
+            .position(|x| x.name == name)
+            .unwrap_or(0)]
+        .font_definitions
+        .clone()
     }
 
     pub fn register_all_fonts(&mut self, ctx: &egui::Context) {
@@ -929,7 +1061,9 @@ impl App {
             let font_def = self.font(&font_name);
             // 从 font_def 中提取对应字体的 Arc<FontData>
             if let Some(font_data) = font_def.font_data.get(&font_name) {
-                font_definitions.font_data.insert(font_name.clone(), Arc::clone(font_data));
+                font_definitions
+                    .font_data
+                    .insert(font_name.clone(), Arc::clone(font_data));
                 font_definitions
                     .families
                     .entry(egui::FontFamily::Name(font_name.clone().into()))
@@ -949,7 +1083,7 @@ impl App {
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
                 .insert(0, font_name.to_owned());
-        };
+        }
 
         ctx.set_fonts(font_definitions);
     }
@@ -995,7 +1129,7 @@ impl App {
         annotation: &str,
     ) {
         std::thread::spawn(|| {
-            kira_play_wav("Resources/assets/sounds/Error.wav").unwrap();
+            play_wav("Resources/assets/sounds/Error.wav").unwrap();
         });
         self.problem_list.push(Problem {
             severity_level,
