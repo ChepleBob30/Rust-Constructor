@@ -1,5 +1,5 @@
 //! pages.rs is the core part of the page of the Rust Constructor, mainly the page content.
-use crate::function::{App, SeverityLevel, general_click_feedback, play_wav};
+use crate::function::{general_click_feedback, play_wav, App, SeverityLevel, RCR};
 use chrono::{Local, Timelike};
 use eframe::egui;
 use egui::{Color32, CornerRadius, Frame, Pos2, Shadow, Stroke};
@@ -75,7 +75,7 @@ impl eframe::App for App {
         };
         match &*self.page.clone() {
             "Launch" => {
-                if !self.check_updated(&self.page.clone()) {
+                if !self.check_updated(&self.page.clone()).unwrap() {
                     self.launch_page_preload(ctx);
                     self.add_var("enable_debug_mode", false);
                     self.add_var("debug_fps_window", false);
@@ -86,14 +86,12 @@ impl eframe::App for App {
                     self.add_split_time("cut_to_animation", false);
                     self.add_split_time("launch_time", false);
                 };
-                self.check_enter_updated(&self.page.clone());
-                let rect_id = self
-                    .resource_rect
-                    .iter()
-                    .position(|x| x.name == "Launch_Background")
-                    .unwrap_or(0);
-                self.resource_rect[rect_id].size =
-                    [ctx.available_rect().width(), ctx.available_rect().height()];
+                self.check_enter_updated(&self.page.clone()).unwrap();
+                if let Ok(id) = self.get_resource_index("CustomRect", "Launch_Background") {
+                    if let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id] {
+                        cr.size = [ctx.available_rect().width(), ctx.available_rect().height()];
+                    };
+                };
                 egui::CentralPanel::default().show(ctx, |ui| {
                     self.rect(ui, "Launch_Background", ctx);
                     self.image(ui, "RC_Logo", ctx);
@@ -123,13 +121,13 @@ impl eframe::App for App {
                                 x: ctx.available_rect().width() / 2_f32 - 98_f32
                                     + 196_f32
                                         * ((self.timer.now_time
-                                            - self.split_time("launch_time")[0])
+                                            - self.split_time("launch_time").unwrap()[0])
                                             / if self.timer.now_time
-                                                - self.split_time("launch_time")[0]
+                                                - self.split_time("launch_time").unwrap()[0]
                                                 > 6_f32
                                             {
                                                 self.timer.now_time
-                                                    - self.split_time("launch_time")[0]
+                                                    - self.split_time("launch_time").unwrap()[0]
                                             } else {
                                                 6_f32
                                             }),
@@ -142,8 +140,8 @@ impl eframe::App for App {
                         },
                     );
                     self.message_box_display(ctx, ui);
-                    if self.timer.now_time - self.split_time("launch_time")[0] >= 6_f32
-                        && self.fade(true, ctx, ui, "cut_to_animation", "Cut_To_Background", 10)
+                    if self.timer.now_time - self.split_time("launch_time").unwrap()[0] >= 6_f32
+                        && self.fade(true, ctx, ui, "cut_to_animation", "Cut_To_Background", 10).unwrap()
                             == 255
                     {
                         self.switch_page("Demo_Desktop");
@@ -152,36 +150,30 @@ impl eframe::App for App {
                 });
             }
             "Demo_Desktop" => {
-                self.check_updated(&self.page.clone());
-                self.check_enter_updated(&self.page.clone());
+                self.check_updated(&self.page.clone()).unwrap();
+                self.check_enter_updated(&self.page.clone()).unwrap();
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    self.fade(false, ctx, ui, "cut_to_animation", "Cut_To_Background", 10);
+                    self.fade(false, ctx, ui, "cut_to_animation", "Cut_To_Background", 10).unwrap();
                     self.message_box_display(ctx, ui);
                 });
             }
             "Error" => {
-                self.check_updated(&self.page.clone());
-                let id = self
-                    .resource_text
-                    .iter()
-                    .position(|x| x.name == "Error_Pages_Reason")
-                    .unwrap_or(0);
-                let id2 = self
-                    .resource_text
-                    .iter()
-                    .position(|x| x.name == "Error_Pages_Solution")
-                    .unwrap_or(0);
-                let id3 = self
-                    .resource_rect
-                    .iter()
-                    .position(|x| x.name == "Error_Pages_Background")
-                    .unwrap_or(0);
-                self.resource_text[id].text_content =
-                    game_text["error_pages_reason"][self.config.language as usize].clone();
-                self.resource_text[id2].text_content =
-                    game_text["error_pages_solution"][self.config.language as usize].clone();
-                self.resource_rect[id3].size =
-                    [ctx.available_rect().width(), ctx.available_rect().height()];
+                self.check_updated(&self.page.clone()).unwrap();
+                if let Ok(id) = self.get_resource_index("Text", "Error_Pages_Reason") {
+                    if let RCR::Text(t) = &mut self.rust_constructor_resource[id].clone() {
+                        t.text_content = game_text["error_pages_reason"][self.config.language as usize].clone();
+                    };
+                };
+                if let Ok(id) = self.get_resource_index("Text", "Error_Pages_Solution") {
+                    if let RCR::Text(t) = &mut self.rust_constructor_resource[id].clone() {
+                        t.text_content = game_text["error_pages_solution"][self.config.language as usize].clone();
+                    };
+                };
+                if let Ok(id) = self.get_resource_index("CustomRect", "Error_Pages_Background") {
+                    if let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id].clone() {
+                        cr.size = [ctx.available_rect().width(), ctx.available_rect().height()];
+                    };
+                };
                 egui::CentralPanel::default().show(ctx, |ui| {
                     self.rect(ui, "Error_Pages_Background", ctx);
                     self.text(ui, "Error_Pages_Sorry", ctx);
@@ -229,14 +221,14 @@ impl eframe::App for App {
                     std::thread::spawn(|| {
                         play_wav("Resources/assets/sounds/Notification.wav").unwrap();
                     });
-                    let enable_debug_mode = self.var_b("enable_debug_mode");
+                    let enable_debug_mode = self.var_b("enable_debug_mode").unwrap();
                     self.modify_var("enable_debug_mode", !enable_debug_mode);
                 };
-                if self.var_b("enable_debug_mode") {
+                if self.var_b("enable_debug_mode").unwrap() {
                     egui::Window::new("performance")
                     .frame(self.frame)
                     .title_bar(false)
-                    .open(&mut self.var_b("debug_fps_window"))
+                    .open(&mut self.var_b("debug_fps_window").unwrap())
                     .show(ctx, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.heading(game_text["debug_frame_number_details"][self.config.language as usize].clone());
@@ -257,7 +249,7 @@ impl eframe::App for App {
                     egui::Window::new("render_list")
                     .frame(self.frame)
                     .title_bar(false)
-                    .open(&mut self.var_b("debug_render_list_window"))
+                    .open(&mut self.var_b("debug_render_list_window").unwrap())
                     .show(ctx, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.heading(game_text["debug_render_list"][self.config.language as usize].clone());
@@ -280,8 +272,75 @@ impl eframe::App for App {
                     egui::Window::new("resource_list")
                     .frame(self.frame)
                     .title_bar(false)
-                    .open(&mut self.var_b("debug_resource_list_window"))
+                    .open(&mut self.var_b("debug_resource_list_window").unwrap())
                     .show(ctx, |ui| {
+                        self.rust_constructor_resource.sort_by(|a, b| {
+                            // 首先按类型排序
+                            let type_a = match a {
+                                RCR::Image(_) => 0,
+                                RCR::Text(_) => 1,
+                                RCR::CustomRect(_) => 2,
+                                RCR::ScrollBackground(_) => 3,
+                                RCR::Variable(_) => 4,
+                                RCR::Font(_) => 5,
+                                RCR::SplitTime(_) => 6,
+                                RCR::Switch(_) => 7,
+                                RCR::MessageBox(_) => 8,
+                                RCR::ImageTexture(_) => 9,
+                                RCR::PageData(_) => 10,
+                            };
+                            
+                            let type_b = match b {
+                                RCR::Image(_) => 0,
+                                RCR::Text(_) => 1,
+                                RCR::CustomRect(_) => 2,
+                                RCR::ScrollBackground(_) => 3,
+                                RCR::Variable(_) => 4,
+                                RCR::Font(_) => 5,
+                                RCR::SplitTime(_) => 6,
+                                RCR::Switch(_) => 7,
+                                RCR::MessageBox(_) => 8,
+                                RCR::ImageTexture(_) => 9,
+                                RCR::PageData(_) => 10,
+                            };
+                            
+                            // 如果类型不同，按类型排序
+                            match type_a.cmp(&type_b) {
+                                std::cmp::Ordering::Equal => {
+                                    // 如果类型相同，按名称排序
+                                    let name_a = match a {
+                                        RCR::Image(img) => &img.name,
+                                        RCR::Text(txt) => &txt.name,
+                                        RCR::CustomRect(rect) => &rect.name,
+                                        RCR::ScrollBackground(bg) => &bg.name,
+                                        RCR::Variable(var) => &var.name,
+                                        RCR::Font(font) => &font.name,
+                                        RCR::SplitTime(st) => &st.name,
+                                        RCR::Switch(sw) => &sw.name,
+                                        RCR::MessageBox(mb) => &mb.name,
+                                        RCR::ImageTexture(it) => &it.name,
+                                        RCR::PageData(pd) => &pd.name,
+                                    };
+                                    
+                                    let name_b = match b {
+                                        RCR::Image(img) => &img.name,
+                                        RCR::Text(txt) => &txt.name,
+                                        RCR::CustomRect(rect) => &rect.name,
+                                        RCR::ScrollBackground(bg) => &bg.name,
+                                        RCR::Variable(var) => &var.name,
+                                        RCR::Font(font) => &font.name,
+                                        RCR::SplitTime(st) => &st.name,
+                                        RCR::Switch(sw) => &sw.name,
+                                        RCR::MessageBox(mb) => &mb.name,
+                                        RCR::ImageTexture(it) => &it.name,
+                                        RCR::PageData(pd) => &pd.name,
+                                    };
+                                    
+                                    name_a.cmp(name_b)
+                                },
+                                other => other,
+                            }
+                        });
                         ui.vertical_centered(|ui| {
                             ui.heading(game_text["debug_all_resource_list"][self.config.language as usize].clone());
                         });
@@ -290,22 +349,21 @@ impl eframe::App for App {
                         .max_height(ctx.available_rect().height() - 100.0)
                         .max_width(ctx.available_rect().width() - 100.0)
                         .show(ui, |ui| {
-                                self.resource_page
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_page.len())
-                                    .for_each(|t| {
+                            for i in 0..self.rust_constructor_resource.len() {
+                                match self.rust_constructor_resource[i].clone() {
+                                    RCR::CustomRect(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(Color32::BLACK, format!("{}: {}", game_text["debug_resource_page_data_forced_update"][self.config.language as usize].clone(), t.forced_update));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {:#?}", game_text["debug_resource_position"][self.config.language as usize].clone(), t.position));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {:#?}", game_text["debug_resource_size"][self.config.language as usize].clone(), t.size));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {:#?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {}", game_text["debug_resource_rect_rounding"][self.config.language as usize].clone(), t.rounding));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {:#?}", game_text["debug_resource_color"][self.config.language as usize].clone(), t.color));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {}", game_text["debug_resource_rect_border_width"][self.config.language as usize].clone(), t.border_width));
+                                        ui.colored_label(egui::Color32::CYAN, format!("{}: {:#?}", game_text["debug_resource_rect_border_color"][self.config.language as usize].clone(), t.border_color));
                                         ui.separator();
-                                    });
-                                self.resource_font
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_font.len())
-                                    .cloned()
-                                    .for_each(|t| {
+                                    }
+                                    RCR::Font(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
                                         ui.colored_label(Color32::MAGENTA, format!("{}: {}", game_text["debug_resource_font_path"][self.config.language as usize].clone(), t.path));
@@ -320,159 +378,119 @@ impl eframe::App for App {
                                                 .family(egui::FontFamily::Name(t.name.into())) // 使用资源中定义的字体名称
                                         );
                                         ui.separator();
-                                    });
-                                self.resource_image
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_image.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::Image(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::RED, format!("{}: {:?}", game_text["debug_resource_size"][self.config.language as usize].clone(), t.image_size));
-                                        ui.colored_label(egui::Color32::RED, format!("{}: {:?}", game_text["debug_resource_position"][self.config.language as usize].clone(), t.image_position));
-                                        ui.colored_label(egui::Color32::RED, format!("{}: {:?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
-                                        ui.colored_label(egui::Color32::RED, format!("{}: {:?}", game_text["debug_resource_alpha"][self.config.language as usize].clone(), t.alpha));
+                                        ui.colored_label(egui::Color32::RED, format!("{}: {:#?}", game_text["debug_resource_size"][self.config.language as usize].clone(), t.image_size));
+                                        ui.colored_label(egui::Color32::RED, format!("{}: {:#?}", game_text["debug_resource_position"][self.config.language as usize].clone(), t.image_position));
+                                        ui.colored_label(egui::Color32::RED, format!("{}: {:#?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
+                                        ui.colored_label(egui::Color32::RED, format!("{}: {}", game_text["debug_resource_alpha"][self.config.language as usize].clone(), t.alpha));
                                         if t.use_overlay_color {
-                                            ui.colored_label(egui::Color32::RED, format!("{}: {:?}", game_text["debug_resource_image_overlay"][self.config.language as usize].clone(), t.overlay_color));
+                                            ui.colored_label(egui::Color32::RED, format!("{}: {:#?}", game_text["debug_resource_image_overlay"][self.config.language as usize].clone(), t.overlay_color));
                                         };
-                                        ui.colored_label(egui::Color32::RED, format!("{}: {:?}", game_text["debug_resource_origin_cite_texture"][self.config.language as usize].clone(), t.origin_cite_texture));
+                                        ui.colored_label(egui::Color32::RED, format!("{}: {}", game_text["debug_resource_origin_cite_texture"][self.config.language as usize].clone(), t.origin_cite_texture));
                                         ui.separator();
-                                    });
-                                self.resource_text
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_text.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::ImageTexture(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_text_content"][self.config.language as usize].clone(), t.text_content));
-                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_size"][self.config.language as usize].clone(), t.font_size));
-                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_position"][self.config.language as usize].clone(), t.position));
-                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
-                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_text_wrap_width"][self.config.language as usize].clone(), t.wrap_width));
-                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_color"][self.config.language as usize].clone(), t.rgba));
-                                        if t.write_background {
-                                            ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_text_background_color"][self.config.language as usize].clone(), t.background_rgb));
-                                            ui.colored_label(egui::Color32::BLUE, format!("{}: {:?}", game_text["debug_resource_text_background_rounding"][self.config.language as usize].clone(), t.rounding));
+                                        ui.colored_label(egui::Color32::GRAY, format!("{}: {}", game_text["debug_resource_image_path"][self.config.language as usize].clone(), t.cite_path));
+                                        ui.separator();
+                                    }
+                                    RCR::MessageBox(t) => {
+                                        ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
+                                        ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:#?}", game_text["debug_resource_message_box_size"][self.config.language as usize].clone(), t.box_size));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_content_name"][self.config.language as usize].clone(), t.box_content_name));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_title_name"][self.config.language as usize].clone(), t.box_title_name));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_image_name"][self.config.language as usize].clone(), t.box_image_name));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_keep_existing"][self.config.language as usize].clone(), t.box_keep_existing));
+                                        if !t.box_keep_existing {
+                                            ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_existing_time"][self.config.language as usize].clone(), t.box_existing_time));
                                         };
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_exist"][self.config.language as usize].clone(), t.box_exist));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_speed"][self.config.language as usize].clone(), t.box_speed));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_restore_speed"][self.config.language as usize].clone(), t.box_restore_speed));
+                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {}", game_text["debug_resource_message_box_memory_offset"][self.config.language as usize].clone(), t.box_memory_offset));
                                         ui.separator();
-                                    });
-                                self.resource_rect
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_rect.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::PageData(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_position"][self.config.language as usize].clone(), t.position));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_size"][self.config.language as usize].clone(), t.size));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_rect_rounding"][self.config.language as usize].clone(), t.rounding));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_color"][self.config.language as usize].clone(), t.color));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_rect_border_width"][self.config.language as usize].clone(), t.border_width));
-                                        ui.colored_label(egui::Color32::YELLOW, format!("{}: {:?}", game_text["debug_resource_rect_border_color"][self.config.language as usize].clone(), t.border_color));
+                                        ui.colored_label(Color32::BLACK, format!("{}: {}", game_text["debug_resource_page_data_forced_update"][self.config.language as usize].clone(), t.forced_update));
                                         ui.separator();
-                                    });
-                                self.resource_scroll_background
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_scroll_background.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::ScrollBackground(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_all_image_name"][self.config.language as usize].clone(), t.image_name));
-                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_scroll_horizontal"][self.config.language as usize].clone(), t.horizontal_or_vertical));
+                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {:#?}", game_text["debug_resource_all_image_name"][self.config.language as usize].clone(), t.image_name));
+                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {}", game_text["debug_resource_scroll_horizontal"][self.config.language as usize].clone(), t.horizontal_or_vertical));
                                         if t.horizontal_or_vertical {
-                                            ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_scroll_left"][self.config.language as usize].clone(), t.left_and_top_or_right_and_bottom));
+                                            ui.colored_label(egui::Color32::GREEN, format!("{}: {}", game_text["debug_resource_scroll_left"][self.config.language as usize].clone(), t.left_and_top_or_right_and_bottom));
                                         } else {
-                                            ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_scroll_top"][self.config.language as usize].clone(), t.left_and_top_or_right_and_bottom));
+                                            ui.colored_label(egui::Color32::GREEN, format!("{}: {}", game_text["debug_resource_scroll_top"][self.config.language as usize].clone(), t.left_and_top_or_right_and_bottom));
                                         };
-                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_scroll_speed"][self.config.language as usize].clone(), t.scroll_speed));
-                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_scroll_boundary"][self.config.language as usize].clone(), t.boundary));
-                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {:?}", game_text["debug_resource_scroll_resume_point"][self.config.language as usize].clone(), t.resume_point));
+                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {}", game_text["debug_resource_scroll_speed"][self.config.language as usize].clone(), t.scroll_speed));
+                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {}", game_text["debug_resource_scroll_boundary"][self.config.language as usize].clone(), t.boundary));
+                                        ui.colored_label(egui::Color32::GREEN, format!("{}: {}", game_text["debug_resource_scroll_resume_point"][self.config.language as usize].clone(), t.resume_point));
                                         ui.separator();
-                                    });
-                                self.timer.split_time
-                                    .iter()
-                                    .rev()
-                                    .take(self.timer.split_time.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::SplitTime(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::KHAKI, format!("{}: {:?}", game_text["debug_resource_split_time_single_page"][self.config.language as usize].clone(), t.time[0]));
-                                        ui.colored_label(egui::Color32::KHAKI, format!("{}: {:?}", game_text["debug_resource_split_time_total"][self.config.language as usize].clone(), t.time[1]));
+                                        ui.colored_label(egui::Color32::KHAKI, format!("{}: {}", game_text["debug_resource_split_time_single_page"][self.config.language as usize].clone(), t.time[0]));
+                                        ui.colored_label(egui::Color32::KHAKI, format!("{}: {}", game_text["debug_resource_split_time_total"][self.config.language as usize].clone(), t.time[1]));
                                         ui.separator();
-                                    });
-                                self.variables
-                                    .iter()
-                                    .rev()
-                                    .take(self.variables.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::Switch(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::GOLD, format!("{}: {:?}", game_text["debug_resource_variable_value"][self.config.language as usize].clone(), t.value));
-                                        ui.separator();
-                                    });
-                                self.resource_image_texture
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_image_texture.len())
-                                    .for_each(|t| {
-                                        ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
-                                        ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::GRAY, format!("{}: {:?}", game_text["debug_resource_image_path"][self.config.language as usize].clone(), t.cite_path));
-                                        ui.separator();
-                                    });
-                                self.resource_switch
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_switch.len())
-                                    .for_each(|t| {
-                                        ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
-                                        ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_image_name"][self.config.language as usize].clone(), t.switch_image_name));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_enable_hover_animation"][self.config.language as usize].clone(), t.enable_hover_click_image[0]));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_enable_click_animation"][self.config.language as usize].clone(), t.enable_hover_click_image[1]));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_state"][self.config.language as usize].clone(), t.state));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_appearance"][self.config.language as usize].clone(), t.appearance));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_click_method"][self.config.language as usize].clone(), t.click_method));
-                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_click_state"][self.config.language as usize].clone(), t.last_time_clicked));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_image_name"][self.config.language as usize].clone(), t.switch_image_name));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_enable_hover_animation"][self.config.language as usize].clone(), t.enable_hover_click_image[0]));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_enable_click_animation"][self.config.language as usize].clone(), t.enable_hover_click_image[1]));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_state"][self.config.language as usize].clone(), t.state));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:#?}", game_text["debug_resource_switch_appearance"][self.config.language as usize].clone(), t.appearance));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {:#?}", game_text["debug_resource_switch_click_method"][self.config.language as usize].clone(), t.click_method));
+                                        ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_click_state"][self.config.language as usize].clone(), t.last_time_clicked));
                                         if t.last_time_clicked {
-                                            ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_clicked_method"][self.config.language as usize].clone(), t.last_time_clicked_index));
+                                            ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_clicked_method"][self.config.language as usize].clone(), t.last_time_clicked_index));
                                         };
                                         if !t.hint_text.is_empty() {
-                                            ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_hint_text"][self.config.language as usize].clone(), t.hint_text));
-                                            ui.colored_label(egui::Color32::ORANGE, format!("{}: {:?}", game_text["debug_resource_switch_hint_text_name"][self.config.language as usize].clone(), t.hint_text_name));
+                                            ui.colored_label(egui::Color32::ORANGE, format!("{}: {:#?}", game_text["debug_resource_switch_hint_text"][self.config.language as usize].clone(), t.hint_text));
+                                            ui.colored_label(egui::Color32::ORANGE, format!("{}: {}", game_text["debug_resource_switch_hint_text_name"][self.config.language as usize].clone(), t.hint_text_name));
                                         };
                                         ui.separator();
-                                    });
-                                self.resource_message_box
-                                    .iter()
-                                    .rev()
-                                    .take(self.resource_message_box.len())
-                                    .for_each(|t| {
+                                    }
+                                    RCR::Variable(t) => {
                                         ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
                                         ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_size"][self.config.language as usize].clone(), t.box_size));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_content_name"][self.config.language as usize].clone(), t.box_content_name));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_title_name"][self.config.language as usize].clone(), t.box_title_name));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_image_name"][self.config.language as usize].clone(), t.box_image_name));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_keep_existing"][self.config.language as usize].clone(), t.box_keep_existing));
-                                        if !t.box_keep_existing {
-                                            ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_existing_time"][self.config.language as usize].clone(), t.box_existing_time));
-                                        };
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_exist"][self.config.language as usize].clone(), t.box_exist));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_speed"][self.config.language as usize].clone(), t.box_speed));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_restore_speed"][self.config.language as usize].clone(), t.box_restore_speed));
-                                        ui.colored_label(egui::Color32::BROWN, format!("{}: {:?}", game_text["debug_resource_message_box_memory_offset"][self.config.language as usize].clone(), t.box_memory_offset));
+                                        ui.colored_label(egui::Color32::GOLD, format!("{}: {:#?}", game_text["debug_resource_variable_value"][self.config.language as usize].clone(), t.value));
                                         ui.separator();
-                                    });
+                                    }
+                                    RCR::Text(t) => {
+                                        ui.label(format!("{}: {}", game_text["debug_resource_name"][self.config.language as usize].clone(), t.name));
+                                        ui.label(format!("{}: {}", game_text["debug_resource_type"][self.config.language as usize].clone(), t.discern_type));
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_text_content"][self.config.language as usize].clone(), t.text_content));
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_size"][self.config.language as usize].clone(), t.font_size));
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_position"][self.config.language as usize].clone(), t.position));
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_text_wrap_width"][self.config.language as usize].clone(), t.wrap_width));
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_color"][self.config.language as usize].clone(), t.rgba));
+                                        if t.write_background {
+                                            ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_text_background_color"][self.config.language as usize].clone(), t.background_rgb));
+                                            ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_text_background_rounding"][self.config.language as usize].clone(), t.rounding));
+                                        };
+                                        ui.separator();
+                                    }
+                                };
+                            };
                         });
                     });
                     egui::Window::new("problem_report")
                     .frame(self.frame)
                     .title_bar(false)
-                    .open(&mut self.var_b("debug_problem_window"))
+                    .open(&mut self.var_b("debug_problem_window").unwrap())
                     .show(ctx, |ui| {
                         ui.vertical_centered(|ui| {
                             ui.heading(game_text["debug_problem_report"][self.config.language as usize].clone());
@@ -542,24 +560,24 @@ impl eframe::App for App {
                                 if ui.button(game_text["debug_frame_number_details"][self.config.language as usize].clone()).clicked()
                                 {
                                     general_click_feedback();
-                                    let flip = !self.var_b("debug_fps_window");
+                                    let flip = !self.var_b("debug_fps_window").unwrap();
                                     self.modify_var("debug_fps_window", flip);
                                 };
                                 if ui.button(game_text["debug_resource_list"][self.config.language as usize].clone()).clicked()
                                 {
                                     general_click_feedback();
-                                    let flip = !self.var_b("debug_resource_list_window");
+                                    let flip = !self.var_b("debug_resource_list_window").unwrap();
                                     self.modify_var("debug_resource_list_window", flip);
                                 };
                                 if ui.button(game_text["debug_render_list"][self.config.language as usize].clone()).clicked() {
                                     general_click_feedback();
-                                    let flip = !self.var_b("debug_render_list_window");
+                                    let flip = !self.var_b("debug_render_list_window").unwrap();
                                     self.modify_var("debug_render_list_window", flip);
                                 };
                                 if ui.button(game_text["debug_problem_report"][self.config.language as usize].clone()).clicked()
                                 {
                                     general_click_feedback();
-                                    let flip = !self.var_b("debug_problem_window");
+                                    let flip = !self.var_b("debug_problem_window").unwrap();
                                     self.modify_var("debug_problem_window", flip);
                                 };
                             });
@@ -589,24 +607,28 @@ impl eframe::App for App {
                                         .color(egui::Color32::GRAY)
                                         .background_color(egui::Color32::from_black_alpha(220)),
                                 );
-                                ui.label(
-                                    egui::WidgetText::from(format!("{}: {}", game_text["debug_game_current_default_font"][self.config.language as usize].clone(), self.resource_font[self.resource_font.len() - 1].name))
-                                        .color(egui::Color32::GRAY)
-                                        .background_color(egui::Color32::from_black_alpha(220)),
-                                );
+                                for i in 0..self.rust_constructor_resource.len() {
+                                    if let RCR::Font(f) = self.rust_constructor_resource[self.rust_constructor_resource.len() - i - 1].clone() {
+                                        ui.label(
+                                            egui::WidgetText::from(format!("{}: {}", game_text["debug_game_current_default_font"][self.config.language as usize].clone(), f.name))
+                                                .color(egui::Color32::GRAY)
+                                                .background_color(egui::Color32::from_black_alpha(220)),
+                                        );
+                                        break
+                                    };
+                                };
                             });
                         });
                     });
                 };
             });
-        let id = self
-            .resource_page
-            .iter()
-            .position(|x| x.name == self.page.clone())
-            .unwrap_or(0);
-        if self.resource_page[id].forced_update {
-            // 请求重新绘制界面
-            ctx.request_repaint();
+        if let Ok(id) = self.get_resource_index("PageData", &self.page.clone()) {
+            if let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
+                if pd.forced_update {
+                    // 请求重新绘制界面
+                    ctx.request_repaint();
+                };
+            };
         };
     }
 }

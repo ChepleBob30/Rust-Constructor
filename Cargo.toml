@@ -1,6 +1,6 @@
 [package]
 name = "Rust-Constructor"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
 description = "A powerful cross-platform GUI framework, the easiest way to develop GUI projects in Rust."

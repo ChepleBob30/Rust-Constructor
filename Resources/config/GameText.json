@@ -9,8 +9,8 @@
       "Page"
     ],
     "debug_game_version": [
-      "Rust Constructor v1.2.0",
-      "Rust Constructor v1.2.0"
+      "Rust Constructor v1.2.1",
+      "Rust Constructor v1.2.1"
     ],
     "debug_game_now_time": [
       "当前页面运行时间",
@@ -409,8 +409,8 @@
       "Current Default Font"
     ],
     "hello": [
-      "来自必达的问候。",
-      "Hello from Binder."
+      "欢迎使用Rust Constructor!",
+      "Welcome to use Rust Constructor!"
     ]
   }
 }
