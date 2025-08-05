@@ -6,7 +6,7 @@
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github Stars](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![Version](https://img.shields.io/badge/Version-v1.2.1-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v1.2.2-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | [简体中文](./README_zh.md)
 

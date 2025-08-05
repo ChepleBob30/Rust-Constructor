@@ -1,4 +1,4 @@
-//! function.rs is the functional module of the Rust Constructor, including function declarations, struct definitions, and some auxiliary content.
+//! function.rs是Rust Constructor的函数模块，包括函数声明、结构定义和一些辅助内容。
 use anyhow::Context;
 use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
 use egui::{Color32, FontData, FontDefinitions, FontId, Frame, PointerButton, Pos2, Ui, Vec2};
@@ -24,13 +24,14 @@ use tray_icon::{
     },
 };
 
-// import for macos status bar.
+// 用于macOS状态栏。
 
 // #[cfg(target_os = "macos")]
 // use objc2::sel;
 // #[cfg(target_os = "macos")]
 // use objc2_app_kit::{NSStatusItem};
 
+/// 从文件中加载图标。
 pub fn load_icon_from_file(path: &str) -> Result<Icon, Box<dyn std::error::Error>> {
     let image = image::open(path)?.into_rgba8();
     let (width, height) = image.dimensions();
@@ -38,7 +39,7 @@ pub fn load_icon_from_file(path: &str) -> Result<Icon, Box<dyn std::error::Error
     Ok(Icon::from_rgba(rgba, width, height)?)
 }
 
-// 创建格式化的JSON文件
+/// 创建格式化的JSON文件。
 #[allow(dead_code)]
 pub fn create_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
     let parent_dir = path
@@ -46,43 +47,44 @@ pub fn create_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<(
         .parent()
         .ok_or_else(|| anyhow::anyhow!("无效的文件路径"))?;
 
-    // 创建父目录（如果不存在）
+    // 创建父目录（如果不存在）。
     fs::create_dir_all(parent_dir)?;
 
-    // 生成带缩进的JSON字符串（4空格缩进）
+    // 生成带缩进的JSON字符串（4空格缩进）。
     let formatted = json::stringify_pretty(data, 4);
 
-    // 写入文件（自动处理换行符）
+    // 写入文件（自动处理换行符）。
     fs::write(path, formatted)?;
     Ok(())
 }
 
-// 复制并重新格式化JSON文件
+/// 复制并重新格式化JSON文件。
 #[allow(dead_code)]
 pub fn copy_and_reformat_json<P: AsRef<Path>>(src: P, dest: P) -> anyhow::Result<()> {
-    // 读取原始文件
+    // 读取原始文件。
     let content = fs::read_to_string(&src)?;
 
-    // 解析JSON（自动验证格式）
+    // 解析JSON（自动验证格式）。
     let parsed = json::parse(&content)?;
 
-    // 使用格式化写入新文件
+    // 使用格式化写入新文件。
     create_json(dest, parsed)?;
 
     Ok(())
 }
 
+/// 检查文件是否存在。
 pub fn check_file_exists<P: AsRef<Path>>(path: P) -> bool {
     let path_ref = path.as_ref();
     if path_ref.exists() {
-        true // 文件已存在时直接返回，不执行写入
+        true // 文件已存在时直接返回true。
     } else {
-        // 文件不存在时，返回 false
+        // 文件不存在时，返回false。
         false
     }
 }
 
-// 通用 JSON 写入函数
+/// 通用 JSON 写入函数。
 #[allow(dead_code)]
 pub fn write_to_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
     let parent_dir = path
@@ -96,13 +98,14 @@ pub fn write_to_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result
     Ok(())
 }
 
-// 通用 JSON 读取函数
+/// 通用 JSON 读取函数。
 pub fn read_from_json<P: AsRef<Path>>(path: P) -> anyhow::Result<JsonValue> {
     let content = fs::read_to_string(&path)
         .with_context(|| format!("无法读取文件: {}", path.as_ref().display()))?;
     json::parse(&content).with_context(|| format!("解析 JSON 失败: {}", path.as_ref().display()))
 }
 
+/// 播放 WAV 文件。
 pub fn play_wav(path: &str) -> anyhow::Result<f64> {
     let mut manager: kira::manager::AudioManager<cpal::CpalBackend> =
         AudioManager::new(kira::manager::AudioManagerSettings::default())?;
@@ -113,12 +116,14 @@ pub fn play_wav(path: &str) -> anyhow::Result<f64> {
     Ok(duration)
 }
 
+/// 通用按键点击反馈函数。
 pub fn general_click_feedback() {
     std::thread::spawn(|| {
         play_wav("Resources/assets/sounds/Click.wav").unwrap();
     });
 }
 
+/// 检查指定目录下有多少个带有特定名称的文件。
 #[allow(dead_code)]
 pub fn count_files_recursive(dir: &Path, target: &str) -> std::io::Result<usize> {
     let mut count = 0;
@@ -136,6 +141,7 @@ pub fn count_files_recursive(dir: &Path, target: &str) -> std::io::Result<usize>
     Ok(count)
 }
 
+/// 检查指定目录下有多少个带有特定名称的文件并返回它们的名称。
 #[allow(dead_code)]
 pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut matches = Vec::new();
@@ -158,11 +164,16 @@ pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, s
     Ok(matches)
 }
 
+/// 配置文件。
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// 显示的语言（注意：此值修改到大于实际语言数目极有可能导致程序崩溃！）。
     pub language: u8,
+    /// 总共有多少种语言已被支持（注意：此值修改到大于实际语言数目极有可能导致程序崩溃！）。
     pub amount_languages: u8,
+    /// 是否启用严格模式：严格模式下，当遇到无法处理的情况时，将直接panic；若未启用严格模式，则会发出一条问题报告来描述情况。
     pub rc_strict_mode: bool,
+    /// 是否启用调试模式：按下F3以开关，可以清晰的监视运行中的数据。
     pub enable_debug_mode: bool,
 }
 
@@ -187,6 +198,7 @@ impl Config {
     }
 }
 
+/// 统一的文本调用处。
 #[derive(Debug, Clone)]
 pub struct GameText {
     pub game_text: HashMap<String, Vec<String>>,
@@ -215,6 +227,7 @@ impl GameText {
     }
 }
 
+/// 存储特定值的枚举。
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum Value {
@@ -262,37 +275,56 @@ impl From<String> for Value {
     }
 }
 
+/// 报告发生问题时的状态。
 #[derive(Clone, Debug)]
 pub struct ReportState {
+    /// 问题发生时所在页面。
     pub current_page: String,
+    /// 问题发生时程序总运行时间。
     pub current_total_runtime: f32,
+    /// 问题发生时页面运行时间。
     pub current_page_runtime: f32,
 }
 
+/// 出现问题时用于存储问题内容、状态及注释的结构体。
 #[derive(Clone, Debug)]
 pub struct Problem {
+    /// 问题严重程度。
     pub severity_level: SeverityLevel,
+    /// 问题描述。
     pub problem: String,
+    /// 问题备注。
     pub annotation: String,
+    /// 问题报告状态。
     pub report_state: ReportState,
+    /// 问题类型。
+    pub problem_type: RustConstructorError,
 }
 
+/// 衡量问题的严重等级。
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum SeverityLevel {
-    #[allow(dead_code)]
+    /// 弱警告：一般情况下不会产生影响。
     MildWarning,
+    /// 强警告：会影响程序正常执行，但一般情况下不会有严重后果。
     SevereWarning,
+    /// 错误：会导致程序无法运行。
     Error,
 }
 
+/// 核心特征，用于统一管理Rust Constructor资源。
 pub trait RustConstructorResource {
-    #[allow(dead_code)]
+    /// 返回资源名称。
     fn name(&self) -> &str;
 
+    /// 返回资源类型。
     fn expose_type(&self) -> &str;
 
+    /// 注册资源。
     fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>);
 
+    /// 匹配资源。
     fn match_resource(&self, resource_name: &str, resource_type: &str) -> bool {
         resource_name == self.name() && resource_type == self.expose_type()
     }
@@ -315,20 +347,29 @@ impl RustConstructorResource for PageData {
     }
 }
 
+/// 用于存储页面数据的RC资源。
 #[derive(Clone, Debug)]
 pub struct PageData {
     pub discern_type: String,
     pub name: String,
+    /// 是否强制在每帧都刷新页面。
     pub forced_update: bool,
+    /// 是否已经加载完首次进入此页面所需内容。
     pub change_page_updated: bool,
+    /// 是否已经加载完进入此页面所需内容。
     pub enter_page_updated: bool,
 }
 
+/// 用于存储运行时间的计时器。
 #[derive(Clone, Debug)]
 pub struct Timer {
+    /// 进入页面的时间。
     pub start_time: f32,
+    /// 程序总运行时间。
     pub total_time: f32,
+    /// 核心计时器。
     pub timer: Instant,
+    /// 当前页面运行时间。
     pub now_time: f32,
 }
 
@@ -349,11 +390,14 @@ impl RustConstructorResource for ImageTexture {
     }
 }
 
+/// 用于存储图片纹理的RC资源。
 #[derive(Clone)]
 pub struct ImageTexture {
     pub discern_type: String,
     pub name: String,
+    /// 图片纹理。
     pub texture: Option<egui::TextureHandle>,
+    /// 图片路径。
     pub cite_path: String,
 }
 
@@ -374,19 +418,30 @@ impl RustConstructorResource for CustomRect {
     }
 }
 
+/// RC的矩形资源。
 #[derive(Clone, Debug)]
 pub struct CustomRect {
     pub discern_type: String,
     pub name: String,
+    /// 位置。
     pub position: [f32; 2],
+    /// 尺寸。
     pub size: [f32; 2],
+    /// 圆角。
     pub rounding: f32,
+    /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
     pub x_grid: [u32; 2],
+    /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
     pub y_grid: [u32; 2],
+    /// 对齐方法。
     pub center_display: [bool; 4],
+    /// 颜色。
     pub color: [u8; 4],
+    /// 边框宽度。
     pub border_width: f32,
+    /// 边框颜色。
     pub border_color: [u8; 4],
+    /// 原始位置。
     pub origin_position: [f32; 2],
 }
 
@@ -407,20 +462,32 @@ impl RustConstructorResource for Image {
     }
 }
 
+/// RC的图片资源。
 #[derive(Clone)]
 pub struct Image {
     pub discern_type: String,
     pub name: String,
+    /// 图片纹理。
     pub image_texture: Option<egui::TextureHandle>,
+    /// 图片位置。
     pub image_position: [f32; 2],
+    /// 图片大小。
     pub image_size: [f32; 2],
+    /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
     pub x_grid: [u32; 2],
+    /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
     pub y_grid: [u32; 2],
+    /// 对齐方法。
     pub center_display: [bool; 4],
+    /// 不透明度。
     pub alpha: u8,
+    /// 叠加颜色。
     pub overlay_color: [u8; 4],
+    /// 是否使用叠加颜色。
     pub use_overlay_color: bool,
+    /// 原始位置。
     pub origin_position: [f32; 2],
+    /// 原始引用纹理名。
     pub origin_cite_texture: String,
 }
 
@@ -441,21 +508,34 @@ impl RustConstructorResource for Text {
     }
 }
 
+/// RC的文本资源。
 #[derive(Clone, Debug)]
 pub struct Text {
     pub discern_type: String,
     pub name: String,
+    /// 文本内容。
     pub text_content: String,
+    /// 字号。
     pub font_size: f32,
+    /// 文本颜色。
     pub rgba: [u8; 4],
+    /// 文本位置。
     pub position: [f32; 2],
+    /// 对齐方法。
     pub center_display: [bool; 4],
+    /// 单行宽度。
     pub wrap_width: f32,
+    /// 是否有背景。
     pub write_background: bool,
+    /// 背景颜色。
     pub background_rgb: [u8; 4],
+    /// 圆角。
     pub rounding: f32,
+    /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
     pub x_grid: [u32; 2],
+    /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
     pub y_grid: [u32; 2],
+    /// 原始位置。
     pub origin_position: [f32; 2],
 }
 
@@ -476,15 +556,23 @@ impl RustConstructorResource for ScrollBackground {
     }
 }
 
+/// RC的滚动背景资源。
 #[derive(Clone, Debug)]
 pub struct ScrollBackground {
     pub discern_type: String,
     pub name: String,
+    /// 所有图片名称。
     pub image_name: Vec<String>,
+    /// true：横向滚动；false：纵向滚动。
     pub horizontal_or_vertical: bool,
+    /// 横向true：往左；横向false：往右。
+    /// 纵向true：往上；纵向false：往下。
     pub left_and_top_or_right_and_bottom: bool,
+    /// 滚动速度。
     pub scroll_speed: u32,
+    /// 边界（到达此处会复位）。
     pub boundary: f32,
+    /// 恢复点（复位时会回到此处）。
     pub resume_point: f32,
 }
 
@@ -505,18 +593,23 @@ impl RustConstructorResource for Variable {
     }
 }
 
+/// RC的变量资源。
 #[derive(Clone, Debug)]
 pub struct Variable {
     pub discern_type: String,
     pub name: String,
+    /// 变量的值。
     pub value: Value,
 }
 
+/// RC的字体资源。
 #[derive(Clone, Debug)]
 pub struct Font {
     pub name: String,
     pub discern_type: String,
+    /// 字体定义。
     pub font_definitions: FontDefinitions,
+    /// 字体路径。
     pub path: String,
 }
 
@@ -554,10 +647,12 @@ impl RustConstructorResource for SplitTime {
     }
 }
 
+/// RC的时间分段资源。
 #[derive(Clone, Debug)]
 pub struct SplitTime {
     pub discern_type: String,
     pub name: String,
+    /// 时间点（第一个值为页面运行时间，第二个值为总运行时间）。
     pub time: [f32; 2],
 }
 
@@ -578,55 +673,85 @@ impl RustConstructorResource for Switch {
     }
 }
 
+/// RC的开关资源。
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct Switch {
     pub discern_type: String,
     pub name: String,
+    /// 外观（包括图片纹理和叠加颜色，数量为开启的动画数量*开关状态总数）。
     pub appearance: Vec<SwitchData>,
+    /// 开关使用的图片名称。
     pub switch_image_name: String,
+    /// 是否启用鼠标悬浮和点击时的动画。
     pub enable_hover_click_image: [bool; 2],
+    /// 开关当前状态。
     pub state: u32,
+    /// 可以用于点击开关的方法（包含点击方式和是否改变开关状态两个参数）。
     pub click_method: Vec<SwitchClickAction>,
+    /// 上一次渲染是否有鼠标悬浮。
     pub last_time_hovered: bool,
+    /// 上一次渲染是否被鼠标点击。
     pub last_time_clicked: bool,
+    /// 上一次点击对应的点击方法的索引。
     pub last_time_clicked_index: usize,
+    /// 动画总数。
     pub animation_count: u32,
+    /// 鼠标长时间悬浮时显示的提示文本。
     pub hint_text: Vec<String>,
+    /// 提示文本资源名。
     pub hint_text_name: String,
 }
 
+/// 渲染的RC资源。
 #[derive(Clone, Debug)]
 pub struct RenderResource {
     pub discern_type: String,
     pub name: String,
 }
 
+/// 开关的外观。
 #[derive(Clone, Debug)]
 pub struct SwitchData {
+    /// 开关的纹理。
     pub texture: String,
+    /// 开关的颜色。
     pub color: [u8; 4],
 }
 
+/// 开关的点击方法。
 #[derive(Clone, Debug)]
 pub struct SwitchClickAction {
+    /// 开关的点击方法。
     pub click_method: PointerButton,
+    /// 点击后是否改变开关状态。
     pub action: bool,
 }
 
+/// RC的消息框资源。
 #[derive(Clone, Debug)]
 pub struct MessageBox {
     pub discern_type: String,
     pub name: String,
+    /// 消息框大小。
     pub box_size: [f32; 2],
+    /// 框内内容资源名。
     pub box_content_name: String,
+    /// 框内标题资源名。
     pub box_title_name: String,
+    /// 框内图片资源名。
     pub box_image_name: String,
+    /// 消息框是否持续存在。
     pub box_keep_existing: bool,
+    /// 如果不持续存在，消息框的持续时间。
     pub box_existing_time: f32,
+    /// 消息框是否存在（不等于是否显示）。
     pub box_exist: bool,
+    /// 消息框移动速度。
     pub box_speed: f32,
+    /// 消息框补位速度。
     pub box_restore_speed: f32,
+    /// 消息框上一次渲染时的y轴偏移量（用于实现补位动画）。
     pub box_memory_offset: f32,
 }
 
@@ -647,6 +772,7 @@ impl RustConstructorResource for MessageBox {
     }
 }
 
+/// 用于将RC资源存储进vec的枚举。
 #[derive(Clone)]
 #[allow(dead_code)]
 #[allow(clippy::upper_case_acronyms)]
@@ -664,24 +790,71 @@ pub enum RCR {
     PageData(PageData),
 }
 
+/// RC资源最基本的错误处理。
+#[derive(Clone, Debug)]
+pub enum RustConstructorError {
+    /// 图片获取失败。
+    ImageGetFailed { image_path: String },
+    /// 变量获取失败。
+    VariableNotInt { variable_name: String },
+    /// 变量获取失败。
+    VariableNotUInt { variable_name: String },
+    /// 变量获取失败。
+    VariableNotFloat { variable_name: String },
+    /// 变量获取失败。
+    VariableNotVec { variable_name: String },
+    /// 变量获取失败。
+    VariableNotBool { variable_name: String },
+    /// 变量获取失败。
+    VariableNotString { variable_name: String },
+    /// 开关外观数量不匹配。
+    SwitchAppearanceMismatch { switch_name: String, differ: u32 },
+    /// 开关提示词数量不匹配。
+    SwitchHintTextMismatch { switch_name: String, differ: u32 },
+    /// 消息框已存在。
+    MessageBoxAlreadyExists { message_box_name: String },
+    /// 获取字体失败。
+    FontGetFailed { font_path: String },
+    /// 资源未找到。
+    ResourceNotFound {
+        resource_name: String,
+        resource_type: String,
+    },
+}
+
+/// 程序主体。
 #[derive(Clone)]
 pub struct App {
+    /// 配置项（与Preferences.json关联）。
     pub config: Config,
+    /// 文本（与GameText.json关联）。
     pub game_text: GameText,
+    /// RC资源。
     pub rust_constructor_resource: Vec<RCR>,
+    /// 渲染资源列表。
     pub render_resource_list: Vec<RenderResource>,
+    /// 问题列表。
     pub problem_list: Vec<Problem>,
+    /// 窗口样式。
     pub frame: Frame,
+    /// RC资源刷新率。
     pub vertrefresh: f32,
+    /// 当前页面。
     pub page: String,
+    /// 计时器。
     pub timer: Timer,
+    /// 帧时间。
     pub frame_times: Vec<f32>,
+    /// 上一帧时间。
     pub last_frame_time: Option<f64>,
+    /// 托盘图标。
     pub tray_icon: Option<tray_icon::TrayIcon>,
+    /// 托盘图标是否已创建。
     pub tray_icon_created: bool,
 }
 
 impl App {
+    /// 初始化程序。
     pub fn new() -> Self {
         let mut config = Config {
             language: 0,
@@ -720,13 +893,6 @@ impl App {
                     change_page_updated: false,
                     enter_page_updated: false,
                 }),
-                RCR::PageData(PageData {
-                    discern_type: "PageData".to_string(),
-                    name: "Error".to_string(),
-                    forced_update: true,
-                    change_page_updated: false,
-                    enter_page_updated: false,
-                }),
             ],
             render_resource_list: Vec::new(),
             problem_list: Vec::new(),
@@ -748,7 +914,7 @@ impl App {
         }
     }
 
-    // Dangerous!
+    // 危险!
 
     // #[cfg(target_os = "macos")]
     // pub fn create_macos_status_bar(&mut self) {
@@ -807,9 +973,10 @@ impl App {
     //     }
     // }
 
+    /// 切换页面。
     pub fn switch_page(&mut self, page: &str) {
-        self.page = page.to_string();
         if let Ok(id) = self.get_resource_index("PageData", page) {
+            self.page = page.to_string();
             if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
                 pd.change_page_updated = false;
                 self.timer.start_time = self.timer.total_time;
@@ -818,6 +985,7 @@ impl App {
         };
     }
 
+    /// 初始化托盘图标。
     pub fn tray_icon_init(&mut self) {
         let icon = load_icon_from_file("Resources/assets/images/tray_icon.png").unwrap();
         // 创建菜单
@@ -854,6 +1022,7 @@ impl App {
         };
     }
 
+    /// 启动程序时的预加载。
     pub fn launch_page_preload(&mut self, ctx: &egui::Context) {
         self.tray_icon_init();
         self.add_fonts("Title", "Resources/assets/fonts/Title.otf");
@@ -907,44 +1076,6 @@ impl App {
             play_wav("Resources/assets/sounds/Launch.wav").unwrap();
         });
         self.add_rect(
-            "Error_Pages_Background",
-            [
-                0_f32,
-                0_f32,
-                ctx.available_rect().width(),
-                ctx.available_rect().height(),
-                0_f32,
-            ],
-            [1, 2, 1, 2],
-            [false, false, true, true],
-            [31, 103, 179, 255, 255, 255, 255, 255],
-            0.0,
-        );
-        self.add_text(
-            ["Error_Pages_Sorry", ":("],
-            [0_f32, 0_f32, 100_f32, 1000_f32, 0.0],
-            [255, 255, 255, 255, 0, 0, 0, 255],
-            [true, true, false, false],
-            false,
-            [1, 5, 1, 6],
-        );
-        self.add_text(
-            ["Error_Pages_Reason", ""],
-            [0_f32, 0_f32, 40_f32, 1000_f32, 0.0],
-            [255, 255, 255, 255, 0, 0, 0, 255],
-            [true, true, false, false],
-            false,
-            [1, 5, 2, 6],
-        );
-        self.add_text(
-            ["Error_Pages_Solution", ""],
-            [0_f32, 0_f32, 20_f32, 1000_f32, 0.0],
-            [255, 255, 255, 255, 0, 0, 0, 255],
-            [true, true, false, false],
-            false,
-            [1, 5, 3, 6],
-        );
-        self.add_rect(
             "Cut_To_Background",
             [
                 0_f32,
@@ -967,58 +1098,146 @@ impl App {
         );
     }
 
-    pub fn get_resource_index(&self, resource_type: &str, resource_name: &str) -> Result<usize, ()> {
+    /// 检查是否存在特定资源。
+    pub fn check_resource_exists(&mut self, resource_type: &str, resource_name: &str) -> bool {
         for i in 0..self.rust_constructor_resource.len() {
             match self.rust_constructor_resource[i].clone() {
-                RCR::Image(im) => 
+                RCR::Image(im) => {
                     if im.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return true;
                     }
-                RCR::Text(t) => 
+                }
+                RCR::Text(t) => {
+                    if t.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::CustomRect(cr) => {
+                    if cr.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::ScrollBackground(sb) => {
+                    if sb.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::Variable(v) => {
+                    if v.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::Font(f) => {
+                    if f.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::SplitTime(st) => {
+                    if st.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::Switch(s) => {
+                    if s.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::MessageBox(mb) => {
+                    if mb.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::ImageTexture(it) => {
+                    if it.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+                RCR::PageData(pd) => {
+                    if pd.match_resource(resource_name, resource_type) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// 获取资源索引。
+    pub fn get_resource_index(
+        &mut self,
+        resource_type: &str,
+        resource_name: &str,
+    ) -> Result<usize, ()> {
+        for i in 0..self.rust_constructor_resource.len() {
+            match self.rust_constructor_resource[i].clone() {
+                RCR::Image(im) => {
+                    if im.match_resource(resource_name, resource_type) {
+                        return Ok(i);
+                    }
+                }
+                RCR::Text(t) => {
                     if t.match_resource(resource_name, resource_type) {
                         return Ok(i);
                     }
-                RCR::CustomRect(cr) => 
+                }
+                RCR::CustomRect(cr) => {
                     if cr.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::ScrollBackground(sb) => 
+                }
+                RCR::ScrollBackground(sb) => {
                     if sb.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::Variable(v) => 
+                }
+                RCR::Variable(v) => {
                     if v.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::Font(f) => 
+                }
+                RCR::Font(f) => {
                     if f.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::SplitTime(st) => 
+                }
+                RCR::SplitTime(st) => {
                     if st.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::Switch(s) =>
+                }
+                RCR::Switch(s) => {
                     if s.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::MessageBox(mb) =>
+                }
+                RCR::MessageBox(mb) => {
                     if mb.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::ImageTexture(it) =>
+                }
+                RCR::ImageTexture(it) => {
                     if it.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
-                RCR::PageData(pd) => 
+                }
+                RCR::PageData(pd) => {
                     if pd.match_resource(resource_name, resource_type) {
-                        return Ok(i)
+                        return Ok(i);
                     }
+                }
             };
-        };
+        }
+        self.problem_report(
+            RustConstructorError::ResourceNotFound {
+                resource_name: resource_name.to_string(),
+                resource_type: resource_type.to_string(),
+            },
+            SeverityLevel::SevereWarning,
+        );
         Err(())
     }
 
+    /// 添加字体资源。
     pub fn add_fonts(&mut self, font_name: &str, font_path: &str) {
         let mut fonts = FontDefinitions::default();
         if let Ok(font_read_data) = std::fs::read(font_path) {
@@ -1049,61 +1268,29 @@ impl App {
                 font_definitions: fonts,
                 path: font_path.to_string(),
             }));
-        } else if self.config.rc_strict_mode {
-            panic!(
-                "{}: \"{}\"",
-                self.game_text.game_text["error_font_read_failed"][self.config.language as usize],
-                font_path
-            )
         } else {
             self.problem_report(
-                &format!(
-                    "{}: \"{}\"",
-                    self.game_text.game_text["error_font_read_failed"]
-                        [self.config.language as usize],
-                    font_path
-                ),
+                RustConstructorError::FontGetFailed {
+                    font_path: font_path.to_string(),
+                },
                 SeverityLevel::SevereWarning,
-                &self.game_text.game_text["error_font_read_failed_annotation"]
-                    [self.config.language as usize]
-                    .clone(),
             );
         };
         // 应用字体定义
         // ctx.set_fonts(fonts);
     }
 
+    /// 输出字体资源。
     pub fn font(&mut self, name: &str) -> Result<FontDefinitions, ()> {
-        if self.get_resource_index("Font", name).is_err() {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "{}: \"{}\"",
-                    self.game_text.game_text["error_font_get_failed"]
-                        [self.config.language as usize],
-                    name
-                )
-            } else {
-                self.problem_report(
-                    &format!(
-                        "{}: \"{}\"",
-                        self.game_text.game_text["error_font_get_failed"]
-                            [self.config.language as usize],
-                        name
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_font_get_failed_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            };
-        } else if let Ok(id) = self.get_resource_index("Font", name) {
+        if let Ok(id) = self.get_resource_index("Font", name) {
             if let RCR::Font(f) = &mut self.rust_constructor_resource[id] {
-                return Ok(f.font_definitions.clone())
+                return Ok(f.font_definitions.clone());
             }
         }
         Err(())
     }
 
+    /// 将所有已添加到RC的字体资源添加到egui中。
     pub fn register_all_fonts(&mut self, ctx: &egui::Context) {
         let mut font_definitions = egui::FontDefinitions::default();
         let mut font_resources = Vec::new();
@@ -1111,7 +1298,7 @@ impl App {
             if let RCR::Font(f) = &self.rust_constructor_resource[i] {
                 font_resources.push(f.clone());
             };
-        };
+        }
         for i in &font_resources {
             let font_name = i.name.clone();
             // 获取字体数据（返回 FontDefinitions）
@@ -1141,41 +1328,40 @@ impl App {
                     .or_default()
                     .insert(0, font_name.to_owned());
             };
-        };
+        }
         ctx.set_fonts(font_definitions);
     }
 
-    pub fn fade(
+    /// 转场工具。
+    pub fn cut_to(
         &mut self,
-        fade_in_or_out: bool,
+        cut_to_in_or_out: bool,
         ctx: &egui::Context,
         ui: &mut Ui,
         split_time_name: &str,
         resource_name: &str,
-        fade_speed: u8,
+        cut_to_speed: u8,
     ) -> Result<u8, ()> {
         if let Ok(id) = self.get_resource_index("CustomRect", resource_name) {
             if let RCR::CustomRect(mut rect) = self.rust_constructor_resource[id].clone() {
-                rect.size =
-                [ctx.available_rect().width(), ctx.available_rect().height()];
-                if self.timer.now_time - self.split_time(split_time_name).unwrap()[0] >= self.vertrefresh {
-                    self.add_split_time(split_time_name, true);
-                    if fade_in_or_out {
-                        rect.color[3] =
-                            if rect.color[3] > 255 - fade_speed {
-                                255
-                            } else {
-                                rect.color[3] + fade_speed
-                            };
-                    } else {
-                        rect.color[3] =
-                            rect.color[3].saturating_sub(fade_speed)
+                rect.size = [ctx.available_rect().width(), ctx.available_rect().height()];
+                if let Ok(split_time) = self.split_time(split_time_name) {
+                    if self.timer.now_time - split_time[0] >= self.vertrefresh {
+                        self.add_split_time(split_time_name, true);
+                        if cut_to_in_or_out {
+                            rect.color[3] = rect.color[3].saturating_add(cut_to_speed)
+                        } else {
+                            rect.color[3] = rect.color[3].saturating_sub(cut_to_speed)
+                        };
                     };
-                };
-                self.rect(ui, resource_name, ctx);
-                self.rust_constructor_resource[id] = RCR::CustomRect(rect.clone());
-                Ok(rect.color[3])
+                    self.rect(ui, resource_name, ctx);
+                    self.rust_constructor_resource[id] = RCR::CustomRect(rect.clone());
+                    Ok(rect.color[3])
+                } else {
+                    Err(())
+                }
             } else {
+                // 一般情况下不会触发。
                 Err(())
             }
         } else {
@@ -1183,27 +1369,198 @@ impl App {
         }
     }
 
+    /// 发生问题时推送报告。
     pub fn problem_report(
         &mut self,
-        problem: &str,
+        problem_type: RustConstructorError,
         severity_level: SeverityLevel,
-        annotation: &str,
     ) {
-        std::thread::spawn(|| {
-            play_wav("Resources/assets/sounds/Error.wav").unwrap();
-        });
-        self.problem_list.push(Problem {
-            severity_level,
-            problem: problem.to_string(),
-            annotation: annotation.to_string(),
-            report_state: ReportState {
-                current_page: self.page.clone(),
-                current_total_runtime: self.timer.total_time,
-                current_page_runtime: self.timer.now_time,
-            },
-        });
+        let (problem, annotation) = match problem_type.clone() {
+            RustConstructorError::FontGetFailed { font_path } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_font_get_failed"]
+                        [self.config.language as usize]
+                        .clone(),
+                    font_path
+                ),
+                self.game_text.game_text["error_font_get_failed_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::ImageGetFailed { image_path } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_image_get_failed"]
+                        [self.config.language as usize]
+                        .clone(),
+                    image_path
+                ),
+                self.game_text.game_text["error_image_get_failed_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_message_box_already_exists"]
+                        [self.config.language as usize]
+                        .clone(),
+                    message_box_name
+                ),
+                self.game_text.game_text["error_message_box_already_exists_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::SwitchAppearanceMismatch {
+                switch_name,
+                differ,
+            } => (
+                format!(
+                    "{} {} {}: {}",
+                    self.game_text.game_text["error_switch_appearance_mismatch"]
+                        [self.config.language as usize]
+                        .clone(),
+                    differ,
+                    self.game_text.game_text["error_switch_mismatch_more"]
+                        [self.config.language as usize]
+                        .clone(),
+                    switch_name
+                ),
+                self.game_text.game_text["error_switch_appearance_mismatch_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::SwitchHintTextMismatch {
+                switch_name,
+                differ,
+            } => (
+                format!(
+                    "{} {} {}: {}",
+                    self.game_text.game_text["error_switch_hint_text_mismatch"]
+                        [self.config.language as usize]
+                        .clone(),
+                    differ,
+                    self.game_text.game_text["error_switch_mismatch_more"]
+                        [self.config.language as usize]
+                        .clone(),
+                    switch_name
+                ),
+                self.game_text.game_text["error_switch_hint_text_mismatch_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::VariableNotBool { variable_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_variable_not_bool"]
+                        [self.config.language as usize]
+                        .clone(),
+                    variable_name
+                ),
+                self.game_text.game_text["error_variable_not_type_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::VariableNotFloat { variable_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_variable_not_float"]
+                        [self.config.language as usize]
+                        .clone(),
+                    variable_name
+                ),
+                self.game_text.game_text["error_variable_not_type_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::VariableNotInt { variable_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_variable_not_int"]
+                        [self.config.language as usize]
+                        .clone(),
+                    variable_name
+                ),
+                self.game_text.game_text["error_variable_not_type_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::VariableNotString { variable_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_variable_not_string"]
+                        [self.config.language as usize]
+                        .clone(),
+                    variable_name
+                ),
+                self.game_text.game_text["error_variable_not_type_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::VariableNotUInt { variable_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_variable_not_uint"]
+                        [self.config.language as usize]
+                        .clone(),
+                    variable_name
+                ),
+                self.game_text.game_text["error_variable_not_type_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::VariableNotVec { variable_name } => (
+                format!(
+                    "{}: {}",
+                    self.game_text.game_text["error_variable_not_vec"]
+                        [self.config.language as usize]
+                        .clone(),
+                    variable_name
+                ),
+                self.game_text.game_text["error_variable_not_type_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+            RustConstructorError::ResourceNotFound {
+                resource_name,
+                resource_type,
+            } => (
+                format!(
+                    "{}: {}({})",
+                    self.game_text.game_text["error_resource_not_found"]
+                        [self.config.language as usize]
+                        .clone(),
+                    resource_type,
+                    resource_name,
+                ),
+                self.game_text.game_text["error_resource_not_found_annotation"]
+                    [self.config.language as usize]
+                    .clone(),
+            ),
+        };
+        // 如果处于严格模式下，则直接崩溃！
+        if self.config.rc_strict_mode {
+            panic!("{}", problem);
+        } else {
+            std::thread::spawn(|| {
+                play_wav("Resources/assets/sounds/Error.wav").unwrap();
+            });
+            self.problem_list.push(Problem {
+                severity_level,
+                problem,
+                annotation,
+                report_state: ReportState {
+                    current_page: self.page.clone(),
+                    current_total_runtime: self.timer.total_time,
+                    current_page_runtime: self.timer.now_time,
+                },
+                problem_type: problem_type.clone(),
+            });
+        };
     }
 
+    /// 检查页面是否已完成首次加载。
     pub fn check_updated(&mut self, name: &str) -> Result<bool, ()> {
         if let Ok(id) = self.get_resource_index("PageData", name) {
             if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
@@ -1221,6 +1578,7 @@ impl App {
         }
     }
 
+    /// 检查页面是否已完成加载。
     pub fn check_enter_updated(&mut self, name: &str) -> Result<bool, ()> {
         if let Ok(id) = self.get_resource_index("PageData", name) {
             if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
@@ -1235,16 +1593,18 @@ impl App {
         }
     }
 
+    /// 进入新页面时的更新。
     pub fn new_page_update(&mut self, name: &str) {
-        self.timer.start_time = self.timer.total_time;
-        self.update_timer();
         if let Ok(id) = self.get_resource_index("PageData", name) {
+            self.timer.start_time = self.timer.total_time;
+            self.update_timer();
             if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
                 pd.change_page_updated = true;
             };
         };
     }
 
+    /// 更新帧数。
     pub fn update_frame_stats(&mut self, ctx: &egui::Context) {
         let current_time = ctx.input(|i| i.time);
         if let Some(last) = self.last_frame_time {
@@ -1259,6 +1619,7 @@ impl App {
         self.last_frame_time = Some(current_time);
     }
 
+    /// 更新帧数显示。
     pub fn current_fps(&self) -> f32 {
         if self.frame_times.is_empty() {
             0.0
@@ -1267,6 +1628,7 @@ impl App {
         }
     }
 
+    /// 添加分段时间。
     pub fn add_split_time(&mut self, name: &str, reset: bool) {
         if reset {
             if let Ok(id) = self.get_resource_index("SplitTime", name) {
@@ -1275,19 +1637,22 @@ impl App {
                 };
             };
         } else {
-            self.rust_constructor_resource.push(RCR::SplitTime(SplitTime {
-                discern_type: "SplitTime".to_string(),
-                name: name.to_string(),
-                time: [self.timer.now_time, self.timer.total_time],
-            }));
+            self.rust_constructor_resource
+                .push(RCR::SplitTime(SplitTime {
+                    discern_type: "SplitTime".to_string(),
+                    name: name.to_string(),
+                    time: [self.timer.now_time, self.timer.total_time],
+                }));
         };
     }
 
+    /// 输出分段时间。
     pub fn split_time(&mut self, name: &str) -> Result<[f32; 2], ()> {
         if let Ok(id) = self.get_resource_index("SplitTime", name) {
             if let RCR::SplitTime(st) = self.rust_constructor_resource[id].clone() {
                 Ok(st.time)
             } else {
+                // 一般情况下不会触发。
                 Err(())
             }
         } else {
@@ -1295,6 +1660,7 @@ impl App {
         }
     }
 
+    /// 更新计时器。
     pub fn update_timer(&mut self) {
         let elapsed = self.timer.timer.elapsed();
         let seconds = elapsed.as_secs();
@@ -1303,6 +1669,7 @@ impl App {
         self.timer.now_time = self.timer.total_time - self.timer.start_time
     }
 
+    /// 添加矩形资源。
     pub fn add_rect(
         &mut self,
         name: &str,
@@ -1312,22 +1679,24 @@ impl App {
         color: [u8; 8],
         border_width: f32,
     ) {
-        self.rust_constructor_resource.push(RCR::CustomRect(CustomRect {
-            discern_type: "CustomRect".to_string(),
-            name: name.to_string(),
-            position: [position_size_and_rounding[0], position_size_and_rounding[1]],
-            size: [position_size_and_rounding[2], position_size_and_rounding[3]],
-            rounding: position_size_and_rounding[4],
-            x_grid: [grid[0], grid[1]],
-            y_grid: [grid[2], grid[3]],
-            center_display,
-            color: [color[0], color[1], color[2], color[3]],
-            border_width,
-            border_color: [color[4], color[5], color[6], color[7]],
-            origin_position: [position_size_and_rounding[0], position_size_and_rounding[1]],
-        }));
+        self.rust_constructor_resource
+            .push(RCR::CustomRect(CustomRect {
+                discern_type: "CustomRect".to_string(),
+                name: name.to_string(),
+                position: [position_size_and_rounding[0], position_size_and_rounding[1]],
+                size: [position_size_and_rounding[2], position_size_and_rounding[3]],
+                rounding: position_size_and_rounding[4],
+                x_grid: [grid[0], grid[1]],
+                y_grid: [grid[2], grid[3]],
+                center_display,
+                color: [color[0], color[1], color[2], color[3]],
+                border_width,
+                border_color: [color[4], color[5], color[6], color[7]],
+                origin_position: [position_size_and_rounding[0], position_size_and_rounding[1]],
+            }));
     }
 
+    /// 显示矩形资源。
     pub fn rect(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("CustomRect", name) {
             if let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id] {
@@ -1367,10 +1736,7 @@ impl App {
                 ui.painter().rect(
                     Rect::from_min_max(
                         Pos2::new(pos_x, pos_y),
-                        Pos2::new(
-                            pos_x + cr.size[0],
-                            pos_y + cr.size[1],
-                        ),
+                        Pos2::new(pos_x + cr.size[0], pos_y + cr.size[1]),
                     ),
                     cr.rounding,
                     Color32::from_rgba_unmultiplied(
@@ -1394,6 +1760,7 @@ impl App {
         };
     }
 
+    /// 添加文本资源。
     pub fn add_text(
         &mut self,
         name_and_content: [&str; 2],
@@ -1427,6 +1794,7 @@ impl App {
         }));
     }
 
+    /// 显示文本资源。
     pub fn text(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("Text", name) {
             if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
@@ -1436,12 +1804,7 @@ impl App {
                     f.layout(
                         t.text_content.to_string(),
                         FontId::proportional(t.font_size),
-                        Color32::from_rgba_unmultiplied(
-                            t.rgba[0],
-                            t.rgba[1],
-                            t.rgba[2],
-                            t.rgba[3],
-                        ),
+                        Color32::from_rgba_unmultiplied(t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3]),
                         t.wrap_width,
                     )
                 });
@@ -1499,16 +1862,14 @@ impl App {
                     position,
                     galley,
                     Color32::from_rgba_unmultiplied(
-                        t.rgba[0],
-                        t.rgba[1],
-                        t.rgba[2],
-                        t.rgba[3], // 应用透明度
+                        t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3], // 应用透明度
                     ),
                 );
             };
         };
     }
 
+    /// 获取文本大小
     pub fn get_text_size(&mut self, resource_name: &str, ui: &mut Ui) -> Result<[f32; 2], ()> {
         if let Ok(id) = self.get_resource_index("Text", resource_name) {
             if let RCR::Text(t) = self.rust_constructor_resource[id].clone() {
@@ -1516,12 +1877,7 @@ impl App {
                     f.layout(
                         t.text_content.to_string(),
                         FontId::proportional(t.font_size),
-                        Color32::from_rgba_unmultiplied(
-                            t.rgba[0],
-                            t.rgba[1],
-                            t.rgba[2],
-                            t.rgba[3],
-                        ),
+                        Color32::from_rgba_unmultiplied(t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3]),
                         t.wrap_width,
                     )
                 });
@@ -1534,37 +1890,24 @@ impl App {
         }
     }
 
+    /// 读取图片。
     fn read_image_to_vec(&mut self, path: &str) -> Vec<u8> {
         let mut file =
             File::open(path).unwrap_or(File::open("Resources/assets/images/error.png").unwrap());
         if !check_file_exists(path) {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "{}: {}",
-                    self.game_text.game_text["error_image_open_failed"]
-                        [self.config.language as usize],
-                    path
-                );
-            } else {
-                self.problem_report(
-                    &format!(
-                        "{}: {}",
-                        self.game_text.game_text["error_image_open_failed"]
-                            [self.config.language as usize],
-                        path
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_image_open_failed_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            };
+            self.problem_report(
+                RustConstructorError::ImageGetFailed {
+                    image_path: path.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
         };
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer).unwrap();
         buffer
     }
 
+    /// 添加变量资源。
     pub fn add_var<T: Into<Value>>(&mut self, name: &str, value: T) {
         self.rust_constructor_resource.push(RCR::Variable(Variable {
             discern_type: "Variable".to_string(),
@@ -1573,6 +1916,7 @@ impl App {
         }));
     }
 
+    /// 修改变量资源。
     pub fn modify_var<T: Into<Value>>(&mut self, name: &str, value: T) {
         if let Ok(id) = self.get_resource_index("Variable", name) {
             if let RCR::Variable(v) = &mut self.rust_constructor_resource[id] {
@@ -1581,6 +1925,7 @@ impl App {
         };
     }
 
+    /// 取出Value变量。
     #[allow(dead_code)]
     pub fn var(&mut self, name: &str) -> Result<Value, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
@@ -1594,6 +1939,7 @@ impl App {
         }
     }
 
+    /// 取出i32变量。
     #[allow(dead_code)]
     pub fn var_i(&mut self, name: &str) -> Result<i32, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
@@ -1602,128 +1948,64 @@ impl App {
                     // 直接访问 value 字段
                     Value::Int(i) => Ok(*i),
                     _ => {
-                        if self.config.rc_strict_mode {
-                            panic!(
-                                "\"{}\" {}",
-                                name,
-                                self.game_text.game_text["error_variable_not_i32_type"]
-                                    [self.config.language as usize]
-                                    .clone()
-                            );
-                        } else {
-                            self.problem_report(
-                                &format!(
-                                    "\"{}\" {}",
-                                    name,
-                                    self.game_text.game_text["error_variable_not_i32_type"]
-                                        [self.config.language as usize]
-                                        .clone()
-                                ),
-                                SeverityLevel::SevereWarning,
-                                &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                                    [self.config.language as usize]
-                                    .clone(),
-                            );
-                        }
+                        self.problem_report(
+                            RustConstructorError::VariableNotInt {
+                                variable_name: name.to_string(),
+                            },
+                            SeverityLevel::SevereWarning,
+                        );
                         Err(())
                     }
                 }
             } else {
+                // 正常情况下不会触发。
                 Err(())
             }
         } else {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "\"{}\" {}",
-                    name,
-                    self.game_text.game_text["error_variable_not_i32_type"]
-                        [self.config.language as usize]
-                        .clone()
-                );
-            } else {
-                self.problem_report(
-                    &format!(
-                        "\"{}\" {}",
-                        name,
-                        self.game_text.game_text["error_variable_not_i32_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            }
+            self.problem_report(
+                RustConstructorError::VariableNotInt {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
             Err(())
         }
     }
 
+    /// 取出u32资源。
     #[allow(dead_code)]
     pub fn var_u(&mut self, name: &str) -> Result<u32, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
-                if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                    match &v.value {
-                        // 直接访问 value 字段
-                        Value::UInt(u) => Ok(*u),
-                        _ => {
-                            if self.config.rc_strict_mode {
-                                panic!(
-                                    "\"{}\" {}",
-                                    name,
-                                    self.game_text.game_text["error_variable_not_u32_type"]
-                                        [self.config.language as usize]
-                                        .clone()
-                                );
-                            } else {
-                                self.problem_report(
-                                    &format!(
-                                        "\"{}\" {}",
-                                        name,
-                                        self.game_text.game_text["error_variable_not_u32_type"]
-                                            [self.config.language as usize]
-                                            .clone()
-                                    ),
-                                    SeverityLevel::SevereWarning,
-                                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                                        [self.config.language as usize]
-                                        .clone(),
-                                );
-                            }
-                            Err(())
-                        }
+            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
+                match &v.value {
+                    // 直接访问 value 字段
+                    Value::UInt(u) => Ok(*u),
+                    _ => {
+                        self.problem_report(
+                            RustConstructorError::VariableNotUInt {
+                                variable_name: name.to_string(),
+                            },
+                            SeverityLevel::SevereWarning,
+                        );
+                        Err(())
                     }
-                } else {
-                    Err(())
                 }
-        } else {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "\"{}\" {}",
-                    name,
-                    self.game_text.game_text["error_variable_not_u32_type"]
-                        [self.config.language as usize]
-                        .clone()
-                );
             } else {
-                self.problem_report(
-                    &format!(
-                        "\"{}\" {}",
-                        name,
-                        self.game_text.game_text["error_variable_not_u32_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            };
+                // 正常情况下不会触发。
+                Err(())
+            }
+        } else {
+            self.problem_report(
+                RustConstructorError::VariableNotUInt {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
             Err(())
         }
     }
 
+    /// 取出f32资源。
     #[allow(dead_code)]
     pub fn var_f(&mut self, name: &str) -> Result<f32, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
@@ -1732,63 +2014,31 @@ impl App {
                     // 直接访问 value 字段
                     Value::Float(f) => Ok(*f),
                     _ => {
-                        if self.config.rc_strict_mode {
-                            panic!(
-                                "\"{}\" {}",
-                                name,
-                                self.game_text.game_text["error_variable_not_f32_type"]
-                                    [self.config.language as usize]
-                                    .clone()
-                            );
-                        } else {
-                            self.problem_report(
-                                &format!(
-                                    "\"{}\" {}",
-                                    name,
-                                    self.game_text.game_text["error_variable_not_f32_type"]
-                                        [self.config.language as usize]
-                                        .clone()
-                                ),
-                                SeverityLevel::SevereWarning,
-                                &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                                    [self.config.language as usize]
-                                    .clone(),
-                            );
-                        }
+                        self.problem_report(
+                            RustConstructorError::VariableNotFloat {
+                                variable_name: name.to_string(),
+                            },
+                            SeverityLevel::SevereWarning,
+                        );
                         Err(())
                     }
                 }
             } else {
+                // 正常情况下不会触发。
                 Err(())
             }
         } else {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "\"{}\" {}",
-                    name,
-                    self.game_text.game_text["error_variable_not_f32_type"]
-                        [self.config.language as usize]
-                        .clone()
-                );
-            } else {
-                self.problem_report(
-                    &format!(
-                        "\"{}\" {}",
-                        name,
-                        self.game_text.game_text["error_variable_not_f32_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            }
+            self.problem_report(
+                RustConstructorError::VariableNotFloat {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
             Err(())
         }
     }
 
+    /// 取出布尔值资源。
     pub fn var_b(&mut self, name: &str) -> Result<bool, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
             if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
@@ -1796,63 +2046,31 @@ impl App {
                     // 直接访问 value 字段
                     Value::Bool(b) => Ok(*b),
                     _ => {
-                        if self.config.rc_strict_mode {
-                            panic!(
-                                "\"{}\" {}",
-                                name,
-                                self.game_text.game_text["error_variable_not_bool_type"]
-                                    [self.config.language as usize]
-                                    .clone()
-                            );
-                        } else {
-                            self.problem_report(
-                                &format!(
-                                    "\"{}\" {}",
-                                    name,
-                                    self.game_text.game_text["error_variable_not_bool_type"]
-                                        [self.config.language as usize]
-                                        .clone()
-                                ),
-                                SeverityLevel::SevereWarning,
-                                &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                                    [self.config.language as usize]
-                                    .clone(),
-                            );
-                        }
+                        self.problem_report(
+                            RustConstructorError::VariableNotBool {
+                                variable_name: name.to_string(),
+                            },
+                            SeverityLevel::SevereWarning,
+                        );
                         Err(())
                     }
                 }
             } else {
+                // 正常情况下不会触发。
                 Err(())
             }
         } else {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "\"{}\" {}",
-                    name,
-                    self.game_text.game_text["error_variable_not_bool_type"]
-                        [self.config.language as usize]
-                        .clone()
-                );
-            } else {
-                self.problem_report(
-                    &format!(
-                        "\"{}\" {}",
-                        name,
-                        self.game_text.game_text["error_variable_not_bool_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            }
+            self.problem_report(
+                RustConstructorError::VariableNotBool {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
             Err(())
         }
     }
 
+    /// 取出包含Value的Vec资源。
     #[allow(dead_code)]
     pub fn var_v(&mut self, name: &str) -> Result<Vec<Value>, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
@@ -1861,63 +2079,31 @@ impl App {
                     // 直接访问 value 字段
                     Value::Vec(v) => Ok(v.clone()),
                     _ => {
-                        if self.config.rc_strict_mode {
-                            panic!(
-                                "\"{}\" {}",
-                                name,
-                                self.game_text.game_text["error_variable_not_vec_type"]
-                                    [self.config.language as usize]
-                                    .clone()
-                            );
-                        } else {
-                            self.problem_report(
-                                &format!(
-                                    "\"{}\" {}",
-                                    name,
-                                    self.game_text.game_text["error_variable_not_vec_type"]
-                                        [self.config.language as usize]
-                                        .clone()
-                                ),
-                                SeverityLevel::SevereWarning,
-                                &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                                    [self.config.language as usize]
-                                    .clone(),
-                            );
-                        }
+                        self.problem_report(
+                            RustConstructorError::VariableNotVec {
+                                variable_name: name.to_string(),
+                            },
+                            SeverityLevel::SevereWarning,
+                        );
                         Err(())
                     }
                 }
             } else {
+                // 正常情况下不会触发。
                 Err(())
             }
         } else {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "\"{}\" {}",
-                    name,
-                    self.game_text.game_text["error_variable_not_vec_type"]
-                        [self.config.language as usize]
-                        .clone()
-                );
-            } else {
-                self.problem_report(
-                    &format!(
-                        "\"{}\" {}",
-                        name,
-                        self.game_text.game_text["error_variable_not_vec_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            }
+            self.problem_report(
+                RustConstructorError::VariableNotVec {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
             Err(())
         }
     }
 
+    /// 取出字符串资源。
     #[allow(dead_code)]
     pub fn var_s(&mut self, name: &str) -> Result<String, ()> {
         if let Ok(id) = self.get_resource_index("Variable", name) {
@@ -1926,243 +2112,131 @@ impl App {
                     // 直接访问 value 字段
                     Value::String(s) => Ok(s.clone()),
                     _ => {
-                        if self.config.rc_strict_mode {
-                            panic!(
-                                "\"{}\" {}",
-                                name,
-                                self.game_text.game_text["error_variable_not_string_type"]
-                                    [self.config.language as usize]
-                                    .clone()
-                            );
-                        } else {
-                            self.problem_report(
-                                &format!(
-                                    "\"{}\" {}",
-                                    name,
-                                    self.game_text.game_text["error_variable_not_string_type"]
-                                        [self.config.language as usize]
-                                        .clone()
-                                ),
-                                SeverityLevel::SevereWarning,
-                                &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                                    [self.config.language as usize]
-                                    .clone(),
-                            );
-                        }
+                        self.problem_report(
+                            RustConstructorError::VariableNotString {
+                                variable_name: name.to_string(),
+                            },
+                            SeverityLevel::SevereWarning,
+                        );
                         Err(())
                     }
                 }
             } else {
+                // 正常情况下不会触发。
                 Err(())
             }
         } else {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "\"{}\" {}",
-                    name,
-                    self.game_text.game_text["error_variable_not_string_type"]
-                        [self.config.language as usize]
-                        .clone()
-                );
-            } else {
-                self.problem_report(
-                    &format!(
-                        "\"{}\" {}",
-                        name,
-                        self.game_text.game_text["error_variable_not_string_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    ),
-                    SeverityLevel::SevereWarning,
-                    &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
-                );
-            }
+            self.problem_report(
+                RustConstructorError::VariableNotString {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+            );
             Err(())
         }
     }
 
+    /// 尝试将Value转换成布尔值。
     #[allow(dead_code)]
-    pub fn var_decode_b(&mut self, target: Value) -> bool {
+    pub fn var_decode_b(&mut self, target: Value) -> Result<bool, ()> {
         match target {
             Value::Bool(b) => {
                 // 处理布尔值
-                b
+                Ok(b)
             }
             _ => {
-                if self.config.rc_strict_mode {
-                    panic!(
-                        "\"{:?}\" {}",
-                        target,
-                        self.game_text.game_text["error_variable_not_bool_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    );
-                } else {
-                    self.problem_report(
-                        &format!(
-                            "\"{:?}\" {}",
-                            target,
-                            self.game_text.game_text["error_variable_not_bool_type"]
-                                [self.config.language as usize]
-                                .clone()
-                        ),
-                        SeverityLevel::SevereWarning,
-                        &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                            [self.config.language as usize]
-                            .clone(),
-                    );
-                    false
-                }
+                self.problem_report(
+                    RustConstructorError::VariableNotBool {
+                        variable_name: format!("{:?}", target),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                Err(())
             }
         }
     }
 
+    /// 尝试将Value转换成i32。
     #[allow(dead_code)]
-    pub fn var_decode_i(&mut self, target: Value) -> i32 {
+    pub fn var_decode_i(&mut self, target: Value) -> Result<i32, ()> {
         match target {
             Value::Int(i) => {
                 // 处理i32整型
-                i
+                Ok(i)
             }
             _ => {
-                if self.config.rc_strict_mode {
-                    panic!(
-                        "\"{:?}\" {}",
-                        target,
-                        self.game_text.game_text["error_variable_not_i32_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    );
-                } else {
-                    self.problem_report(
-                        &format!(
-                            "\"{:?}\" {}",
-                            target,
-                            self.game_text.game_text["error_variable_not_i32_type"]
-                                [self.config.language as usize]
-                                .clone()
-                        ),
-                        SeverityLevel::SevereWarning,
-                        &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                            [self.config.language as usize]
-                            .clone(),
-                    );
-                    0
-                }
+                self.problem_report(
+                    RustConstructorError::VariableNotInt {
+                        variable_name: format!("{:?}", target),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                Err(())
             }
         }
     }
 
+    /// 尝试将Value转换成u32。
     #[allow(dead_code)]
-    pub fn var_decode_u(&mut self, target: Value) -> u32 {
+    pub fn var_decode_u(&mut self, target: Value) -> Result<u32, ()> {
         match target {
             Value::UInt(u) => {
                 // 处理u32无符号整型
-                u
+                Ok(u)
             }
             _ => {
-                if self.config.rc_strict_mode {
-                    panic!(
-                        "\"{:?}\" {}",
-                        target,
-                        self.game_text.game_text["error_variable_not_u32_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    );
-                } else {
-                    self.problem_report(
-                        &format!(
-                            "\"{:?}\" {}",
-                            target,
-                            self.game_text.game_text["error_variable_not_u32_type"]
-                                [self.config.language as usize]
-                                .clone()
-                        ),
-                        SeverityLevel::SevereWarning,
-                        &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                            [self.config.language as usize]
-                            .clone(),
-                    );
-                    0
-                }
+                self.problem_report(
+                    RustConstructorError::VariableNotUInt {
+                        variable_name: format!("{:?}", target),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                Err(())
             }
         }
     }
 
+    /// 尝试将Value转换成f32。
     #[allow(dead_code)]
-    pub fn var_decode_f(&mut self, target: Value) -> f32 {
+    pub fn var_decode_f(&mut self, target: Value) -> Result<f32, ()> {
         match target {
             Value::Float(f) => {
                 // 处理浮点数
-                f
+                Ok(f)
             }
             _ => {
-                if self.config.rc_strict_mode {
-                    panic!(
-                        "\"{:?}\" {}",
-                        target,
-                        self.game_text.game_text["error_variable_not_f32_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    );
-                } else {
-                    self.problem_report(
-                        &format!(
-                            "\"{:?}\" {}",
-                            target,
-                            self.game_text.game_text["error_variable_not_f32_type"]
-                                [self.config.language as usize]
-                                .clone()
-                        ),
-                        SeverityLevel::SevereWarning,
-                        &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                            [self.config.language as usize]
-                            .clone(),
-                    );
-                    0_f32
-                }
+                self.problem_report(
+                    RustConstructorError::VariableNotFloat {
+                        variable_name: format!("{:?}", target),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                Err(())
             }
         }
     }
 
+    /// 尝试将Value转换成字符串。
     #[allow(dead_code)]
-    pub fn var_decode_s(&mut self, target: Value) -> String {
+    pub fn var_decode_s(&mut self, target: Value) -> Result<String, ()> {
         match target {
             Value::String(s) => {
                 // 处理字符串
-                s
+                Ok(s)
             }
             _ => {
-                if self.config.rc_strict_mode {
-                    panic!(
-                        "\"{:?}\" {}",
-                        target,
-                        self.game_text.game_text["error_variable_not_string_type"]
-                            [self.config.language as usize]
-                            .clone()
-                    );
-                } else {
-                    self.problem_report(
-                        &format!(
-                            "\"{:?}\" {}",
-                            target,
-                            self.game_text.game_text["error_variable_not_string_type"]
-                                [self.config.language as usize]
-                                .clone()
-                        ),
-                        SeverityLevel::SevereWarning,
-                        &self.game_text.game_text["error_variable_wrong_type_annotation"]
-                            [self.config.language as usize]
-                            .clone(),
-                    );
-                    String::new()
-                }
+                self.problem_report(
+                    RustConstructorError::VariableNotString {
+                        variable_name: format!("{:?}", target),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                Err(())
             }
         }
     }
 
+    /// 添加滚动背景资源。
     #[allow(dead_code)]
     pub fn add_scroll_background(
         &mut self,
@@ -2181,15 +2255,14 @@ impl App {
                         image_id.push(u);
                     };
                 };
-            };
-        };
+            }
+        }
         for (count, _) in image_id.clone().into_iter().enumerate() {
             if let RCR::Image(im) = &mut self.rust_constructor_resource[image_id[count]] {
                 im.x_grid = [0, 0];
                 im.y_grid = [0, 0];
                 im.center_display = [true, true, false, false];
-                im.image_size =
-                    [size_position_boundary[0], size_position_boundary[1]];
+                im.image_size = [size_position_boundary[0], size_position_boundary[1]];
                 let mut temp_position;
                 if horizontal_or_vertical {
                     temp_position = size_position_boundary[2];
@@ -2204,8 +2277,7 @@ impl App {
                             temp_position -= size_position_boundary[0];
                         };
                     }
-                    im.origin_position =
-                        [temp_position, size_position_boundary[3]];
+                    im.origin_position = [temp_position, size_position_boundary[3]];
                 } else {
                     for _ in 0..count {
                         if left_and_top_or_right_and_bottom {
@@ -2214,30 +2286,32 @@ impl App {
                             temp_position -= size_position_boundary[1];
                         };
                     }
-                    im.origin_position =
-                        [size_position_boundary[2], temp_position];
+                    im.origin_position = [size_position_boundary[2], temp_position];
                 };
             };
-        };
-        if let RCR::Image(im) = self.rust_constructor_resource[image_id[image_id.len() - 1]].clone() {
+        }
+        if let RCR::Image(im) = self.rust_constructor_resource[image_id[image_id.len() - 1]].clone()
+        {
             let resume_point = if horizontal_or_vertical {
                 im.origin_position[0]
             } else {
                 im.origin_position[1]
             };
-            self.rust_constructor_resource.push(RCR::ScrollBackground(ScrollBackground {
-                discern_type: "ScrollBackground".to_string(),
-                name: name.to_string(),
-                image_name,
-                horizontal_or_vertical,
-                left_and_top_or_right_and_bottom,
-                scroll_speed,
-                boundary: size_position_boundary[4],
-                resume_point,
-            }));
+            self.rust_constructor_resource
+                .push(RCR::ScrollBackground(ScrollBackground {
+                    discern_type: "ScrollBackground".to_string(),
+                    name: name.to_string(),
+                    image_name,
+                    horizontal_or_vertical,
+                    left_and_top_or_right_and_bottom,
+                    scroll_speed,
+                    boundary: size_position_boundary[4],
+                    resume_point,
+                }));
         };
     }
 
+    /// 显示滚动背景。
     #[allow(dead_code)]
     pub fn scroll_background(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("ScrollBackground", name) {
@@ -2247,87 +2321,79 @@ impl App {
                     self.add_split_time(name, false);
                 };
                 for i in 0..sb.image_name.len() {
-                    self.image(
-                        ui,
-                        &sb.image_name[i].clone(),
-                        ctx,
-                    );
+                    self.image(ui, &sb.image_name[i].clone(), ctx);
                 }
                 if self.timer.now_time - self.split_time(name).unwrap()[0] >= self.vertrefresh {
                     self.add_split_time(name, true);
                     for i in 0..sb.image_name.len() {
-                        if let Ok(id2) = self.get_resource_index("Image", &sb.image_name[i].clone()) {
-                            if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone() {
+                        if let Ok(id2) = self.get_resource_index("Image", &sb.image_name[i].clone())
+                        {
+                            if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone()
+                            {
                                 if sb.horizontal_or_vertical {
                                     if sb.left_and_top_or_right_and_bottom {
                                         for _ in 0..sb.scroll_speed {
                                             im.origin_position[0] -= 1_f32;
-                                            self.rust_constructor_resource[id2] = RCR::Image(im.clone());
+                                            self.rust_constructor_resource[id2] =
+                                                RCR::Image(im.clone());
                                             self.scroll_background_check_boundary(id, id2);
                                         }
                                     } else {
                                         for _ in 0..sb.scroll_speed {
                                             im.origin_position[0] += 1_f32;
-                                            self.rust_constructor_resource[id2] = RCR::Image(im.clone());
+                                            self.rust_constructor_resource[id2] =
+                                                RCR::Image(im.clone());
                                             self.scroll_background_check_boundary(id, id2);
                                         }
                                     };
                                 } else if sb.left_and_top_or_right_and_bottom {
                                     for _ in 0..sb.scroll_speed {
                                         im.origin_position[1] -= 1_f32;
-                                        self.rust_constructor_resource[id2] = RCR::Image(im.clone());
+                                        self.rust_constructor_resource[id2] =
+                                            RCR::Image(im.clone());
                                         self.scroll_background_check_boundary(id, id2);
                                     }
                                 } else {
                                     for _ in 0..sb.scroll_speed {
                                         im.origin_position[1] += 1_f32;
-                                        self.rust_constructor_resource[id2] = RCR::Image(im.clone());
+                                        self.rust_constructor_resource[id2] =
+                                            RCR::Image(im.clone());
                                         self.scroll_background_check_boundary(id, id2);
-                                    };
+                                    }
                                 };
                             };
                         };
-                    };
+                    }
                 };
             };
         };
     }
 
+    /// 检查滚动背景是否越界。
     fn scroll_background_check_boundary(&mut self, id: usize, id2: usize) {
         if let RCR::ScrollBackground(sb) = self.rust_constructor_resource[id].clone() {
             if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone() {
                 if sb.horizontal_or_vertical {
                     if sb.left_and_top_or_right_and_bottom {
-                        if im.origin_position[0]
-                            <= sb.boundary
-                        {
-                            im.origin_position[0] =
-                                sb.resume_point;
+                        if im.origin_position[0] <= sb.boundary {
+                            im.origin_position[0] = sb.resume_point;
                         };
-                    } else if im.origin_position[0]
-                        >= sb.boundary
-                    {
-                        im.origin_position[0] =
-                            sb.resume_point;
+                    } else if im.origin_position[0] >= sb.boundary {
+                        im.origin_position[0] = sb.resume_point;
                     };
                 } else if sb.left_and_top_or_right_and_bottom {
-                    if im.origin_position[1]
-                        <= sb.boundary
-                    {
-                        im.origin_position[1] =
-                            sb.resume_point;
+                    if im.origin_position[1] <= sb.boundary {
+                        im.origin_position[1] = sb.resume_point;
                     };
-                } else if im.origin_position[1]
-                    >= sb.boundary
-                {
-                    im.origin_position[1] =
-                        sb.resume_point;
+                } else if im.origin_position[1] >= sb.boundary {
+                    im.origin_position[1] = sb.resume_point;
                 };
                 self.rust_constructor_resource[id2] = RCR::Image(im);
             };
         };
     }
 
+    /// 添加图片纹理资源。
     pub fn add_image_texture(
         &mut self,
         name: &str,
@@ -2350,7 +2416,15 @@ impl App {
         let color_image =
             egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
         let image_texture = Some(ctx.load_texture(name, color_image, TextureOptions::LINEAR));
-        if let Ok(id) = self.get_resource_index("ImageTexture", name) {
+        if create_new_resource {
+            self.rust_constructor_resource
+                .push(RCR::ImageTexture(ImageTexture {
+                    discern_type: "ImageTexture".to_string(),
+                    name: name.to_string(),
+                    texture: image_texture,
+                    cite_path: path.to_string(),
+                }));
+        } else if let Ok(id) = self.get_resource_index("ImageTexture", name) {
             if let RCR::ImageTexture(it) = &mut self.rust_constructor_resource[id] {
                 if !create_new_resource {
                     it.texture = image_texture;
@@ -2358,15 +2432,17 @@ impl App {
                 };
             };
         } else {
-            self.rust_constructor_resource.push(RCR::ImageTexture(ImageTexture {
-                discern_type: "ImageTexture".to_string(),
-                name: name.to_string(),
-                texture: image_texture,
-                cite_path: path.to_string(),
-            }));
+            self.rust_constructor_resource
+                .push(RCR::ImageTexture(ImageTexture {
+                    discern_type: "ImageTexture".to_string(),
+                    name: name.to_string(),
+                    texture: image_texture,
+                    cite_path: path.to_string(),
+                }));
         };
     }
 
+    /// 添加图片资源。
     pub fn add_image(
         &mut self,
         name: &str,
@@ -2407,6 +2483,7 @@ impl App {
         };
     }
 
+    /// 显示图片资源。
     pub fn image(&mut self, ui: &Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("Image", name) {
             if let RCR::Image(im) = &mut self.rust_constructor_resource[id] {
@@ -2428,27 +2505,19 @@ impl App {
                     }
                 };
                 if im.center_display[2] {
-                    im.image_position[0] -=
-                        im.image_size[0] / 2.0;
+                    im.image_position[0] -= im.image_size[0] / 2.0;
                 } else if !im.center_display[0] {
                     im.image_position[0] -= im.image_size[0];
                 };
                 if im.center_display[3] {
-                    im.image_position[1] -=
-                        im.image_size[1] / 2.0;
+                    im.image_position[1] -= im.image_size[1] / 2.0;
                 } else if !im.center_display[1] {
                     im.image_position[1] -= im.image_size[1];
                 };
                 if let Some(texture) = &im.image_texture {
                     let rect = Rect::from_min_size(
-                        Pos2::new(
-                            im.image_position[0],
-                            im.image_position[1],
-                        ),
-                        Vec2::new(
-                            im.image_size[0],
-                            im.image_size[1],
-                        ),
+                        Pos2::new(im.image_position[0], im.image_position[1]),
+                        Vec2::new(im.image_size[0], im.image_size[1]),
                     );
                     let color = if im.use_overlay_color {
                         // 创建颜色覆盖
@@ -2457,9 +2526,7 @@ impl App {
                             im.overlay_color[1],
                             im.overlay_color[2],
                             // 将图片透明度与覆盖颜色透明度相乘
-                            (im.alpha as f32
-                                * im.overlay_color[3] as f32
-                                / 255.0) as u8,
+                            (im.alpha as f32 * im.overlay_color[3] as f32 / 255.0) as u8,
                         )
                     } else {
                         Color32::from_white_alpha(im.alpha)
@@ -2476,6 +2543,7 @@ impl App {
         };
     }
 
+    /// 添加消息框资源。
     #[allow(dead_code)]
     pub fn add_message_box(
         &mut self,
@@ -2485,18 +2553,19 @@ impl App {
         box_existing_time: f32,
         box_normal_and_restore_speed: [f32; 2],
     ) {
-        if self.get_resource_index("MessageBox", box_itself_title_content_image_name[0]).is_err()
-        {
-            if let Ok(id) = self.get_resource_index("Image", box_itself_title_content_image_name[3]) {
+        if !self.check_resource_exists("MessageBox", box_itself_title_content_image_name[0]) {
+            if let Ok(id) = self.get_resource_index("Image", box_itself_title_content_image_name[3])
+            {
                 if let RCR::Image(im) = &mut self.rust_constructor_resource[id] {
                     im.image_size = [box_size[1] - 15_f32, box_size[1] - 15_f32];
                     im.center_display = [true, false, false, true];
                     im.x_grid = [1, 1];
-                    im.y_grid = [0, 1];    
-                    im.name = format!("MessageBox_{}", im.name);  
+                    im.y_grid = [0, 1];
+                    im.name = format!("MessageBox_{}", im.name);
                 };
             };
-            if let Ok(id) = self.get_resource_index("Text", box_itself_title_content_image_name[1]) {
+            if let Ok(id) = self.get_resource_index("Text", box_itself_title_content_image_name[1])
+            {
                 if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
                     t.x_grid = [1, 1];
                     t.y_grid = [0, 1];
@@ -2505,7 +2574,8 @@ impl App {
                     t.name = format!("MessageBox_{}", t.name);
                 };
             };
-            if let Ok(id) = self.get_resource_index("Text", box_itself_title_content_image_name[2]) {
+            if let Ok(id) = self.get_resource_index("Text", box_itself_title_content_image_name[2])
+            {
                 if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
                     t.center_display = [true, true, false, false];
                     t.x_grid = [1, 1];
@@ -2514,20 +2584,30 @@ impl App {
                     t.name = format!("MessageBox_{}", t.name);
                 };
             };
-            self.rust_constructor_resource.push(RCR::MessageBox(MessageBox {
-                discern_type: "MessageBox".to_string(),
-                name: box_itself_title_content_image_name[0].to_string(),
-                box_size,
-                box_title_name: format!("MessageBox_{}", box_itself_title_content_image_name[1]),
-                box_content_name: format!("MessageBox_{}", box_itself_title_content_image_name[2]),
-                box_image_name: format!("MessageBox_{}", box_itself_title_content_image_name[3]),
-                box_keep_existing,
-                box_existing_time,
-                box_exist: true,
-                box_speed: box_normal_and_restore_speed[0],
-                box_restore_speed: box_normal_and_restore_speed[1],
-                box_memory_offset: 0_f32,
-            }));
+            self.rust_constructor_resource
+                .push(RCR::MessageBox(MessageBox {
+                    discern_type: "MessageBox".to_string(),
+                    name: box_itself_title_content_image_name[0].to_string(),
+                    box_size,
+                    box_title_name: format!(
+                        "MessageBox_{}",
+                        box_itself_title_content_image_name[1]
+                    ),
+                    box_content_name: format!(
+                        "MessageBox_{}",
+                        box_itself_title_content_image_name[2]
+                    ),
+                    box_image_name: format!(
+                        "MessageBox_{}",
+                        box_itself_title_content_image_name[3]
+                    ),
+                    box_keep_existing,
+                    box_existing_time,
+                    box_exist: true,
+                    box_speed: box_normal_and_restore_speed[0],
+                    box_restore_speed: box_normal_and_restore_speed[1],
+                    box_memory_offset: 0_f32,
+                }));
             if !box_keep_existing {
                 self.add_split_time(
                     &format!("MessageBox_{}", box_itself_title_content_image_name[0]),
@@ -2605,29 +2685,17 @@ impl App {
                     "".to_string(),
                 ],
             );
-        } else if self.config.rc_strict_mode {
-            panic!(
-                "{}{}",
-                box_itself_title_content_image_name[0],
-                self.game_text.game_text["error_message_box_already_exists"]
-                    [self.config.language as usize]
-            );
         } else {
             self.problem_report(
-                &format!(
-                    "{}{}",
-                    box_itself_title_content_image_name[0],
-                    self.game_text.game_text["error_message_box_already_exists"]
-                        [self.config.language as usize]
-                ),
+                RustConstructorError::MessageBoxAlreadyExists {
+                    message_box_name: box_itself_title_content_image_name[0].to_string(),
+                },
                 SeverityLevel::SevereWarning,
-                &self.game_text.game_text["error_message_box_already_exists_annotation"]
-                    [self.config.language as usize]
-                    .clone(),
             );
         };
     }
 
+    /// 处理所有已添加的消息框资源。
     pub fn message_box_display(&mut self, ctx: &egui::Context, ui: &mut Ui) {
         let mut offset = 0_f32;
         let mut delete_count = 0;
@@ -2636,23 +2704,48 @@ impl App {
             if let RCR::MessageBox(_) = self.rust_constructor_resource[i] {
                 index_list.push(i);
             };
-        };
+        }
         for u in 0..index_list.len() {
             let mut deleted = false;
             let i = u - delete_count;
             if let RCR::MessageBox(mut mb) = self.rust_constructor_resource[index_list[i]].clone() {
                 if let Ok(id1) = self.get_resource_index("Image", &mb.box_image_name) {
                     if let RCR::Image(mut im1) = self.rust_constructor_resource[id1].clone() {
-                        if let Ok(id2) = self.get_resource_index("CustomRect", &format!("MessageBox_{}", mb.name)) {
-                            if let RCR::CustomRect(mut cr) = self.rust_constructor_resource[id2].clone() {
-                                if let Ok(id3) = self.get_resource_index("Text", &mb.box_title_name) {
-                                    if let RCR::Text(mut t1) = self.rust_constructor_resource[id3].clone() {
-                                        if let Ok(id4) = self.get_resource_index("Text", &mb.box_content_name) {
-                                            if let RCR::Text(mut t2) = self.rust_constructor_resource[id4].clone() {
-                                                if let Ok(id5) = self.get_resource_index("Switch", &format!("MessageBox_{}_Close", mb.name)) {
-                                                    if let RCR::Switch(mut s) = self.rust_constructor_resource[id5].clone() {
-                                                        if let Ok(id6) = self.get_resource_index("Image", &format!("MessageBox_{}_Close", mb.name)) {
-                                                            if let RCR::Image(mut im2) = self.rust_constructor_resource[id6].clone() {
+                        if let Ok(id2) = self
+                            .get_resource_index("CustomRect", &format!("MessageBox_{}", mb.name))
+                        {
+                            if let RCR::CustomRect(mut cr) =
+                                self.rust_constructor_resource[id2].clone()
+                            {
+                                if let Ok(id3) = self.get_resource_index("Text", &mb.box_title_name)
+                                {
+                                    if let RCR::Text(mut t1) =
+                                        self.rust_constructor_resource[id3].clone()
+                                    {
+                                        if let Ok(id4) =
+                                            self.get_resource_index("Text", &mb.box_content_name)
+                                        {
+                                            if let RCR::Text(mut t2) =
+                                                self.rust_constructor_resource[id4].clone()
+                                            {
+                                                if let Ok(id5) = self.get_resource_index(
+                                                    "Switch",
+                                                    &format!("MessageBox_{}_Close", mb.name),
+                                                ) {
+                                                    if let RCR::Switch(mut s) =
+                                                        self.rust_constructor_resource[id5].clone()
+                                                    {
+                                                        if let Ok(id6) = self.get_resource_index(
+                                                            "Image",
+                                                            &format!(
+                                                                "MessageBox_{}_Close",
+                                                                mb.name
+                                                            ),
+                                                        ) {
+                                                            if let RCR::Image(mut im2) = self
+                                                                .rust_constructor_resource[id6]
+                                                                .clone()
+                                                            {
                                                                 if mb.box_size[1]
                                                                     < self.get_text_size(&mb.box_title_name.clone(), ui).unwrap()[1]
                                                                         + self.get_text_size(&mb.box_content_name.clone(), ui).unwrap()
@@ -2719,10 +2812,12 @@ impl App {
                                                                             {
                                                                                 cr.origin_position[0] =
                                                                                     -mb.box_size[0] - 5_f32;
-                                                                                self.add_split_time(
-                                                                                    &format!("MessageBox_{}", mb.name),
-                                                                                    true,
-                                                                                );
+                                                                                if self.check_resource_exists("SplitTime", &format!("MessageBox_{}", mb.name)) {
+                                                                                    self.add_split_time(
+                                                                                        &format!("MessageBox_{}", mb.name),
+                                                                                        true,
+                                                                                    );
+                                                                                };
                                                                             } else {
                                                                                 cr.origin_position[0] -=
                                                                                     mb.box_speed;
@@ -2758,14 +2853,23 @@ impl App {
                                                                         + im1.image_size[0]
                                                                         + 5_f32,
                                                                     t1.origin_position[1]
-                                                                        + self.get_text_size(&mb.box_title_name.clone(), ui).unwrap()
-                                                                            [1],
+                                                                        + self
+                                                                            .get_text_size(
+                                                                                &mb.box_title_name
+                                                                                    .clone(),
+                                                                                ui,
+                                                                            )
+                                                                            .unwrap()[1],
                                                                 ];
                                                                 im2.origin_position = cr.position;
                                                                 if !mb.box_keep_existing
                                                                     && self.timer.total_time
-                                                                        - self.split_time(&format!("MessageBox_{}", mb.name)).unwrap()
-                                                                            [1]
+                                                                        - self
+                                                                            .split_time(&format!(
+                                                                                "MessageBox_{}",
+                                                                                mb.name
+                                                                            ))
+                                                                            .unwrap()[1]
                                                                         >= mb.box_existing_time
                                                                     && cr.origin_position[0]
                                                                         == -mb.box_size[0] - 5_f32
@@ -2775,39 +2879,65 @@ impl App {
                                                                         + mb.box_speed
                                                                         >= 15_f32
                                                                     {
-                                                                        cr.origin_position[0] = 15_f32;
+                                                                        cr.origin_position[0] =
+                                                                            15_f32;
                                                                     } else {
                                                                         cr.origin_position[0] +=
                                                                             mb.box_speed;
                                                                     };
                                                                 };
-                                                                if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                                                                    let rect = egui::Rect::from_min_size(
-                                                                        Pos2 {
-                                                                            x: im2.image_position[0],
-                                                                            y: im2.image_position[1],
-                                                                        },
-                                                                        Vec2 {
-                                                                            x: cr.size[0] + 25_f32,
-                                                                            y: cr.size[1] + 25_f32,
-                                                                        },
-                                                                    );
+                                                                if let Some(mouse_pos) =
+                                                                    ui.input(|i| {
+                                                                        i.pointer.hover_pos()
+                                                                    })
+                                                                {
+                                                                    let rect =
+                                                                        egui::Rect::from_min_size(
+                                                                            Pos2 {
+                                                                                x: im2
+                                                                                    .image_position
+                                                                                    [0],
+                                                                                y: im2
+                                                                                    .image_position
+                                                                                    [1],
+                                                                            },
+                                                                            Vec2 {
+                                                                                x: cr.size[0]
+                                                                                    + 25_f32,
+                                                                                y: cr.size[1]
+                                                                                    + 25_f32,
+                                                                            },
+                                                                        );
                                                                     if rect.contains(mouse_pos) {
-                                                                        s.appearance[0].color[3] = 200;
+                                                                        s.appearance[0].color[3] =
+                                                                            200;
                                                                     } else {
-                                                                        s.appearance[0].color[3] = 0;
+                                                                        s.appearance[0].color[3] =
+                                                                            0;
                                                                     };
                                                                 };
-                                                                self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
-                                                                self.rust_constructor_resource[id1] = RCR::Image(im1.clone());
-                                                                self.rust_constructor_resource[id2] = RCR::CustomRect(cr.clone());
-                                                                self.rust_constructor_resource[id3] = RCR::Text(t1.clone());
-                                                                self.rust_constructor_resource[id4] = RCR::Text(t2.clone());
-                                                                self.rust_constructor_resource[id5] = RCR::Switch(s.clone());
-                                                                self.rust_constructor_resource[id6] = RCR::Image(im2.clone());
+                                                                self.rust_constructor_resource
+                                                                    [index_list[i]] =
+                                                                    RCR::MessageBox(mb.clone());
+                                                                self.rust_constructor_resource
+                                                                    [id1] = RCR::Image(im1.clone());
+                                                                self.rust_constructor_resource
+                                                                    [id2] =
+                                                                    RCR::CustomRect(cr.clone());
+                                                                self.rust_constructor_resource
+                                                                    [id3] = RCR::Text(t1.clone());
+                                                                self.rust_constructor_resource
+                                                                    [id4] = RCR::Text(t2.clone());
+                                                                self.rust_constructor_resource
+                                                                    [id5] = RCR::Switch(s.clone());
+                                                                self.rust_constructor_resource
+                                                                    [id6] = RCR::Image(im2.clone());
                                                                 self.rect(
                                                                     ui,
-                                                                    &format!("MessageBox_{}", mb.name),
+                                                                    &format!(
+                                                                        "MessageBox_{}",
+                                                                        mb.name
+                                                                    ),
                                                                     ctx,
                                                                 );
                                                                 self.image(
@@ -2815,22 +2945,38 @@ impl App {
                                                                     &mb.box_image_name.clone(),
                                                                     ctx,
                                                                 );
-                                                                self.text(ui, &t1.name.clone(), ctx);
-                                                                self.text(ui, &t2.name.clone(), ctx);
-                                                                if self.switch(
-                                                                    &format!("MessageBox_{}_Close", mb.name),
+                                                                self.text(
                                                                     ui,
+                                                                    &t1.name.clone(),
                                                                     ctx,
-                                                                    s.state == 0 && mb.box_exist,
-                                                                    true,
-                                                                ).unwrap()[0] == 0
+                                                                );
+                                                                self.text(
+                                                                    ui,
+                                                                    &t2.name.clone(),
+                                                                    ctx,
+                                                                );
+                                                                if self
+                                                                    .switch(
+                                                                        &format!(
+                                                                            "MessageBox_{}_Close",
+                                                                            mb.name
+                                                                        ),
+                                                                        ui,
+                                                                        ctx,
+                                                                        s.state == 0
+                                                                            && mb.box_exist,
+                                                                        true,
+                                                                    )
+                                                                    .unwrap()[0]
+                                                                    == 0
                                                                 {
                                                                     mb.box_exist = false;
                                                                     if cr.origin_position[0]
                                                                         + mb.box_speed
                                                                         >= 15_f32
                                                                     {
-                                                                        cr.origin_position[0] = 15_f32;
+                                                                        cr.origin_position[0] =
+                                                                            15_f32;
                                                                     } else {
                                                                         cr.origin_position[0] +=
                                                                             mb.box_speed;
@@ -2839,16 +2985,39 @@ impl App {
                                                                     self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
                                                                 };
                                                                 if deleted {
-                                                                    if let Ok(id) = self.get_resource_index("Image", &mb.box_image_name) {
+                                                                    if let Ok(id) = self
+                                                                        .get_resource_index(
+                                                                            "Image",
+                                                                            &mb.box_image_name,
+                                                                        )
+                                                                    {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
-                                                                    if let Ok(id) = self.get_resource_index("CustomRect", &format!("MessageBox_{}", mb.name)) {
+                                                                    if let Ok(id) = self
+                                                                        .get_resource_index(
+                                                                            "CustomRect",
+                                                                            &format!(
+                                                                                "MessageBox_{}",
+                                                                                mb.name
+                                                                            ),
+                                                                        )
+                                                                    {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
-                                                                    if let Ok(id) = self.get_resource_index("Text", &mb.box_title_name) {
+                                                                    if let Ok(id) = self
+                                                                        .get_resource_index(
+                                                                            "Text",
+                                                                            &mb.box_title_name,
+                                                                        )
+                                                                    {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
-                                                                    if let Ok(id) = self.get_resource_index("Text", &mb.box_content_name) {
+                                                                    if let Ok(id) = self
+                                                                        .get_resource_index(
+                                                                            "Text",
+                                                                            &mb.box_content_name,
+                                                                        )
+                                                                    {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
                                                                     if let Ok(id) = self.get_resource_index("Switch", &format!("MessageBox_{}_Close", mb.name)) {
@@ -2863,8 +3032,18 @@ impl App {
                                                                     if let Ok(id) = self.get_resource_index("SplitTime", &format!("MessageBox_{}_animation", mb.name)) {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
-                                                                    if let Ok(id) = self.get_resource_index("SplitTime", &format!("MessageBox_{}", mb.name)) {
-                                                                        self.rust_constructor_resource.remove(id);
+                                                                    if !mb.box_keep_existing {
+                                                                        if let Ok(id) = self
+                                                                            .get_resource_index(
+                                                                                "SplitTime",
+                                                                                &format!(
+                                                                                    "MessageBox_{}",
+                                                                                    mb.name
+                                                                                ),
+                                                                            )
+                                                                        {
+                                                                            self.rust_constructor_resource.remove(id);
+                                                                        };
                                                                     };
                                                                     if let Ok(id) = self.get_resource_index("SplitTime", &format!("MessageBox_{}_Close_hint_fade_animation", mb.name)) {
                                                                         self.rust_constructor_resource.remove(id);
@@ -2872,11 +3051,17 @@ impl App {
                                                                     if let Ok(id) = self.get_resource_index("SplitTime", &format!("MessageBox_{}_Close_start_hover_time", mb.name)) {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
-                                                                    if let Ok(id) = self.get_resource_index("MessageBox", &mb.name) {
+                                                                    if let Ok(id) = self
+                                                                        .get_resource_index(
+                                                                            "MessageBox",
+                                                                            &mb.name,
+                                                                        )
+                                                                    {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
                                                                 } else {
-                                                                    offset += mb.box_size[1] + 15_f32;
+                                                                    offset +=
+                                                                        mb.box_size[1] + 15_f32;
                                                                 };
                                                             };
                                                         };
@@ -2891,9 +3076,10 @@ impl App {
                     };
                 };
             };
-        };
+        }
     }
 
+    /// 添加开关资源。
     pub fn add_switch(
         &mut self,
         name_switch_and_image_name: [&str; 2],
@@ -2913,31 +3099,15 @@ impl App {
         if appearance.len() as u32 != count * switch_amounts_state
             || hint_text.len() as u32 != switch_amounts_state
         {
-            if self.config.rc_strict_mode {
-                panic!(
-                    "{}{}:{}",
-                    name_switch_and_image_name[0],
-                    self.game_text.game_text["error_switch_vec_mismatch"]
-                        [self.config.language as usize],
-                    count * switch_amounts_state - appearance.len() as u32
-                );
-            } else {
+            if appearance.len() as u32 != count * switch_amounts_state {
                 self.problem_report(
-                    &format!(
-                        "{}{}:{}",
-                        name_switch_and_image_name[0],
-                        self.game_text.game_text["error_switch_vec_mismatch"]
-                            [self.config.language as usize],
-                        if appearance.len() as u32 != count * switch_amounts_state {
-                            count * switch_amounts_state - appearance.len() as u32
-                        } else {
-                            switch_amounts_state - hint_text.len() as u32
-                        }
-                    ),
-                    SeverityLevel::MildWarning,
-                    &self.game_text.game_text["error_switch_vec_mismatch_annotation"]
-                        [self.config.language as usize]
-                        .clone(),
+                    RustConstructorError::SwitchAppearanceMismatch {
+                        switch_name: name_switch_and_image_name[0].to_string(),
+                        differ: (count as i32 * switch_amounts_state as i32
+                            - appearance.len() as i32)
+                            .unsigned_abs(),
+                    },
+                    SeverityLevel::SevereWarning,
                 );
                 for _ in 0..count * switch_amounts_state - appearance.len() as u32 {
                     appearance.push(SwitchData {
@@ -2945,7 +3115,17 @@ impl App {
                         color: [255, 255, 255, 255],
                     });
                 }
-                for _ in 0..count * switch_amounts_state - hint_text.len() as u32 {
+            };
+            if hint_text.len() as u32 != switch_amounts_state {
+                self.problem_report(
+                    RustConstructorError::SwitchHintTextMismatch {
+                        switch_name: name_switch_and_image_name[0].to_string(),
+                        differ: (switch_amounts_state as i32 - hint_text.len() as i32)
+                            .unsigned_abs(),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                for _ in 0..switch_amounts_state - hint_text.len() as u32 {
                     hint_text.push("Error".to_string());
                 }
             };
@@ -3000,6 +3180,7 @@ impl App {
         }));
     }
 
+    /// 显示开关资源并返回点击方法和开关状态。
     pub fn switch(
         &mut self,
         name: &str,
@@ -3012,19 +3193,13 @@ impl App {
         if let Ok(id) = self.get_resource_index("Switch", name) {
             if let RCR::Switch(mut s) = self.rust_constructor_resource[id].clone() {
                 if let Ok(id2) = self.get_resource_index("Image", &s.switch_image_name.clone()) {
-                    if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone()  {
+                    if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone() {
                         if let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name) {
-                            if let RCR::Text(mut t) = self.rust_constructor_resource[id3].clone()  {
+                            if let RCR::Text(mut t) = self.rust_constructor_resource[id3].clone() {
                                 s.reg_render_resource(&mut self.render_resource_list);
                                 let rect = Rect::from_min_size(
-                                    Pos2::new(
-                                        im.image_position[0],
-                                        im.image_position[1],
-                                    ),
-                                    Vec2::new(
-                                        im.image_size[0],
-                                        im.image_size[1],
-                                    ),
+                                    Pos2::new(im.image_position[0], im.image_position[1]),
+                                    Vec2::new(im.image_size[0], im.image_size[1]),
                                 );
                                 let mut hovered = false;
                                 if enable {
@@ -3037,10 +3212,12 @@ impl App {
                                                     true,
                                                 );
                                             } else if self.timer.total_time
-                                                - self.split_time(&format!(
-                                                    "{}_start_hover_time",
-                                                    s.name
-                                                )).unwrap()[1]
+                                                - self
+                                                    .split_time(&format!(
+                                                        "{}_start_hover_time",
+                                                        s.name
+                                                    ))
+                                                    .unwrap()[1]
                                                 >= 2_f32
                                                 || t.rgba[3] != 0
                                             {
@@ -3066,55 +3243,67 @@ impl App {
                                                 s.last_time_clicked = true;
                                                 if s.enable_hover_click_image[1] {
                                                     if s.enable_hover_click_image[0] {
-                                                        im.overlay_color = s
-                                                            .appearance[(s
-                                                            .state
+                                                        im.overlay_color = s.appearance[(s.state
                                                             * s.animation_count
-                                                            + 2) as usize]
+                                                            + 2)
+                                                            as usize]
                                                             .color;
-                                                        if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                                        .state
-                                                                        * s.animation_count
-                                                                        + 2)
-                                                                        as usize]
-                                                                        .texture
-                                                                        .clone()) {
-                                                            if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
-                                                                im.image_texture = it.texture.clone();
+                                                        if let Ok(id4) = self.get_resource_index(
+                                                            "ImageTexture",
+                                                            &s.appearance[(s.state
+                                                                * s.animation_count
+                                                                + 2)
+                                                                as usize]
+                                                                .texture
+                                                                .clone(),
+                                                        ) {
+                                                            if let RCR::ImageTexture(it) = self
+                                                                .rust_constructor_resource[id4]
+                                                                .clone()
+                                                            {
+                                                                im.image_texture =
+                                                                    it.texture.clone();
                                                             };
                                                         };
                                                     } else {
-                                                        im.overlay_color = s
-                                                            .appearance[(s
-                                                            .state
+                                                        im.overlay_color = s.appearance[(s.state
                                                             * s.animation_count
-                                                            + 1) as usize]
+                                                            + 1)
+                                                            as usize]
                                                             .color;
-                                                        if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                                        .state
-                                                                        * s.animation_count
-                                                                        + 1)
-                                                                        as usize]
-                                                                        .texture
-                                                                        .clone()) {
-                                                            if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
-                                                                im.image_texture = it.texture.clone();
+                                                        if let Ok(id4) = self.get_resource_index(
+                                                            "ImageTexture",
+                                                            &s.appearance[(s.state
+                                                                * s.animation_count
+                                                                + 1)
+                                                                as usize]
+                                                                .texture
+                                                                .clone(),
+                                                        ) {
+                                                            if let RCR::ImageTexture(it) = self
+                                                                .rust_constructor_resource[id4]
+                                                                .clone()
+                                                            {
+                                                                im.image_texture =
+                                                                    it.texture.clone();
                                                             };
                                                         };
                                                     };
                                                 } else if !s.enable_hover_click_image[0] {
-                                                    im.overlay_color =
-                                                        s.appearance[(s.state
-                                                            * s.animation_count)
+                                                    im.overlay_color = s.appearance
+                                                        [(s.state * s.animation_count) as usize]
+                                                        .color;
+                                                    if let Ok(id4) = self.get_resource_index(
+                                                        "ImageTexture",
+                                                        &s.appearance[(s.state * s.animation_count)
                                                             as usize]
-                                                            .color;
-                                                    if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                                    .state
-                                                                    * s.animation_count)
-                                                                    as usize]
-                                                                    .texture
-                                                                    .clone()) {
-                                                        if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
+                                                            .texture
+                                                            .clone(),
+                                                    ) {
+                                                        if let RCR::ImageTexture(it) = self
+                                                            .rust_constructor_resource[id4]
+                                                            .clone()
+                                                        {
                                                             im.image_texture = it.texture.clone();
                                                         };
                                                     };
@@ -3131,12 +3320,12 @@ impl App {
                                                     if s.enable_hover_click_image[1] {
                                                         count += 1;
                                                     };
-                                                    if s.click_method
-                                                        [s.last_time_clicked_index]
+                                                    if s.click_method[s.last_time_clicked_index]
                                                         .action
                                                     {
                                                         if s.state
-                                                            < (s.appearance.len() / count - 1) as u32
+                                                            < (s.appearance.len() / count - 1)
+                                                                as u32
                                                         {
                                                             s.state += 1;
                                                         } else {
@@ -3147,36 +3336,41 @@ impl App {
                                                     s.last_time_clicked = false;
                                                 };
                                                 if s.enable_hover_click_image[0] {
-                                                    im.overlay_color = s
-                                                        .appearance[(s
-                                                        .state
+                                                    im.overlay_color = s.appearance[(s.state
                                                         * s.animation_count
-                                                        + 1) as usize]
+                                                        + 1)
+                                                        as usize]
                                                         .color;
-                                                    if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                                    .state
-                                                                    * s.animation_count
-                                                                    + 1)
-                                                                    as usize]
-                                                                    .texture
-                                                                    .clone()) {
-                                                        if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
+                                                    if let Ok(id4) = self.get_resource_index(
+                                                        "ImageTexture",
+                                                        &s.appearance[(s.state * s.animation_count
+                                                            + 1)
+                                                            as usize]
+                                                            .texture
+                                                            .clone(),
+                                                    ) {
+                                                        if let RCR::ImageTexture(it) = self
+                                                            .rust_constructor_resource[id4]
+                                                            .clone()
+                                                        {
                                                             im.image_texture = it.texture.clone();
                                                         };
                                                     };
                                                 } else {
-                                                    im.overlay_color =
-                                                        s.appearance[(s.state
-                                                            * s.animation_count)
+                                                    im.overlay_color = s.appearance
+                                                        [(s.state * s.animation_count) as usize]
+                                                        .color;
+                                                    if let Ok(id4) = self.get_resource_index(
+                                                        "ImageTexture",
+                                                        &s.appearance[(s.state * s.animation_count)
                                                             as usize]
-                                                            .color;
-                                                    if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                                    .state
-                                                                    * s.animation_count)
-                                                                    as usize]
-                                                                    .texture
-                                                                    .clone()) {
-                                                        if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
+                                                            .texture
+                                                            .clone(),
+                                                    ) {
+                                                        if let RCR::ImageTexture(it) = self
+                                                            .rust_constructor_resource[id4]
+                                                            .clone()
+                                                        {
                                                             im.image_texture = it.texture.clone();
                                                         };
                                                     };
@@ -3185,16 +3379,18 @@ impl App {
                                         } else {
                                             s.last_time_clicked = false;
                                             im.overlay_color = s.appearance
-                                                [(s.state * s.animation_count)
-                                                    as usize]
+                                                [(s.state * s.animation_count) as usize]
                                                 .color;
-                                            if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                            .state
-                                                            * s.animation_count)
-                                                            as usize]
-                                                            .texture
-                                                            .clone()) {
-                                                if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
+                                            if let Ok(id4) = self.get_resource_index(
+                                                "ImageTexture",
+                                                &s.appearance
+                                                    [(s.state * s.animation_count) as usize]
+                                                    .texture
+                                                    .clone(),
+                                            ) {
+                                                if let RCR::ImageTexture(it) =
+                                                    self.rust_constructor_resource[id4].clone()
+                                                {
                                                     im.image_texture = it.texture.clone();
                                                 };
                                             };
@@ -3203,17 +3399,16 @@ impl App {
                                 } else {
                                     s.last_time_clicked = false;
                                     im.overlay_color =
-                                        s.appearance[(s.state
-                                            * s.animation_count)
-                                            as usize]
-                                            .color;
-                                    if let Ok(id4) = self.get_resource_index("ImageTexture", &s.appearance[(s
-                                                    .state
-                                                    * s.animation_count)
-                                                    as usize]
-                                                    .texture
-                                                    .clone()) {
-                                        if let RCR::ImageTexture(it) = self.rust_constructor_resource[id4].clone() {
+                                        s.appearance[(s.state * s.animation_count) as usize].color;
+                                    if let Ok(id4) = self.get_resource_index(
+                                        "ImageTexture",
+                                        &s.appearance[(s.state * s.animation_count) as usize]
+                                            .texture
+                                            .clone(),
+                                    ) {
+                                        if let RCR::ImageTexture(it) =
+                                            self.rust_constructor_resource[id4].clone()
+                                        {
                                             im.image_texture = it.texture.clone();
                                         };
                                     };
@@ -3226,20 +3421,17 @@ impl App {
                                         );
                                     };
                                     if self.timer.total_time
-                                        - self.split_time(&format!(
-                                            "{}_hint_fade_animation",
-                                            s.name
-                                        )).unwrap()[1]
+                                        - self
+                                            .split_time(&format!("{}_hint_fade_animation", s.name))
+                                            .unwrap()[1]
                                         >= self.vertrefresh
                                     {
-                                        t.rgba[3] =
-                                            t.rgba[3].saturating_sub(1);
+                                        t.rgba[3] = t.rgba[3].saturating_sub(1);
                                     };
                                 };
                                 t.background_rgb[3] = t.rgba[3];
                                 s.last_time_hovered = hovered;
-                                t.text_content =
-                                    s.hint_text[s.state as usize].clone();
+                                t.text_content = s.hint_text[s.state as usize].clone();
                                 activated[1] = s.state as usize;
                                 self.rust_constructor_resource[id] = RCR::Switch(s.clone());
                                 self.rust_constructor_resource[id2] = RCR::Image(im);

@@ -1,5 +1,5 @@
-//! pages.rs is the core part of the page of the Rust Constructor, mainly the page content.
-use crate::function::{general_click_feedback, play_wav, App, SeverityLevel, RCR};
+//! pages.rs是Rust Constructor的页面部分。
+use crate::function::{App, RCR, SeverityLevel, general_click_feedback, play_wav};
 use chrono::{Local, Timelike};
 use eframe::egui;
 use egui::{Color32, CornerRadius, Frame, Pos2, Shadow, Stroke};
@@ -8,8 +8,11 @@ use tray_icon::menu::MenuEvent;
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 更新帧数
         self.update_frame_stats(ctx);
+        // 更新渲染资源列表
         self.render_resource_list = Vec::new();
+        // 夜间模式
         if Local::now().hour() >= 18 {
             ctx.set_visuals(egui::Visuals::dark());
             self.frame = Frame {
@@ -48,8 +51,10 @@ impl eframe::App for App {
             };
         };
         let game_text = self.game_text.game_text.clone();
+        // 更新计时器
         self.update_timer();
         if self.tray_icon_created {
+            // 接收托盘事件
             if let Ok(MenuEvent { id }) = MenuEvent::receiver().try_recv() {
                 #[cfg(target_os = "macos")]
                 match id.0.as_str() {
@@ -75,6 +80,7 @@ impl eframe::App for App {
         };
         match &*self.page.clone() {
             "Launch" => {
+                // 初始更新
                 if !self.check_updated(&self.page.clone()).unwrap() {
                     self.launch_page_preload(ctx);
                     self.add_var("enable_debug_mode", false);
@@ -141,7 +147,9 @@ impl eframe::App for App {
                     );
                     self.message_box_display(ctx, ui);
                     if self.timer.now_time - self.split_time("launch_time").unwrap()[0] >= 6_f32
-                        && self.fade(true, ctx, ui, "cut_to_animation", "Cut_To_Background", 10).unwrap()
+                        && self
+                            .cut_to(true, ctx, ui, "cut_to_animation", "Cut_To_Background", 10)
+                            .unwrap()
                             == 255
                     {
                         self.switch_page("Demo_Desktop");
@@ -153,70 +161,23 @@ impl eframe::App for App {
                 self.check_updated(&self.page.clone()).unwrap();
                 self.check_enter_updated(&self.page.clone()).unwrap();
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    self.fade(false, ctx, ui, "cut_to_animation", "Cut_To_Background", 10).unwrap();
+                    self.cut_to(false, ctx, ui, "cut_to_animation", "Cut_To_Background", 10)
+                        .unwrap();
                     self.message_box_display(ctx, ui);
                 });
             }
-            "Error" => {
-                self.check_updated(&self.page.clone()).unwrap();
-                if let Ok(id) = self.get_resource_index("Text", "Error_Pages_Reason") {
-                    if let RCR::Text(t) = &mut self.rust_constructor_resource[id].clone() {
-                        t.text_content = game_text["error_pages_reason"][self.config.language as usize].clone();
-                    };
-                };
-                if let Ok(id) = self.get_resource_index("Text", "Error_Pages_Solution") {
-                    if let RCR::Text(t) = &mut self.rust_constructor_resource[id].clone() {
-                        t.text_content = game_text["error_pages_solution"][self.config.language as usize].clone();
-                    };
-                };
-                if let Ok(id) = self.get_resource_index("CustomRect", "Error_Pages_Background") {
-                    if let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id].clone() {
-                        cr.size = [ctx.available_rect().width(), ctx.available_rect().height()];
-                    };
-                };
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    self.rect(ui, "Error_Pages_Background", ctx);
-                    self.text(ui, "Error_Pages_Sorry", ctx);
-                    self.text(ui, "Error_Pages_Reason", ctx);
-                    self.text(ui, "Error_Pages_Solution", ctx);
-                    self.message_box_display(ctx, ui);
-                });
-            }
-            _ => {
-                if self.config.rc_strict_mode {
-                    panic!(
-                        "{}{}",
-                        game_text["error_page_not_found"][self.config.language as usize].clone(),
-                        self.page
-                    );
-                } else {
-                    self.problem_report(
-                        &format!(
-                            "{}{}",
-                            game_text["error_page_not_found"][self.config.language as usize]
-                                .clone(),
-                            self.page
-                        ),
-                        SeverityLevel::Error,
-                        &game_text["error_page_not_found_annotation"]
-                            [self.config.language as usize]
-                            .clone(),
-                    );
-                    std::thread::spawn(|| {
-                        play_wav("Resources/assets/sounds/Error.wav").unwrap();
-                    });
-                    self.switch_page("Error");
-                };
-            }
+            _ => self.switch_page("Demo_Desktop"),
         };
+        // 调试模式
         egui::TopBottomPanel::top("Debug mode")
             .frame(egui::Frame {
                 fill: egui::Color32::TRANSPARENT,
-                inner_margin: egui::Margin::symmetric(8, 4), // 按需调整
+                inner_margin: egui::Margin::symmetric(8, 4),
                 ..Default::default()
             })
             .show_separator_line(false)
             .show(ctx, |ui| {
+                // 启用方法
                 if ctx.input(|i| i.key_pressed(egui::Key::F3)) && self.config.enable_debug_mode {
                     std::thread::spawn(|| {
                         play_wav("Resources/assets/sounds/Notification.wav").unwrap();
@@ -289,7 +250,7 @@ impl eframe::App for App {
                                 RCR::ImageTexture(_) => 9,
                                 RCR::PageData(_) => 10,
                             };
-                            
+
                             let type_b = match b {
                                 RCR::Image(_) => 0,
                                 RCR::Text(_) => 1,
@@ -303,7 +264,7 @@ impl eframe::App for App {
                                 RCR::ImageTexture(_) => 9,
                                 RCR::PageData(_) => 10,
                             };
-                            
+
                             // 如果类型不同，按类型排序
                             match type_a.cmp(&type_b) {
                                 std::cmp::Ordering::Equal => {
@@ -321,7 +282,7 @@ impl eframe::App for App {
                                         RCR::ImageTexture(it) => &it.name,
                                         RCR::PageData(pd) => &pd.name,
                                     };
-                                    
+
                                     let name_b = match b {
                                         RCR::Image(img) => &img.name,
                                         RCR::Text(txt) => &txt.name,
@@ -335,14 +296,14 @@ impl eframe::App for App {
                                         RCR::ImageTexture(it) => &it.name,
                                         RCR::PageData(pd) => &pd.name,
                                     };
-                                    
+
                                     name_a.cmp(name_b)
                                 },
                                 other => other,
                             }
                         });
                         ui.vertical_centered(|ui| {
-                            ui.heading(game_text["debug_all_resource_list"][self.config.language as usize].clone());
+                            ui.heading(game_text["debug_resource_list"][self.config.language as usize].clone());
                         });
                         ui.separator();
                         egui::ScrollArea::vertical()
@@ -528,6 +489,11 @@ impl eframe::App for App {
                                             SeverityLevel::Error => egui::Color32::RED,
                                             SeverityLevel::SevereWarning => egui::Color32::ORANGE,
                                             SeverityLevel::MildWarning => egui::Color32::YELLOW,
+                                        }, format!("{}: {:#?}", game_text["debug_problem_type"][self.config.language as usize].clone(), t.problem_type));
+                                        ui.colored_label(match t.severity_level {
+                                            SeverityLevel::Error => egui::Color32::RED,
+                                            SeverityLevel::SevereWarning => egui::Color32::ORANGE,
+                                            SeverityLevel::MildWarning => egui::Color32::YELLOW,
                                         }, format!("{}: {}", game_text["debug_problem_current_page"][self.config.language as usize].clone(), t.report_state.current_page));
                                         ui.colored_label(match t.severity_level {
                                             SeverityLevel::Error => egui::Color32::RED,
@@ -557,24 +523,24 @@ impl eframe::App for App {
                             );
                             ui.separator();
                             ui.vertical(|ui| {
-                                if ui.button(game_text["debug_frame_number_details"][self.config.language as usize].clone()).clicked()
+                                if ui.button(format!("{}: {}", game_text["debug_frame_number_details"][self.config.language as usize].clone(), if self.var_b("debug_fps_window").unwrap() { game_text["debug_on"][self.config.language as usize].clone() } else { game_text["debug_off"][self.config.language as usize].clone() })).clicked()
                                 {
                                     general_click_feedback();
                                     let flip = !self.var_b("debug_fps_window").unwrap();
                                     self.modify_var("debug_fps_window", flip);
                                 };
-                                if ui.button(game_text["debug_resource_list"][self.config.language as usize].clone()).clicked()
+                                if ui.button(format!("{}: {}", game_text["debug_resource_list"][self.config.language as usize].clone(), if self.var_b("debug_resource_list_window").unwrap() { game_text["debug_on"][self.config.language as usize].clone() } else { game_text["debug_off"][self.config.language as usize].clone() })).clicked()
                                 {
                                     general_click_feedback();
                                     let flip = !self.var_b("debug_resource_list_window").unwrap();
                                     self.modify_var("debug_resource_list_window", flip);
                                 };
-                                if ui.button(game_text["debug_render_list"][self.config.language as usize].clone()).clicked() {
+                                if ui.button(format!("{}: {}", game_text["debug_render_list"][self.config.language as usize].clone(), if self.var_b("debug_render_list_window").unwrap() { game_text["debug_on"][self.config.language as usize].clone() } else { game_text["debug_off"][self.config.language as usize].clone() })).clicked() {
                                     general_click_feedback();
                                     let flip = !self.var_b("debug_render_list_window").unwrap();
                                     self.modify_var("debug_render_list_window", flip);
                                 };
-                                if ui.button(game_text["debug_problem_report"][self.config.language as usize].clone()).clicked()
+                                if ui.button(format!("{}: {}", game_text["debug_problem_report"][self.config.language as usize].clone(), if self.var_b("debug_problem_window").unwrap() { game_text["debug_on"][self.config.language as usize].clone() } else { game_text["debug_off"][self.config.language as usize].clone() })).clicked()
                                 {
                                     general_click_feedback();
                                     let flip = !self.var_b("debug_problem_window").unwrap();

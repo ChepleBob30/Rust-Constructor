@@ -1,6 +1,6 @@
-//! Rust Constructor v1.2.1
-//! Developer: Cheple_Bob
-//! A powerful cross-platform GUI framework, the easiest way to develop GUI projects in Rust.
+//! Rust Constructor v1.2.2
+//! 开发者: Cheple_Bob
+//! 一个强大的跨平台GUI框架，在Rust中开发GUI项目的最简单方法。
 use egui::IconData;
 use function::App;
 use function::Config;
@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 mod function;
 mod pages;
+/// 启动函数。
 fn main() {
     let mut config = Config {
         language: 0,
@@ -61,9 +62,10 @@ fn main() {
     };
 
     println!(
-        "{} {}\n{} https://github.com/ChepleBob30/Rust-Constructor :)",
+        "{} {}\n{} https://github.com/ChepleBob30/Rust-Constructor",
         gametext.game_text["debug_game_version"][config.language as usize],
-        gametext.game_text[&format!("debug_language_{}", config.language)][config.language as usize],
+        gametext.game_text[&format!("debug_language_{}", config.language)]
+            [config.language as usize],
         gametext.game_text["hello"][config.language as usize]
     );
 

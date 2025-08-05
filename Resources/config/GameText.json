@@ -9,8 +9,8 @@
       "Page"
     ],
     "debug_game_version": [
-      "Rust Constructor v1.2.1",
-      "Rust Constructor v1.2.1"
+      "Rust Constructor v1.2.2",
+      "Rust Constructor v1.2.2"
     ],
     "debug_game_now_time": [
       "当前页面运行时间",
@@ -63,10 +63,6 @@
     "debug_render_list": [
       "渲染列表",
       "Render list"
-    ],
-    "debug_all_resource_list": [
-      "全部资源列表",
-      "All resource list"
     ],
     "debug_resource_size": [
       "大小",
@@ -217,8 +213,8 @@
       "Page Not found "
     ],
     "error_page_not_found_annotation": [
-      "此问题会导致页面无法正常显示，请检查页面名称是否正确。",
-      "This issue may cause the page to fail to display properly. Please check if the page name is correct."
+      "请检查是否在创建页面前意外调用了切换页面方法。",
+      "Please check whether you accidentally called the switch page method before creating the page."
     ],
     "debug_problem": [
       "问题",
@@ -256,53 +252,65 @@
       "错误",
       "Error"
     ],
-    "error_image_open_failed": [
-      "图片打开失败",
-      "Image open failed"
+    "error_image_get_failed": [
+      "图片获取失败",
+      "Image get failed"
     ],
-    "error_image_open_failed_annotation": [
-      "此问题会导致图片无法正常显示，请检查图片名称是否正确。",
-      "This issue may cause the image to fail to display properly. Please check whether the image names are correct."
+    "error_image_get_failed_annotation": [
+      "请检查图片路径是否正确及图片是否已添加。",
+      "Please check whether the image path is correct and whether the image has been added."
     ],
-    "error_variable_not_i32_type": [
-      "变量不是i32类型",
-      "Variable is not i32 type"
+    "error_variable_not_int": [
+      "变量不是int",
+      "Variable is not int"
     ],
-    "error_variable_not_u32_type": [
-      "变量不是u32类型",
-      "Variable is not u32 type"
+    "error_variable_not_uint": [
+      "变量不是uint",
+      "Variable is not uint"
     ],
-    "error_variable_not_f32_type": [
-      "变量不是f32类型",
-      "Variable is not f32 type"
+    "error_variable_not_float": [
+      "变量不是float",
+      "Variable is not f32"
     ],
-    "error_variable_not_vec_type": [
-      "变量不是vec类型",
-      "Variable is not vec type"
+    "error_variable_not_vec": [
+      "变量不是vec",
+      "Variable is not vec"
     ],
-    "error_variable_not_bool_type": [
-      "变量不是bool类型",
-      "Variable is not bool type"
+    "error_variable_not_bool": [
+      "变量不是bool",
+      "Variable is not bool"
     ],
-    "error_variable_not_string_type": [
-      "变量不是string类型",
-      "Variable is not string type"
+    "error_variable_not_string": [
+      "变量不是string",
+      "Variable is not string"
     ],
-    "error_variable_wrong_type_annotation": [
+    "error_variable_not_type_annotation": [
       "请检查变量名称与类型是否正确，是否存在重名项。",
       "Please check whether the variable names and types are correct and whether there are duplicate items."
     ],
-    "error_switch_vec_mismatch": [
-      " 开关 外观/提示词 列表项目数 多/少",
-      " Switch appearance/prompt word list's number of items is large / small"
+    "error_switch_appearance_mismatch": [
+      "开关外观列表项目数多或少",
+      "Switch appearance list's number of items is large / small"
     ],
-    "error_switch_vec_mismatch_annotation": [
-      "此问题会导致开关无法正常显示，请检查资源数量是否与开启的动画数匹配。",
-      "This issue will cause the switch to fail to display normally. Please check whether the number of resources matches the number of animations that are enabled."
+    "error_switch_mismatch_more": [
+      "个",
+      "more"
+    ],
+    "error_switch_appearance_mismatch_annotation": [
+      "请检查外观列表项目数是否与开启的动画数匹配。",
+      "Please check whether the number of appearance list items matches the number of enabled animations."
+    ],
+    "error_switch_hint_text_mismatch": [
+      "开关提示词列表项目数多或少",
+      "Switch hint text list's number of items is large / small"
+    ],
+    "error_switch_hint_text_mismatch_annotation": [
+      "请检查提示词列表项目数是否与开关状态数目匹配。",
+      "Please check whether the number of hint text list items matches the number of switch states."
     ],
     "error_message_box_already_exists": [
       "消息框已存在",
-      " Message box already exists"
+      "Message box already exists"
     ],
     "error_message_box_already_exists_annotation": [
       "请检查生成消息框的代码是否被意外多次调用。",
@@ -369,14 +377,6 @@
       "Font get failed"
     ],
     "error_font_get_failed_annotation": [
-      "请检查是否已添加字体。",
-      "Please check if the font has been added."
-    ],
-    "error_font_read_failed": [
-      "读取字体失败",
-      "Font read failed"
-    ],
-    "error_font_read_failed_annotation": [
       "请检查字体文件是否存在及路径是否正确。",
       "Please check if the font file exists and the path is correct."
     ],
@@ -409,8 +409,28 @@
       "Current Default Font"
     ],
     "hello": [
-      "欢迎使用Rust Constructor!",
-      "Welcome to use Rust Constructor!"
+      "欢迎使用Rust Constructor :)",
+      "Welcome to use Rust Constructor :)"
+    ],
+    "error_resource_not_found": [
+      "未找到资源",
+      "Resource not found"
+    ],
+    "error_resource_not_found_annotation": [
+      "请检查是否已添加资源。",
+      "Please check whether the resource has been added."
+    ],
+    "debug_problem_type": [
+      "问题类型",
+      "Problem type"
+    ],
+    "debug_on": [
+      "开",
+      "ON"
+    ],
+    "debug_off": [
+      "关",
+      "OFF"
     ]
   }
 }
