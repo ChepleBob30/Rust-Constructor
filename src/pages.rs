@@ -438,10 +438,28 @@ impl eframe::App for App {
                                         ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_origin_or_excursion_position"][self.config.language as usize].clone(), t.origin_position));
                                         ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_text_wrap_width"][self.config.language as usize].clone(), t.wrap_width));
                                         ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_color"][self.config.language as usize].clone(), t.rgba));
+                                        if self.check_resource_exists("Font", &t.font) {
+                                            ui.colored_label(egui::Color32::BLUE, egui::RichText::new(format!("{}: {}", game_text["debug_resource_text_font"][self.config.language as usize].clone(), t.font)).family(egui::FontFamily::Name(t.font.into())));
+                                        } else {
+                                            ui.colored_label(egui::Color32::BLUE, format!("{}: {} ({})", game_text["debug_resource_text_font"][self.config.language as usize].clone(), t.font, game_text["debug_resource_text_font_not_found"][self.config.language as usize].clone()));
+                                        };
                                         if t.write_background {
                                             ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_text_background_color"][self.config.language as usize].clone(), t.background_rgb));
                                             ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_text_background_rounding"][self.config.language as usize].clone(), t.rounding));
                                         };
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {}", game_text["debug_resource_text_selectable"][self.config.language as usize].clone(), t.selectable));
+                                        let get_text_range = |text: &str, start: usize, end: usize| -> String {
+                                            let chars: Vec<char> = text.chars().collect();
+                                            let safety_start = if start >= chars.len() { chars.len() } else { start };
+                                            let safety_end = if end >= chars.len() { chars.len() } else { end };
+                                            chars[safety_start.min(safety_end)..safety_start.max(safety_end)].iter().collect()
+                                        };
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}\n[{}]", game_text["debug_resource_text_selection"][self.config.language as usize].clone(), t.selection, if let Some(selection) = t.selection { get_text_range(&t.text_content, selection.0, selection.1) } else { game_text["debug_resource_none"][self.config.language as usize].clone() }));
+                                        let mut hyperlink_list = Vec::new();
+                                        for i in t.hyperlink_text {
+                                            hyperlink_list.push(format!("{}[{}]", get_text_range(&t.text_content, i.0, i.1), i.2));
+                                        };
+                                        ui.colored_label(egui::Color32::BLUE, format!("{}: {:#?}", game_text["debug_resource_text_hyperlink"][self.config.language as usize].clone(), hyperlink_list));
                                         ui.separator();
                                     }
                                 };

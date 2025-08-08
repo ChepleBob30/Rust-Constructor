@@ -9,8 +9,8 @@
       "Page"
     ],
     "debug_game_version": [
-      "Rust Constructor v1.2.2",
-      "Rust Constructor v1.2.2"
+      "Rust Constructor v1.3.0",
+      "Rust Constructor v1.3.0"
     ],
     "debug_game_now_time": [
       "当前页面运行时间",
@@ -431,6 +431,30 @@
     "debug_off": [
       "关",
       "OFF"
+    ],
+    "debug_resource_text_font": [
+      "字体",
+      "Font"
+    ],
+    "debug_resource_text_font_not_found": [
+      "字体未找到",
+      "Font not found"
+    ],
+    "debug_resource_text_selectable": [
+      "可选中",
+      "Selectable"
+    ],
+    "debug_resource_text_selection": [
+      "选中的文本",
+      "Selection"
+    ],
+    "debug_resource_text_hyperlink": [
+      "超链接",
+      "Hyperlink"
+    ],
+    "debug_resource_none": [
+      "无",
+      "None"
     ]
   }
 }

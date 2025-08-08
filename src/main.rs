@@ -1,4 +1,4 @@
-//! Rust Constructor v1.2.2
+//! Rust Constructor v1.3.0
 //! 开发者: Cheple_Bob
 //! 一个强大的跨平台GUI框架，在Rust中开发GUI项目的最简单方法。
 use egui::IconData;

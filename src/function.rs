@@ -1,7 +1,9 @@
 //! function.rs是Rust Constructor的函数模块，包括函数声明、结构定义和一些辅助内容。
 use anyhow::Context;
 use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
-use egui::{Color32, FontData, FontDefinitions, FontId, Frame, PointerButton, Pos2, Ui, Vec2};
+use egui::{
+    Color32, FontData, FontDefinitions, FontId, Frame, PointerButton, Pos2, Ui, Vec2, text::CCursor,
+};
 use json::JsonValue;
 use kira::{
     manager::{AudioManager, backend::cpal},
@@ -537,6 +539,14 @@ pub struct Text {
     pub y_grid: [u32; 2],
     /// 原始位置。
     pub origin_position: [f32; 2],
+    /// 字体。
+    pub font: String,
+    /// 框选选中的文本。
+    pub selection: Option<(usize, usize)>,
+    /// 是否可框选。
+    pub selectable: bool,
+    /// 超链接文本。
+    pub hyperlink_text: Vec<(usize, usize, String)>,
 }
 
 impl RustConstructorResource for ScrollBackground {
@@ -1763,26 +1773,31 @@ impl App {
     /// 添加文本资源。
     pub fn add_text(
         &mut self,
-        name_and_content: [&str; 2],
+        name_content_and_font: [&str; 3],
         position_font_size_wrap_width_rounding: [f32; 5],
         color: [u8; 8],
-        center_display: [bool; 4],
-        write_background: bool,
+        center_display_write_background_and_enable_copy: [bool; 6],
         grid: [u32; 4],
+        hyperlink_text: Vec<(usize, usize, &str)>,
     ) {
         self.rust_constructor_resource.push(RCR::Text(Text {
             discern_type: "Text".to_string(),
-            name: name_and_content[0].to_string(),
-            text_content: name_and_content[1].to_string(),
+            name: name_content_and_font[0].to_string(),
+            text_content: name_content_and_font[1].to_string(),
             font_size: position_font_size_wrap_width_rounding[2],
             rgba: [color[0], color[1], color[2], color[3]],
             position: [
                 position_font_size_wrap_width_rounding[0],
                 position_font_size_wrap_width_rounding[1],
             ],
-            center_display,
+            center_display: [
+                center_display_write_background_and_enable_copy[0],
+                center_display_write_background_and_enable_copy[1],
+                center_display_write_background_and_enable_copy[2],
+                center_display_write_background_and_enable_copy[3],
+            ],
             wrap_width: position_font_size_wrap_width_rounding[3],
-            write_background,
+            write_background: center_display_write_background_and_enable_copy[4],
             background_rgb: [color[4], color[5], color[6], color[7]],
             rounding: position_font_size_wrap_width_rounding[4],
             x_grid: [grid[0], grid[1]],
@@ -1791,19 +1806,40 @@ impl App {
                 position_font_size_wrap_width_rounding[0],
                 position_font_size_wrap_width_rounding[1],
             ],
+            font: name_content_and_font[2].to_string(),
+            selection: None,
+            selectable: center_display_write_background_and_enable_copy[5],
+            hyperlink_text: hyperlink_text
+                .into_iter()
+                .map(|(a, b, c)| {
+                    (
+                        a,
+                        if b > name_content_and_font[1].len() - 1 {
+                            name_content_and_font[1].len() - 1
+                        } else {
+                            b
+                        },
+                        c.to_string(),
+                    )
+                })
+                .collect(),
         }));
     }
 
     /// 显示文本资源。
     pub fn text(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("Text", name) {
-            if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
+            if let RCR::Text(mut t) = self.rust_constructor_resource[id].clone() {
                 t.reg_render_resource(&mut self.render_resource_list);
                 // 计算文本大小
                 let galley = ui.fonts(|f| {
                     f.layout(
                         t.text_content.to_string(),
-                        FontId::proportional(t.font_size),
+                        if self.check_resource_exists("Font", &t.font.clone()) {
+                            FontId::new(t.font_size, egui::FontFamily::Name(t.font.clone().into()))
+                        } else {
+                            FontId::proportional(t.font_size)
+                        },
                         Color32::from_rgba_unmultiplied(t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3]),
                         t.wrap_width,
                     )
@@ -1843,6 +1879,184 @@ impl App {
                 };
                 // 使用绝对定位放置文本
                 let position = Pos2::new(pos_x, pos_y);
+
+                if t.selectable {
+                    let rect = Rect::from_min_size(
+                        [position[0] - 20_f32, position[1] - 5_f32].into(),
+                        [text_size[0] + 40_f32, text_size[1] + 10_f32].into(),
+                    );
+
+                    let rect2 = Rect::from_min_size(
+                        [0_f32, 0_f32].into(),
+                        [ctx.available_rect().width(), ctx.available_rect().height()].into(),
+                    );
+
+                    // 创建可交互的区域
+                    let response = ui.interact(
+                        rect,
+                        egui::Id::new(format!("text_{}_click_and_drag", t.name)),
+                        egui::Sense::click_and_drag(),
+                    );
+
+                    let response2 = ui.interact(
+                        rect2,
+                        egui::Id::new(format!("text_{}_total", t.name)),
+                        egui::Sense::click(),
+                    );
+
+                    // 处理选择逻辑
+                    let cursor_at_pointer = |pointer_pos: Vec2| -> usize {
+                        let relative_pos = pointer_pos - position.to_vec2();
+                        let cursor = galley.cursor_from_pos(relative_pos);
+                        cursor.index
+                    };
+
+                    if !response.clicked() && response2.clicked() {
+                        t.selection = None;
+                    };
+
+                    if response.clicked() || response.drag_started() {
+                        if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                            let cursor = cursor_at_pointer(pointer_pos.to_vec2());
+                            t.selection = Some((cursor, cursor));
+                        };
+                        response.request_focus();
+                    };
+
+                    if response.dragged() && t.selection.is_some() {
+                        if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                            let cursor = cursor_at_pointer(pointer_pos.to_vec2());
+                            if let Some((start, _)) = t.selection {
+                                t.selection = Some((start, cursor));
+                            };
+                        };
+                    };
+
+                    // 处理复制操作
+                    if response.has_focus() {
+                        // 处理复制操作 - 使用按键释放事件
+                        let copy_triggered = ui.input(|input| {
+                            let c_released = input.key_released(egui::Key::C);
+                            let cmd_pressed = input.modifiers.command || input.modifiers.mac_cmd;
+                            let ctrl_pressed = input.modifiers.ctrl;
+                            c_released && (cmd_pressed || ctrl_pressed)
+                        });
+                        if copy_triggered {
+                            if let Some((start, end)) = t.selection {
+                                let (start, end) = (start.min(end), start.max(end));
+                                let chars: Vec<char> = t.text_content.chars().collect();
+                                if start <= chars.len() && end <= chars.len() && start < end {
+                                    let selected_text: String = chars[start..end].iter().collect();
+                                    ui.ctx().copy_text(selected_text);
+                                };
+                            };
+                        };
+                    };
+
+                    // 绘制选择区域背景
+                    if let Some((start, end)) = t.selection {
+                        let (start, end) = (start.min(end), start.max(end));
+                        if start != end {
+                            // 获取选择区域的范围
+                            let start_cursor = galley.pos_from_cursor(CCursor::new(start));
+                            let end_cursor = galley.pos_from_cursor(CCursor::new(end));
+
+                            let start_pos = start_cursor.left_top();
+                            let end_pos = end_cursor.right_top();
+                            // 选择框绘制
+                            if start_pos.y == end_pos.y {
+                                // 单行选择
+                                // 修复：使用实际行的高度而不是整个文本的高度除以行数
+                                let rows = &galley.rows;
+                                let row_height = if !rows.is_empty() {
+                                    // 获取实际行的高度
+                                    if let Some(row) = rows.first() {
+                                        row.height()
+                                    } else {
+                                        text_size.y / t.text_content.lines().count() as f32
+                                    }
+                                } else {
+                                    text_size.y / t.text_content.lines().count() as f32
+                                };
+
+                                let selection_rect = Rect::from_min_max(
+                                    Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                                    Pos2::new(
+                                        position.x + end_pos.x,
+                                        position.y + start_pos.y + row_height,
+                                    ),
+                                );
+                                ui.painter().rect_filled(
+                                    selection_rect,
+                                    0.0,
+                                    Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                );
+                            } else {
+                                // 多行选择 - 为每行创建精确的矩形
+                                let rows = &galley.rows;
+                                let row_height = if !rows.is_empty() {
+                                    rows[0].height()
+                                } else {
+                                    text_size.y / t.text_content.lines().count() as f32
+                                };
+
+                                // 计算选择的上下边界
+                                let selection_top = position.y + start_pos.y.min(end_pos.y);
+                                let selection_bottom = position.y + start_pos.y.max(end_pos.y);
+
+                                // 确定起始行和结束行的索引
+                                let start_row_index = (start_pos.y / row_height).floor() as usize;
+                                let end_row_index = (end_pos.y / row_height).floor() as usize;
+                                let (first_row_index, last_row_index) =
+                                    if start_row_index <= end_row_index {
+                                        (start_row_index, end_row_index)
+                                    } else {
+                                        (end_row_index, start_row_index)
+                                    };
+
+                                for (i, row) in rows.iter().enumerate() {
+                                    let row_y = position.y + row_height * i as f32;
+                                    let row_bottom = row_y + row_height;
+                                    // 检查当前行是否与选择区域相交
+                                    if row_bottom > selection_top && row_y <= selection_bottom {
+                                        let left = if i == first_row_index {
+                                            // 首行 - 从选择开始位置开始
+                                            position.x + start_pos.x
+                                        } else {
+                                            // 非首行 - 从行首开始
+                                            position.x + row.rect().min.x
+                                        };
+
+                                        let right = if i == last_row_index {
+                                            // 尾行 - 到选择结束位置结束
+                                            position.x + end_pos.x
+                                        } else {
+                                            // 非尾行 - 到行尾结束
+                                            position.x + row.rect().max.x
+                                        };
+
+                                        let selection_rect = Rect::from_min_max(
+                                            Pos2::new(left, row_y),
+                                            Pos2::new(right, row_bottom),
+                                        );
+
+                                        // 确保矩形有效
+                                        if selection_rect.width() > 0.0
+                                            && selection_rect.height() > 0.0
+                                        {
+                                            ui.painter().rect_filled(
+                                                selection_rect,
+                                                0.0,
+                                                Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                            );
+                                        };
+                                    };
+                                }
+                            };
+                        };
+                    };
+                };
+
                 if t.write_background {
                     let rect = Rect::from_min_size(position, text_size);
                     // 绘制背景颜色
@@ -1860,16 +2074,304 @@ impl App {
                 // 绘制文本
                 ui.painter().galley(
                     position,
-                    galley,
+                    galley.clone(),
                     Color32::from_rgba_unmultiplied(
                         t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3], // 应用透明度
                     ),
                 );
+
+                // 绘制超链接
+                for (start, end, url) in &t.hyperlink_text {
+                    // 获取超链接文本的范围
+                    let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
+                    let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
+
+                    let start_pos = start_cursor.left_top();
+                    let end_pos = end_cursor.right_top();
+
+                    // 检查鼠标是否在超链接上
+                    let mut is_hovering_link = false;
+                    if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                        let relative_pos = pointer_pos - position.to_vec2();
+                        let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                        if cursor.index >= *start && cursor.index <= *end {
+                            is_hovering_link = true;
+                        };
+                    };
+
+                    let row_height = galley.rows.first().map_or(14.0, |row| row.height());
+
+                    // 为超链接创建交互响应对象
+                    let link_responses = if start_cursor.min.y == end_cursor.min.y {
+                        // 单行超链接
+                        let link_rect = Rect::from_min_max(
+                            Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                            Pos2::new(
+                                position.x + end_pos.x,
+                                position.y + start_pos.y + row_height,
+                            ),
+                        );
+                        vec![ui.interact(
+                            link_rect,
+                            egui::Id::new(format!("link_{}_{}_{}", t.name, start, end)),
+                            egui::Sense::click(),
+                        )]
+                    } else {
+                        // 多行超链接
+                        let start_row = (start_pos.y / row_height).round() as usize;
+                        let end_row = (end_pos.y / row_height).round() as usize;
+                        let mut responses = Vec::new();
+
+                        for row in start_row..=end_row {
+                            if let Some(current_row) = galley.rows.get(row) {
+                                let row_rect = current_row.rect();
+                                let row_y = position.y + row as f32 * row_height;
+
+                                let link_rect = if row == start_row {
+                                    // 第一行从文本开始位置到行尾
+                                    Rect::from_min_max(
+                                        Pos2::new(position.x + start_pos.x, row_y),
+                                        Pos2::new(position.x + row_rect.max.x, row_y + row_height),
+                                    )
+                                } else if row == end_row {
+                                    // 最后一行从行首到文本结束位置
+                                    Rect::from_min_max(
+                                        Pos2::new(position.x + row_rect.min.x, row_y),
+                                        Pos2::new(position.x + end_pos.x, row_y + row_height),
+                                    )
+                                } else {
+                                    // 中间整行
+                                    Rect::from_min_max(
+                                        Pos2::new(position.x + row_rect.min.x, row_y),
+                                        Pos2::new(position.x + row_rect.max.x, row_y + row_height),
+                                    )
+                                };
+
+                                responses.push(ui.interact(
+                                    link_rect,
+                                    egui::Id::new(format!(
+                                        "link_{}_{}_{}_row_{}",
+                                        t.name, start, end, row
+                                    )),
+                                    egui::Sense::click(),
+                                ));
+                            };
+                        }
+                        responses
+                    };
+
+                    // 检查是否正在点击这个超链接
+                    let mut is_pressing_link = false;
+                    for link_response in &link_responses {
+                        if link_response.is_pointer_button_down_on()
+                            && !link_response.drag_started()
+                        {
+                            t.selection = None;
+                            if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                                let relative_pos = pointer_pos - position.to_vec2();
+                                let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                                if cursor.index >= *start && cursor.index <= *end {
+                                    is_pressing_link = true;
+                                    break;
+                                };
+                            };
+                        };
+                    }
+
+                    // 检查是否释放了鼠标（点击完成）
+                    let mut clicked_on_link = false;
+                    for link_response in &link_responses {
+                        if link_response.clicked() {
+                            if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                                let relative_pos = pointer_pos - position.to_vec2();
+                                let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                                if cursor.index >= *start && cursor.index <= *end {
+                                    clicked_on_link = true;
+                                    break;
+                                };
+                            };
+                        };
+                    }
+
+                    if clicked_on_link {
+                        // 执行超链接跳转
+                        if !url.is_empty() {
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                        };
+                    };
+
+                    // 绘制超链接高亮（如果正在点击或悬停）
+                    if is_pressing_link {
+                        if start_cursor.min.y == end_cursor.min.y {
+                            // 单行超链接高亮
+                            let selection_rect = Rect::from_min_max(
+                                Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                                Pos2::new(
+                                    position.x + end_pos.x,
+                                    position.y
+                                        + start_pos.y
+                                        + galley.rows.first().map_or(14.0, |row| row.height()),
+                                ),
+                            );
+                            ui.painter().rect_filled(
+                                selection_rect,
+                                0.0,
+                                Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                            );
+                        } else {
+                            // 多行超链接高亮
+                            let row_height = galley.rows.first().map_or(14.0, |row| row.height());
+                            let start_row = (start_pos.y / row_height).round() as usize;
+                            let end_row = (end_pos.y / row_height).round() as usize;
+
+                            for row in start_row..=end_row {
+                                if let Some(current_row) = galley.rows.get(row) {
+                                    let row_rect = current_row.rect();
+
+                                    if row == start_row {
+                                        // 第一行从文本开始位置到行尾
+                                        let selection_rect = Rect::from_min_max(
+                                            Pos2::new(
+                                                position.x + start_pos.x,
+                                                position.y + row as f32 * row_height,
+                                            ),
+                                            Pos2::new(
+                                                position.x + row_rect.max.x,
+                                                position.y + row as f32 * row_height + row_height,
+                                            ),
+                                        );
+                                        ui.painter().rect_filled(
+                                            selection_rect,
+                                            0.0,
+                                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                        );
+                                    } else if row == end_row {
+                                        // 最后一行从行首到文本结束位置
+                                        let selection_rect = Rect::from_min_max(
+                                            Pos2::new(
+                                                position.x + row_rect.min.x,
+                                                position.y + row as f32 * row_height,
+                                            ),
+                                            Pos2::new(
+                                                position.x + end_pos.x,
+                                                position.y + row as f32 * row_height + row_height,
+                                            ),
+                                        );
+                                        ui.painter().rect_filled(
+                                            selection_rect,
+                                            0.0,
+                                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                        );
+                                    } else {
+                                        // 中间整行高亮
+                                        let selection_rect = Rect::from_min_max(
+                                            Pos2::new(
+                                                position.x + row_rect.min.x,
+                                                position.y + row as f32 * row_height,
+                                            ),
+                                            Pos2::new(
+                                                position.x + row_rect.max.x,
+                                                position.y + row as f32 * row_height + row_height,
+                                            ),
+                                        );
+                                        ui.painter().rect_filled(
+                                            selection_rect,
+                                            0.0,
+                                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                        );
+                                    };
+                                };
+                            }
+                        };
+                    };
+
+                    // 绘制超链接下划线
+                    // 检查超链接是否跨行
+                    if start_cursor.min.y == end_cursor.min.y {
+                        // 单行超链接
+                        let underline_y = position.y
+                            + start_pos.y
+                            + galley.rows.first().map_or(14.0, |row| row.height())
+                            - 2.0;
+
+                        // 绘制下划线
+                        let color = if is_hovering_link {
+                            Color32::from_rgba_unmultiplied(
+                                t.rgba[0].saturating_add(50),
+                                t.rgba[1],
+                                t.rgba[2],
+                                t.rgba[3],
+                            )
+                        } else {
+                            Color32::from_rgba_unmultiplied(
+                                t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3],
+                            )
+                        };
+
+                        ui.painter().line_segment(
+                            [
+                                Pos2::new(position.x + start_pos.x, underline_y),
+                                Pos2::new(position.x + end_pos.x, underline_y),
+                            ],
+                            Stroke::new(t.font_size / 10_f32, color),
+                        );
+                    } else {
+                        // 多行超链接
+                        let row_height = galley.rows.first().map_or(14.0, |row| row.height()); // 默认行高14.0
+
+                        // 计算起始行和结束行的索引
+                        let start_row = (start_pos.y / row_height).round() as usize;
+                        let end_row = (end_pos.y / row_height).round() as usize;
+
+                        for row in start_row..=end_row {
+                            let row_y = position.y + row as f32 * row_height + row_height - 2.0; // 行底部稍微上移一点绘制下划线
+
+                            // 获取当前行的矩形范围
+                            if let Some(current_row) = galley.rows.get(row) {
+                                let row_rect = current_row.rect();
+
+                                let color = Color32::from_rgba_unmultiplied(
+                                    t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3],
+                                );
+
+                                if row == start_row {
+                                    // 第一行从文本开始位置到行尾
+                                    ui.painter().line_segment(
+                                        [
+                                            Pos2::new(position.x + start_pos.x, row_y),
+                                            Pos2::new(position.x + row_rect.max.x, row_y),
+                                        ],
+                                        Stroke::new(t.font_size / 10_f32, color),
+                                    );
+                                } else if row == end_row {
+                                    // 最后一行从行首到文本结束位置
+                                    ui.painter().line_segment(
+                                        [
+                                            Pos2::new(position.x + row_rect.min.x, row_y),
+                                            Pos2::new(position.x + end_pos.x, row_y),
+                                        ],
+                                        Stroke::new(t.font_size / 10_f32, color),
+                                    );
+                                } else {
+                                    // 中间整行下划线
+                                    ui.painter().line_segment(
+                                        [
+                                            Pos2::new(position.x + row_rect.min.x, row_y),
+                                            Pos2::new(position.x + row_rect.max.x, row_y),
+                                        ],
+                                        Stroke::new(t.font_size / 10_f32, color),
+                                    );
+                                };
+                            };
+                        }
+                    };
+                }
+                self.rust_constructor_resource[id] = RCR::Text(t);
             };
         };
     }
 
-    /// 获取文本大小
+    /// 获取文本大小。
     pub fn get_text_size(&mut self, resource_name: &str, ui: &mut Ui) -> Result<[f32; 2], ()> {
         if let Ok(id) = self.get_resource_index("Text", resource_name) {
             if let RCR::Text(t) = self.rust_constructor_resource[id].clone() {
@@ -3140,12 +3642,13 @@ impl App {
                 [
                     &format!("{}_hint", name_switch_and_image_name[0]),
                     &hint_text[0],
+                    "Content",
                 ],
                 [0_f32, 0_f32, 25_f32, 300_f32, 10_f32],
                 [255, 255, 255, 0, 0, 0, 0, 0],
-                [true, true, false, false],
-                true,
+                [true, true, false, false, true, false],
                 [0, 0, 0, 0],
+                vec![],
             );
             self.add_split_time(
                 &format!("{}_start_hover_time", name_switch_and_image_name[0]),
