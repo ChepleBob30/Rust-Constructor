@@ -1,4 +1,4 @@
-# Rust Constructor
+# Rust Constructor V2
 
 ## A powerful cross-platform GUI framework, the easiest way to develop GUI projects in Rust
 
@@ -6,7 +6,7 @@
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github Stars](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![Version](https://img.shields.io/badge/Version-v1.3.0-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.0.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | [简体中文](./README_zh.md)
 
@@ -44,7 +44,10 @@ Rust Constructor is an open-source project. However, due to personal reasons, I 
 
 - How to use Rust Constructor?
 
-    *Call the functions in function.rs from pages.rs and write the pages.
+    *Add rust_constructor = "x.y.z" in toml.
+
+- What are the differences between Rust Constructor V2 and V1?  
+    *The original architecture was modified to fit the structure of the library crate and published on [crates.io](https://crates.io/) with an official guide added.
 
 ---
 

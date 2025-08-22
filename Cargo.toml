@@ -1,6 +1,11 @@
+[workspace]
+members = [
+    "Rust-Constructor-Guide"
+]
+
 [package]
-name = "Rust-Constructor"
-version = "1.3.0"
+name = "rust-constructor"
+version = "2.0.0"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
 description = "A powerful cross-platform GUI framework, the easiest way to develop GUI projects in Rust."
@@ -9,16 +14,15 @@ readme = "README.md"
 keywords = ["develop", "GUI"]
 repository = "https://github.com/ChepleBob30/Rust-Constructor"
 
-[[bin]]
-name = "Rust-Constructor"
-path = "src/main.rs"
+[lib]
+name = "rust_constructor"
+path = "src/lib.rs"
 
 [dependencies]
-egui = "0.32.0"
-eframe = "0.32.0"
-egui_extras = { version = "0.32.0", features = ["all_loaders"] }
-kira = { version = "0.8", features = ["cpal"]}
-anyhow = "1.0.98"
+egui = "0.32.1"
+eframe = "0.32.1"
+kira = "0.10.8"
+anyhow = "1.0.99"
 image = "0.25.6"
 json = "0.12.4"
 chrono = "0.4.41"

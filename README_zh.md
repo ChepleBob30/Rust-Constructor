@@ -1,4 +1,4 @@
-# Rust Constructor
+# Rust Constructor V2
 
 ## 一个强大的跨平台GUI框架, 用Rust开发GUI项目最简单的方式
 
@@ -6,7 +6,7 @@
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github 星星](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![版本](https://img.shields.io/badge/版本-v1.3.0-09EEE7)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.0.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | [简体中文](./README_zh.md)
 
@@ -45,7 +45,11 @@ Rust Constructor是一个开源项目，但是由于个人因素，我并不希�
 
 - Rust Constructor如何使用？
 
-    *在pages.rs中调用function.rs的函数并编写页面。
+    *在toml中添加 rust_constructor = "x.y.z"。
+
+- Rust Constructor V2比起V1有什么区别？
+
+    *将原先的架构修改为了符合库crate的结构，发布在了[crates.io](https://crates.io/)上，并添加了官方指南。
 
 ---
 
