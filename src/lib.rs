@@ -1312,7 +1312,6 @@ impl App {
             if let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
                 if !pd.change_page_updated {
                     self.new_page_update(name);
-                    self.rust_constructor_resource[id] = RCR::PageData(pd.clone());
                 };
                 return Ok(pd.change_page_updated);
             };
