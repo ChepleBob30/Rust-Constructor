@@ -1,4 +1,4 @@
-//! Rust Constructor v2.0.0
+//! Rust Constructor v2.0.3
 //! 开发者: Cheple_Bob
 //! 一个强大的跨平台GUI框架，在Rust中开发GUI项目的最简单方法。
 use anyhow::Context;
@@ -2512,6 +2512,27 @@ impl App {
                     SeverityLevel::SevereWarning,
                 );
                 Err(RustConstructorError::VariableNotString {
+                    variable_name: format!("{:?}", target),
+                })
+            }
+        }
+    }
+
+    /// 尝试将Value转换成Vec。
+    pub fn var_decode_v(&mut self, target: Value) -> Result<Vec<Value>, RustConstructorError> {
+        match target {
+            Value::Vec(v) => {
+                // 处理字符串
+                Ok(v)
+            }
+            _ => {
+                self.problem_report(
+                    RustConstructorError::VariableNotVec {
+                        variable_name: format!("{:?}", target),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
+                Err(RustConstructorError::VariableNotVec {
                     variable_name: format!("{:?}", target),
                 })
             }
