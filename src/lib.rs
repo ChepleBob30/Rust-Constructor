@@ -924,7 +924,7 @@ impl App {
         if let Ok(id) = self.get_resource_index("PageData", page) {
             self.page = page.to_string();
             if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
-                pd.change_page_updated = false;
+                pd.enter_page_updated = false;
                 self.timer.start_time = self.timer.total_time;
                 self.update_timer();
             };
