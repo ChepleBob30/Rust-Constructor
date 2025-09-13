@@ -1,4 +1,4 @@
-//! Rust Constructor v2.0.3
+//! Rust Constructor
 //! 开发者: Cheple_Bob
 //! 一个强大的跨平台GUI框架，在Rust中开发GUI项目的最简单方法。
 use anyhow::Context;
@@ -416,7 +416,7 @@ pub struct CustomRect {
     /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
     pub y_grid: [u32; 2],
     /// 对齐方法。
-    pub center_display: [bool; 4],
+    pub center_display: (HorizontalAlign, VerticalAlign),
     /// 颜色。
     pub color: [u8; 4],
     /// 边框宽度。
@@ -460,7 +460,7 @@ pub struct Image {
     /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
     pub y_grid: [u32; 2],
     /// 对齐方法。
-    pub center_display: [bool; 4],
+    pub center_display: (HorizontalAlign, VerticalAlign),
     /// 不透明度。
     pub alpha: u8,
     /// 叠加颜色。
@@ -506,7 +506,7 @@ pub struct Text {
     /// 文本位置。
     pub position: [f32; 2],
     /// 对齐方法。
-    pub center_display: [bool; 4],
+    pub center_display: (HorizontalAlign, VerticalAlign),
     /// 单行宽度。
     pub wrap_width: f32,
     /// 是否有背景。
@@ -829,6 +829,22 @@ pub enum RustConstructorError {
     },
     /// 页面未找到（需在外部自行调用问题报告）。
     PageNotFound { page_name: String },
+}
+
+/// 水平对齐方法。
+#[derive(Debug, Clone, Copy)]
+pub enum HorizontalAlign {
+    Left,
+    Center,
+    Right,
+}
+
+/// 垂直对齐方法。
+#[derive(Debug, Clone, Copy)]
+pub enum VerticalAlign {
+    Top,
+    Center,
+    Bottom,
 }
 
 /// 程序主体。
@@ -1433,7 +1449,7 @@ impl App {
         name: &str,
         position_size_and_rounding: [f32; 5],
         grid: [u32; 4],
-        center_display: [bool; 4],
+        center_display: (HorizontalAlign, VerticalAlign),
         color: [u8; 8],
         border_width: f32,
     ) {
@@ -1475,21 +1491,15 @@ impl App {
                             + cr.origin_position[1]
                     }
                 };
-                let pos_x;
-                let pos_y;
-                if cr.center_display[2] {
-                    pos_x = cr.position[0] - cr.size[0] / 2.0;
-                } else if cr.center_display[0] {
-                    pos_x = cr.position[0];
-                } else {
-                    pos_x = cr.position[0] - cr.size[0];
+                let pos_x = match cr.center_display.0 {
+                    HorizontalAlign::Left => cr.position[0],
+                    HorizontalAlign::Center => cr.position[0] - cr.size[0] / 2.0,
+                    HorizontalAlign::Right => cr.position[0] - cr.size[0],
                 };
-                if cr.center_display[3] {
-                    pos_y = cr.position[1] - cr.size[1] / 2.0;
-                } else if cr.center_display[1] {
-                    pos_y = cr.position[1];
-                } else {
-                    pos_y = cr.position[1] - cr.size[1];
+                let pos_y = match cr.center_display.1 {
+                    VerticalAlign::Top => cr.position[1],
+                    VerticalAlign::Center => cr.position[1] - cr.size[1] / 2.0,
+                    VerticalAlign::Bottom => cr.position[1] - cr.size[1],
                 };
                 ui.painter().rect(
                     Rect::from_min_max(
@@ -1524,7 +1534,12 @@ impl App {
         name_content_and_font: [&str; 3],
         position_font_size_wrap_width_rounding: [f32; 5],
         color: [u8; 8],
-        center_display_write_background_and_enable_copy: [bool; 6],
+        center_display_write_background_and_enable_copy: (
+            HorizontalAlign,
+            VerticalAlign,
+            bool,
+            bool,
+        ),
         grid: [u32; 4],
         hyperlink_text: Vec<(usize, usize, &str)>,
     ) {
@@ -1538,14 +1553,12 @@ impl App {
                 position_font_size_wrap_width_rounding[0],
                 position_font_size_wrap_width_rounding[1],
             ],
-            center_display: [
-                center_display_write_background_and_enable_copy[0],
-                center_display_write_background_and_enable_copy[1],
-                center_display_write_background_and_enable_copy[2],
-                center_display_write_background_and_enable_copy[3],
-            ],
+            center_display: (
+                center_display_write_background_and_enable_copy.0,
+                center_display_write_background_and_enable_copy.1,
+            ),
             wrap_width: position_font_size_wrap_width_rounding[3],
-            write_background: center_display_write_background_and_enable_copy[4],
+            write_background: center_display_write_background_and_enable_copy.2,
             background_rgb: [color[4], color[5], color[6], color[7]],
             rounding: position_font_size_wrap_width_rounding[4],
             x_grid: [grid[0], grid[1]],
@@ -1556,7 +1569,7 @@ impl App {
             ],
             font: name_content_and_font[2].to_string(),
             selection: None,
-            selectable: center_display_write_background_and_enable_copy[5],
+            selectable: center_display_write_background_and_enable_copy.3,
             hyperlink_text: hyperlink_text
                 .into_iter()
                 .map(|(a, b, c)| {
@@ -1609,21 +1622,15 @@ impl App {
                             + t.origin_position[1]
                     }
                 };
-                let pos_x;
-                let pos_y;
-                if t.center_display[2] {
-                    pos_x = t.position[0] - text_size.x / 2.0;
-                } else if t.center_display[0] {
-                    pos_x = t.position[0];
-                } else {
-                    pos_x = t.position[0] - text_size.x;
+                let pos_x = match t.center_display.0 {
+                    HorizontalAlign::Left => t.position[0],
+                    HorizontalAlign::Center => t.position[0] - text_size.x / 2.0,
+                    HorizontalAlign::Right => t.position[0] - text_size.x,
                 };
-                if t.center_display[3] {
-                    pos_y = t.position[1] - text_size.y / 2.0;
-                } else if t.center_display[1] {
-                    pos_y = t.position[1];
-                } else {
-                    pos_y = t.position[1] - text_size.y;
+                let pos_y = match t.center_display.1 {
+                    VerticalAlign::Top => t.position[1],
+                    VerticalAlign::Center => t.position[1] - text_size.y / 2.0,
+                    VerticalAlign::Bottom => t.position[1] - text_size.y,
                 };
                 // 使用绝对定位放置文本
                 let position = Pos2::new(pos_x, pos_y);
@@ -2563,7 +2570,7 @@ impl App {
             if let RCR::Image(im) = &mut self.rust_constructor_resource[image_id[count]] {
                 im.x_grid = [0, 0];
                 im.y_grid = [0, 0];
-                im.center_display = [true, true, false, false];
+                im.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                 im.image_size = [size_position_boundary[0], size_position_boundary[1]];
                 let mut temp_position;
                 if horizontal_or_vertical {
@@ -2742,7 +2749,7 @@ impl App {
         name: &str,
         position_size: [f32; 4],
         grid: [u32; 4],
-        center_display_and_use_overlay: [bool; 5],
+        center_display_and_use_overlay: (HorizontalAlign, VerticalAlign, bool),
         alpha_and_overlay_color: [u8; 5],
         image_texture_name: &str,
     ) {
@@ -2756,12 +2763,10 @@ impl App {
                     image_size: [position_size[2], position_size[3]],
                     x_grid: [grid[0], grid[1]],
                     y_grid: [grid[2], grid[3]],
-                    center_display: [
-                        center_display_and_use_overlay[0],
-                        center_display_and_use_overlay[1],
-                        center_display_and_use_overlay[2],
-                        center_display_and_use_overlay[3],
-                    ],
+                    center_display: (
+                        center_display_and_use_overlay.0,
+                        center_display_and_use_overlay.1,
+                    ),
                     alpha: alpha_and_overlay_color[0],
                     overlay_color: [
                         alpha_and_overlay_color[1],
@@ -2769,7 +2774,7 @@ impl App {
                         alpha_and_overlay_color[3],
                         alpha_and_overlay_color[4],
                     ],
-                    use_overlay_color: center_display_and_use_overlay[4],
+                    use_overlay_color: center_display_and_use_overlay.2,
                     origin_position: [position_size[0], position_size[1]],
                     cite_texture: image_texture_name.to_string(),
                     last_frame_cite_texture: image_texture_name.to_string(),
@@ -2806,15 +2811,15 @@ impl App {
                             + im.origin_position[1]
                     }
                 };
-                if im.center_display[2] {
-                    im.image_position[0] -= im.image_size[0] / 2.0;
-                } else if !im.center_display[0] {
-                    im.image_position[0] -= im.image_size[0];
+                match im.center_display.0 {
+                    HorizontalAlign::Left => {}
+                    HorizontalAlign::Center => im.image_position[0] -= im.image_size[0] / 2.0,
+                    HorizontalAlign::Right => im.image_position[0] -= im.image_size[0],
                 };
-                if im.center_display[3] {
-                    im.image_position[1] -= im.image_size[1] / 2.0;
-                } else if !im.center_display[1] {
-                    im.image_position[1] -= im.image_size[1];
+                match im.center_display.1 {
+                    VerticalAlign::Top => {}
+                    VerticalAlign::Center => im.image_position[1] -= im.image_size[1] / 2.0,
+                    VerticalAlign::Bottom => im.image_position[1] -= im.image_size[1],
                 };
                 if let Some(texture) = &im.image_texture {
                     let rect = Rect::from_min_size(
@@ -2864,7 +2869,7 @@ impl App {
             ) {
                 if let RCR::Image(im) = &mut self.rust_constructor_resource[id] {
                     im.image_size = [box_size[1] - 15_f32, box_size[1] - 15_f32];
-                    im.center_display = [true, false, false, true];
+                    im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
                     im.x_grid = [1, 1];
                     im.y_grid = [0, 1];
                     im.name = format!("MessageBox{}", im.name);
@@ -2877,7 +2882,7 @@ impl App {
                 if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
                     t.x_grid = [1, 1];
                     t.y_grid = [0, 1];
-                    t.center_display = [true, true, false, false];
+                    t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                     t.wrap_width = box_size[0] - box_size[1] + 5_f32;
                     t.name = format!("MessageBox{}", t.name);
                 };
@@ -2887,7 +2892,7 @@ impl App {
                 box_itself_title_content_image_name_and_sound_path[2],
             ) {
                 if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
-                    t.center_display = [true, true, false, false];
+                    t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                     t.x_grid = [1, 1];
                     t.y_grid = [0, 1];
                     t.wrap_width = box_size[0] - box_size[1] + 5_f32;
@@ -2941,7 +2946,7 @@ impl App {
                 ),
                 [0_f32, 0_f32, box_size[0], box_size[1], 20_f32],
                 [1, 1, 0, 1],
-                [true, true, false, false],
+                (HorizontalAlign::Left, VerticalAlign::Top),
                 [100, 100, 100, 125, 240, 255, 255, 255],
                 0.0,
             );
@@ -2952,7 +2957,7 @@ impl App {
                 ),
                 [0_f32, 0_f32, 30_f32, 30_f32],
                 [0, 0, 0, 0],
-                [false, false, true, true, false],
+                (HorizontalAlign::Center, VerticalAlign::Center, false),
                 [255, 0, 0, 0, 0],
                 "CloseMessageBox",
             );
@@ -3466,7 +3471,7 @@ impl App {
                         name_switch_image_name_text_name_and_sound_path[2],
                     ) {
                         if let RCR::Text(t) = &mut self.rust_constructor_resource[id2] {
-                            t.center_display = [false, false, true, true];
+                            t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
                             t.x_grid = [0, 0];
                             t.y_grid = [0, 0];
                             text_origin_position = t.origin_position;
@@ -3476,8 +3481,7 @@ impl App {
                 self.rust_constructor_resource[id] = RCR::Image(im);
             };
         };
-        if !appearance.iter().any(|x| x.hint_text.is_empty())
-        {
+        if !appearance.iter().any(|x| x.hint_text.is_empty()) {
             self.add_text(
                 [
                     &format!("{}Hint", name_switch_image_name_text_name_and_sound_path[0]),
@@ -3486,7 +3490,7 @@ impl App {
                 ],
                 [0_f32, 0_f32, 25_f32, 300_f32, 10_f32],
                 [255, 255, 255, 0, 0, 0, 0, 0],
-                [true, true, false, false, true, false],
+                (HorizontalAlign::Left, VerticalAlign::Top, true, false),
                 [0, 0, 0, 0],
                 vec![],
             );
@@ -3520,10 +3524,7 @@ impl App {
             last_time_clicked: false,
             last_time_clicked_index: 0,
             animation_count: count,
-            hint_text_name: if !appearance
-                .iter()
-                .any(|x| x.hint_text.is_empty())
-            {
+            hint_text_name: if !appearance.iter().any(|x| x.hint_text.is_empty()) {
                 format!("{}Hint", name_switch_image_name_text_name_and_sound_path[0])
             } else {
                 "".to_string()
@@ -3584,15 +3585,26 @@ impl App {
                                                     t.rgba[3] = 255;
                                                     t.origin_position = [mouse_pos.x, mouse_pos.y];
                                                 };
-                                                t.center_display[0] = mouse_pos.x + self
+                                                t.center_display.0 = if mouse_pos.x
+                                                    + self
                                                         .get_text_size(&s.hint_text_name, ui)
                                                         .unwrap()[0]
-                                                    <= ctx.available_rect().width();
-                                                t.center_display[1] = mouse_pos.y
+                                                    <= ctx.available_rect().width()
+                                                {
+                                                    HorizontalAlign::Left
+                                                } else {
+                                                    HorizontalAlign::Right
+                                                };
+                                                t.center_display.1 = if mouse_pos.y
                                                     + self
                                                         .get_text_size(&s.hint_text_name, ui)
                                                         .unwrap()[1]
-                                                    <= ctx.available_rect().height();
+                                                    <= ctx.available_rect().height()
+                                                {
+                                                    VerticalAlign::Top
+                                                } else {
+                                                    VerticalAlign::Bottom
+                                                };
                                                 self.rust_constructor_resource[id3] = RCR::Text(t);
                                             };
                                         };
