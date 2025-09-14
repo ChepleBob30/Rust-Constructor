@@ -1575,8 +1575,8 @@ impl App {
                 .map(|(a, b, c)| {
                     (
                         a,
-                        if b > name_content_and_font[1].len() - 1 {
-                            name_content_and_font[1].len() - 1
+                        if b > name_content_and_font[1].len() {
+                            name_content_and_font[1].len()
                         } else {
                             b
                         },
@@ -1844,16 +1844,6 @@ impl App {
                     let start_pos = start_cursor.left_top();
                     let end_pos = end_cursor.right_top();
 
-                    // 检查鼠标是否在超链接上
-                    let mut is_hovering_link = false;
-                    if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                        let relative_pos = pointer_pos - position.to_vec2();
-                        let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
-                        if cursor.index >= *start && cursor.index <= *end {
-                            is_hovering_link = true;
-                        };
-                    };
-
                     let row_height = galley.rows.first().map_or(14.0, |row| row.height());
 
                     // 为超链接创建交互响应对象
@@ -2050,18 +2040,9 @@ impl App {
                             - 2.0;
 
                         // 绘制下划线
-                        let color = if is_hovering_link {
-                            Color32::from_rgba_unmultiplied(
-                                t.rgba[0].saturating_add(50),
-                                t.rgba[1],
-                                t.rgba[2],
-                                t.rgba[3],
-                            )
-                        } else {
-                            Color32::from_rgba_unmultiplied(
-                                t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3],
-                            )
-                        };
+                        let color = Color32::from_rgba_unmultiplied(
+                            t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3],
+                        );
 
                         ui.painter().line_segment(
                             [
