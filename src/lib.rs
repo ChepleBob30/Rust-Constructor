@@ -924,6 +924,26 @@ impl App {
         }
     }
 
+    /// 整合所有页面需要一次性处理的功能。
+    pub fn page_handler(&mut self, ctx: &egui::Context) {
+        // 更新帧数
+        self.update_frame_stats(ctx);
+        // 更新渲染资源列表
+        self.render_resource_list = Vec::new();
+        // 更新计时器
+        self.update_timer();
+        if let Ok(id) = self
+            .get_resource_index("PageData", &self.page.clone())
+        {
+            if let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
+                if pd.forced_update {
+                    // 请求重新绘制界面
+                    ctx.request_repaint();
+                };
+            };
+        };
+    }
+
     /// 运行时添加新页面。
     pub fn add_page(&mut self, name: &str, forced_update: bool) {
         self.rust_constructor_resource.push(RCR::PageData(PageData {

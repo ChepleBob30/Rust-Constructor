@@ -6,9 +6,9 @@
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github 星星](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![版本](https://img.shields.io/badge/版本-v2.0.7-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.0.8-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
-[English](./README.md) | [简体中文](./README_zh.md)
+[English](./README.md) | 简体中文
 
 ---
 
@@ -17,7 +17,6 @@ Rust Constructor是开源项目，但与egui开发组无直接关系！
 ## 目录
 
 - [创造Rust Constructor的目的](#创造rust-constructor的目的)
-- [如何给Rust Constructor做贡献](#如何给rust-constructor做贡献)
 - [常见问题](#常见问题)
 - [许可证](#许可证)
 - [尾声](#尾声)
@@ -27,13 +26,6 @@ Rust Constructor是开源项目，但与egui开发组无直接关系！
 ## 创造Rust Constructor的目的
 
 我们在开发[靶向载体](https://github.com/ChepleBob30/Targeted-Vector/)的过程中遇到了一些egui无法解决的问题，因此我们拓展了许多工具。为了能让更多人便利地进行开发，我们就创造了Rust Constructor。
-
----
-
-## 如何给Rust Constructor做贡献
-
-Rust Constructor是一个开源项目，但是由于个人因素，我并不希望有人直接提交代码（因为这样会让开发与提交代码工作变得混乱且困难）。
-如果您在使用Rust Constructor时遇到任何bug或有任何功能建议，请在GitHub存储库中创建issue或直接发送给我（<Cheple_Bob@outlook.com>）。
 
 ---
 

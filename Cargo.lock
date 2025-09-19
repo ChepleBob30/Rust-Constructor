@@ -3573,7 +3573,7 @@ checksum = "ad8388ea1a9e0ea807e442e8263a699e7edcb320ecbcd21b4fa8ff859acce3ba"
 
 [[package]]
 name = "rust-constructor"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "anyhow",
  "chrono",
