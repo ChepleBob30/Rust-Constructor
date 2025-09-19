@@ -1303,7 +1303,6 @@ impl App {
         if self.config.rc_strict_mode {
             panic!("{}", problem);
         } else {
-            eprintln!("something goes wrong.");
             let sound = self.config.problem_report_sound.clone();
             std::thread::spawn(move || {
                 play_wav(&sound).unwrap_or(0_f64);
@@ -2545,8 +2544,8 @@ impl App {
                         image_id.push(u);
                     };
                 };
-            }
-        }
+            };
+        };
         for (count, _) in image_id.clone().into_iter().enumerate() {
             if let RCR::Image(im) = &mut self.rust_constructor_resource[image_id[count]] {
                 im.x_grid = [0, 0];
@@ -2566,7 +2565,7 @@ impl App {
                         } else {
                             temp_position -= size_position_boundary[0];
                         };
-                    }
+                    };
                     im.origin_position = [temp_position, size_position_boundary[3]];
                 } else {
                     for _ in 0..count {
@@ -2575,11 +2574,11 @@ impl App {
                         } else {
                             temp_position -= size_position_boundary[1];
                         };
-                    }
+                    };
                     im.origin_position = [size_position_boundary[2], temp_position];
                 };
             };
-        }
+        };
         if let RCR::Image(im) = self.rust_constructor_resource[image_id[image_id.len() - 1]].clone()
         {
             let resume_point = if horizontal_or_vertical {
@@ -2606,12 +2605,12 @@ impl App {
         if let Ok(id) = self.get_resource_index("ScrollBackground", name) {
             if let RCR::ScrollBackground(sb) = self.rust_constructor_resource[id].clone() {
                 sb.reg_render_resource(&mut self.render_resource_list);
-                if self.get_resource_index("SplitTime", name).is_err() {
+                if !self.check_resource_exists("SplitTime", name) {
                     self.add_split_time(name, false);
                 };
                 for i in 0..sb.image_name.len() {
                     self.image(ui, &sb.image_name[i].clone(), ctx);
-                }
+                };
                 if self.timer.now_time - self.split_time(name).unwrap()[0] >= self.vertrefresh {
                     self.add_split_time(name, true);
                     for i in 0..sb.image_name.len() {
@@ -2658,7 +2657,7 @@ impl App {
                                 };
                             };
                         };
-                    }
+                    };
                 };
             };
         };
