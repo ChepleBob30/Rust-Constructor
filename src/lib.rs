@@ -3690,7 +3690,8 @@ impl App {
                                             .unwrap()[1]
                                         >= self.vertrefresh
                                     {
-                                        t.rgba[3] = t.rgba[3].saturating_sub(1);
+                                        self.add_split_time(&format!("{}HintFadeAnimation", s.name), true);
+                                        t.rgba[3] = t.rgba[3].saturating_sub(10);
                                     };
                                     self.rust_constructor_resource[id3] = RCR::Text(t);
                                 };
