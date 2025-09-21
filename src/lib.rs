@@ -140,11 +140,10 @@ pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, s
         if path.is_dir() {
             // 递归处理子目录
             matches.extend(list_files_recursive(&path, prefix)?);
-        } else if let Some(file_name) = path.file_name() {
-            if file_name.to_string_lossy().contains(prefix) {
+        } else if let Some(file_name) = path.file_name()
+            && file_name.to_string_lossy().contains(prefix) {
                 matches.push(path);
             }
-        }
     }
 
     Ok(matches)
@@ -890,16 +889,14 @@ impl App {
         let mut game_text = GameText {
             game_text: HashMap::new(),
         };
-        if let Ok(json_value) = read_from_json(config_path) {
-            if let Some(read_config) = Config::from_json_value(&json_value) {
+        if let Ok(json_value) = read_from_json(config_path)
+            && let Some(read_config) = Config::from_json_value(&json_value) {
                 config = read_config;
             }
-        }
-        if let Ok(json_value) = read_from_json(game_text_path) {
-            if let Some(read_game_text) = GameText::from_json_value(&json_value) {
+        if let Ok(json_value) = read_from_json(game_text_path)
+            && let Some(read_game_text) = GameText::from_json_value(&json_value) {
                 game_text = read_game_text;
             }
-        }
         Self {
             config,
             game_text,
@@ -934,14 +931,11 @@ impl App {
         self.update_timer();
         if let Ok(id) = self
             .get_resource_index("PageData", &self.page.clone())
-        {
-            if let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
-                if pd.forced_update {
+            && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone()
+                && pd.forced_update {
                     // 请求重新绘制界面
                     ctx.request_repaint();
                 };
-            };
-        };
     }
 
     /// 运行时添加新页面。
@@ -1169,11 +1163,10 @@ impl App {
 
     /// 输出字体资源。
     pub fn font(&mut self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Font", name) {
-            if let RCR::Font(f) = &mut self.rust_constructor_resource[id] {
+        if let Ok(id) = self.get_resource_index("Font", name)
+            && let RCR::Font(f) = &mut self.rust_constructor_resource[id] {
                 return Ok(f.font_definitions.clone());
             }
-        }
         self.problem_report(
             RustConstructorError::FontNotFound {
                 font_name: name.to_string(),
@@ -1343,14 +1336,13 @@ impl App {
 
     /// 检查页面是否已完成首次加载。
     pub fn check_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("PageData", name) {
-            if let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("PageData", name)
+            && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
                 if !pd.change_page_updated {
                     self.new_page_update(name);
                 };
                 return Ok(pd.change_page_updated);
             };
-        };
         self.problem_report(
             RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
@@ -1364,13 +1356,12 @@ impl App {
 
     /// 检查页面是否已完成加载。
     pub fn check_enter_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("PageData", name) {
-            if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
+        if let Ok(id) = self.get_resource_index("PageData", name)
+            && let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
                 let return_value = pd.enter_page_updated;
                 pd.enter_page_updated = true;
                 return Ok(return_value);
             };
-        };
         self.problem_report(
             RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
@@ -1420,11 +1411,10 @@ impl App {
     /// 添加分段时间。
     pub fn add_split_time(&mut self, name: &str, reset: bool) {
         if reset {
-            if let Ok(id) = self.get_resource_index("SplitTime", name) {
-                if let RCR::SplitTime(st) = &mut self.rust_constructor_resource[id] {
+            if let Ok(id) = self.get_resource_index("SplitTime", name)
+                && let RCR::SplitTime(st) = &mut self.rust_constructor_resource[id] {
                     st.time = [self.timer.now_time, self.timer.total_time];
                 };
-            };
         } else {
             self.rust_constructor_resource
                 .push(RCR::SplitTime(SplitTime {
@@ -1437,11 +1427,10 @@ impl App {
 
     /// 输出分段时间。
     pub fn split_time(&mut self, name: &str) -> Result<[f32; 2], RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("SplitTime", name) {
-            if let RCR::SplitTime(st) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("SplitTime", name)
+            && let RCR::SplitTime(st) = self.rust_constructor_resource[id].clone() {
                 return Ok(st.time);
             };
-        };
         self.problem_report(
             RustConstructorError::SplitTimeNotFound {
                 split_time_name: name.to_string(),
@@ -1491,8 +1480,8 @@ impl App {
 
     /// 显示矩形资源。
     pub fn rect(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("CustomRect", name) {
-            if let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id] {
+        if let Ok(id) = self.get_resource_index("CustomRect", name)
+            && let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id] {
                 cr.reg_render_resource(&mut self.render_resource_list);
                 cr.position[0] = match cr.x_grid[1] {
                     0 => cr.origin_position[0],
@@ -1544,7 +1533,6 @@ impl App {
                     egui::StrokeKind::Inside,
                 );
             };
-        };
     }
 
     /// 添加文本资源。
@@ -1608,8 +1596,8 @@ impl App {
 
     /// 显示文本资源。
     pub fn text(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("Text", name) {
-            if let RCR::Text(mut t) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("Text", name)
+            && let RCR::Text(mut t) = self.rust_constructor_resource[id].clone() {
                 t.reg_render_resource(&mut self.render_resource_list);
                 // 计算文本大小
                 let galley = ui.fonts(|f| {
@@ -1720,14 +1708,13 @@ impl App {
                         response.request_focus();
                     };
 
-                    if response.dragged() && t.selection.is_some() {
-                        if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                    if response.dragged() && t.selection.is_some()
+                        && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
                             let cursor = cursor_at_pointer(pointer_pos.to_vec2());
                             if let Some((start, _)) = t.selection {
                                 t.selection = Some((start, cursor));
                             };
                         };
-                    };
 
                     // 处理复制操作
                     if response.has_focus() {
@@ -1738,8 +1725,8 @@ impl App {
                             let ctrl_pressed = input.modifiers.ctrl;
                             c_released && (cmd_pressed || ctrl_pressed)
                         });
-                        if copy_triggered {
-                            if let Some((start, end)) = t.selection {
+                        if copy_triggered
+                            && let Some((start, end)) = t.selection {
                                 let (start, end) = (start.min(end), start.max(end));
                                 let chars: Vec<char> = t.text_content.chars().collect();
                                 if start <= chars.len() && end <= chars.len() && start < end {
@@ -1747,7 +1734,6 @@ impl App {
                                     ui.ctx().copy_text(selected_text);
                                 };
                             };
-                        };
                     };
 
                     // 绘制选择区域背景
@@ -1945,8 +1931,8 @@ impl App {
                     // 检查是否释放了鼠标（点击完成）
                     let mut clicked_on_link = false;
                     for link_response in &link_responses {
-                        if link_response.clicked() {
-                            if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                        if link_response.clicked()
+                            && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
                                 let relative_pos = pointer_pos - position.to_vec2();
                                 let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
                                 if cursor.index >= *start && cursor.index <= *end {
@@ -1954,7 +1940,6 @@ impl App {
                                     break;
                                 };
                             };
-                        };
                     }
 
                     if clicked_on_link {
@@ -2123,7 +2108,6 @@ impl App {
                 }
                 self.rust_constructor_resource[id] = RCR::Text(t);
             };
-        };
     }
 
     /// 获取文本大小。
@@ -2132,8 +2116,8 @@ impl App {
         resource_name: &str,
         ui: &mut Ui,
     ) -> Result<[f32; 2], RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Text", resource_name) {
-            if let RCR::Text(t) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("Text", resource_name)
+            && let RCR::Text(t) = self.rust_constructor_resource[id].clone() {
                 let galley = ui.fonts(|f| {
                     f.layout(
                         t.text_content.to_string(),
@@ -2144,7 +2128,6 @@ impl App {
                 });
                 return Ok([galley.size().x, galley.size().y]);
             };
-        };
         self.problem_report(
             RustConstructorError::TextNotFound {
                 text_name: resource_name.to_string(),
@@ -2167,20 +2150,18 @@ impl App {
 
     /// 修改变量资源。
     pub fn modify_var<T: Into<Value>>(&mut self, name: &str, value: T) {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = &mut self.rust_constructor_resource[id] {
+        if let Ok(id) = self.get_resource_index("Variable", name)
+            && let RCR::Variable(v) = &mut self.rust_constructor_resource[id] {
                 v.value = value.into();
             };
-        };
     }
 
     /// 取出Value变量。
     pub fn var(&mut self, name: &str) -> Result<Value, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("Variable", name)
+            && let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
                 return Ok(v.clone().value);
             };
-        };
         self.problem_report(
             RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2559,11 +2540,10 @@ impl App {
         let mut image_id = vec![];
         for i in image_name.clone() {
             for u in 0..self.rust_constructor_resource.len() {
-                if let RCR::Image(im) = self.rust_constructor_resource[u].clone() {
-                    if im.name == i {
+                if let RCR::Image(im) = self.rust_constructor_resource[u].clone()
+                    && im.name == i {
                         image_id.push(u);
                     };
-                };
             };
         };
         for (count, _) in image_id.clone().into_iter().enumerate() {
@@ -2622,8 +2602,8 @@ impl App {
 
     /// 显示滚动背景。
     pub fn scroll_background(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("ScrollBackground", name) {
-            if let RCR::ScrollBackground(sb) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("ScrollBackground", name)
+            && let RCR::ScrollBackground(sb) = self.rust_constructor_resource[id].clone() {
                 sb.reg_render_resource(&mut self.render_resource_list);
                 if !self.check_resource_exists("SplitTime", name) {
                     self.add_split_time(name, false);
@@ -2635,8 +2615,7 @@ impl App {
                     self.add_split_time(name, true);
                     for i in 0..sb.image_name.len() {
                         if let Ok(id2) = self.get_resource_index("Image", &sb.image_name[i].clone())
-                        {
-                            if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone()
+                            && let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone()
                             {
                                 if sb.horizontal_or_vertical {
                                     if sb.left_and_top_or_right_and_bottom {
@@ -2676,11 +2655,9 @@ impl App {
                                     self.rust_constructor_resource[id2] = RCR::Image(im.clone());
                                 };
                             };
-                        };
                     };
                 };
             };
-        };
     }
 
     /// 添加图片纹理资源。
@@ -2718,12 +2695,11 @@ impl App {
                         cite_path: path.to_string(),
                     }));
             } else if let Ok(id) = self.get_resource_index("ImageTexture", name) {
-                if let RCR::ImageTexture(it) = &mut self.rust_constructor_resource[id] {
-                    if !create_new_resource {
+                if let RCR::ImageTexture(it) = &mut self.rust_constructor_resource[id]
+                    && !create_new_resource {
                         it.texture = image_texture;
                         it.cite_path = path.to_string();
                     };
-                };
             } else {
                 self.rust_constructor_resource
                     .push(RCR::ImageTexture(ImageTexture {
@@ -2753,8 +2729,8 @@ impl App {
         alpha_and_overlay_color: [u8; 5],
         image_texture_name: &str,
     ) {
-        if let Ok(id) = self.get_resource_index("ImageTexture", image_texture_name) {
-            if let RCR::ImageTexture(it) = self.rust_constructor_resource[id].clone() {
+        if let Ok(id) = self.get_resource_index("ImageTexture", image_texture_name)
+            && let RCR::ImageTexture(it) = self.rust_constructor_resource[id].clone() {
                 self.rust_constructor_resource.push(RCR::Image(Image {
                     discern_type: "Image".to_string(),
                     name: name.to_string(),
@@ -2780,20 +2756,17 @@ impl App {
                     last_frame_cite_texture: image_texture_name.to_string(),
                 }));
             };
-        };
     }
 
     /// 显示图片资源。
     pub fn image(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("Image", name) {
-            if let RCR::Image(mut im) = self.rust_constructor_resource[id].clone() {
-                if im.cite_texture != im.last_frame_cite_texture {
-                    if let Ok(id2) = self.get_resource_index("ImageTexture", &im.cite_texture) {
-                        if let RCR::ImageTexture(it) = self.rust_constructor_resource[id2].clone() {
+        if let Ok(id) = self.get_resource_index("Image", name)
+            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone() {
+                if im.cite_texture != im.last_frame_cite_texture
+                    && let Ok(id2) = self.get_resource_index("ImageTexture", &im.cite_texture)
+                        && let RCR::ImageTexture(it) = self.rust_constructor_resource[id2].clone() {
                             im.image_texture = it.texture;
                         };
-                    };
-                };
                 im.reg_render_resource(&mut self.render_resource_list);
                 im.image_position[0] = match im.x_grid[1] {
                     0 => im.origin_position[0],
@@ -2847,7 +2820,6 @@ impl App {
                 im.last_frame_cite_texture = im.cite_texture.clone();
                 self.rust_constructor_resource[id] = RCR::Image(im);
             };
-        };
     }
 
     /// 添加消息框资源(重要事项：你需要添加一个CloseMessageBox图片纹理资源才可正常使用！)。
@@ -2866,39 +2838,36 @@ impl App {
             if let Ok(id) = self.get_resource_index(
                 "Image",
                 box_itself_title_content_image_name_and_sound_path[3],
-            ) {
-                if let RCR::Image(im) = &mut self.rust_constructor_resource[id] {
+            )
+                && let RCR::Image(im) = &mut self.rust_constructor_resource[id] {
                     im.image_size = [box_size[1] - 15_f32, box_size[1] - 15_f32];
                     im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
                     im.x_grid = [1, 1];
                     im.y_grid = [0, 1];
                     im.name = format!("MessageBox{}", im.name);
                 };
-            };
             if let Ok(id) = self.get_resource_index(
                 "Text",
                 box_itself_title_content_image_name_and_sound_path[1],
-            ) {
-                if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
+            )
+                && let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
                     t.x_grid = [1, 1];
                     t.y_grid = [0, 1];
                     t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                     t.wrap_width = box_size[0] - box_size[1] + 5_f32;
                     t.name = format!("MessageBox{}", t.name);
                 };
-            };
             if let Ok(id) = self.get_resource_index(
                 "Text",
                 box_itself_title_content_image_name_and_sound_path[2],
-            ) {
-                if let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
+            )
+                && let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
                     t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                     t.x_grid = [1, 1];
                     t.y_grid = [0, 1];
                     t.wrap_width = box_size[0] - box_size[1] + 5_f32;
                     t.name = format!("MessageBox{}", t.name);
                 };
-            };
             self.rust_constructor_resource
                 .push(RCR::MessageBox(MessageBox {
                     discern_type: "MessageBox".to_string(),
@@ -3031,38 +3000,31 @@ impl App {
         for u in 0..index_list.len() {
             let mut deleted = false;
             let i = u - delete_count;
-            if let RCR::MessageBox(mut mb) = self.rust_constructor_resource[index_list[i]].clone() {
-                if let Ok(id1) = self.get_resource_index("Image", &mb.box_image_name) {
-                    if let RCR::Image(mut im1) = self.rust_constructor_resource[id1].clone() {
-                        if let Ok(id2) =
+            if let RCR::MessageBox(mut mb) = self.rust_constructor_resource[index_list[i]].clone()
+                && let Ok(id1) = self.get_resource_index("Image", &mb.box_image_name)
+                    && let RCR::Image(mut im1) = self.rust_constructor_resource[id1].clone()
+                        && let Ok(id2) =
                             self.get_resource_index("CustomRect", &format!("MessageBox{}", mb.name))
-                        {
-                            if let RCR::CustomRect(mut cr) =
+                            && let RCR::CustomRect(mut cr) =
                                 self.rust_constructor_resource[id2].clone()
-                            {
-                                if let Ok(id3) = self.get_resource_index("Text", &mb.box_title_name)
-                                {
-                                    if let RCR::Text(mut t1) =
+                                && let Ok(id3) = self.get_resource_index("Text", &mb.box_title_name)
+                                    && let RCR::Text(mut t1) =
                                         self.rust_constructor_resource[id3].clone()
-                                    {
-                                        if let Ok(id4) =
+                                        && let Ok(id4) =
                                             self.get_resource_index("Text", &mb.box_content_name)
-                                        {
-                                            if let RCR::Text(mut t2) =
+                                            && let RCR::Text(mut t2) =
                                                 self.rust_constructor_resource[id4].clone()
-                                            {
-                                                if let Ok(id5) = self.get_resource_index(
+                                                && let Ok(id5) = self.get_resource_index(
                                                     "Switch",
                                                     &format!("MessageBox{}Close", mb.name),
-                                                ) {
-                                                    if let RCR::Switch(mut s) =
+                                                )
+                                                    && let RCR::Switch(mut s) =
                                                         self.rust_constructor_resource[id5].clone()
-                                                    {
-                                                        if let Ok(id6) = self.get_resource_index(
+                                                        && let Ok(id6) = self.get_resource_index(
                                                             "Image",
                                                             &format!("MessageBox{}Close", mb.name),
-                                                        ) {
-                                                            if let RCR::Image(mut im2) = self
+                                                        )
+                                                            && let RCR::Image(mut im2) = self
                                                                 .rust_constructor_resource[id6]
                                                                 .clone()
                                                             {
@@ -3379,8 +3341,8 @@ impl App {
                                                                     if let Ok(id) = self.get_resource_index("SplitTime", &format!("MessageBox{}Animation", mb.name)) {
                                                                         self.rust_constructor_resource.remove(id);
                                                                     };
-                                                                    if !mb.box_keep_existing {
-                                                                        if let Ok(id) = self
+                                                                    if !mb.box_keep_existing
+                                                                        && let Ok(id) = self
                                                                             .get_resource_index(
                                                                                 "SplitTime",
                                                                                 &format!(
@@ -3391,7 +3353,6 @@ impl App {
                                                                         {
                                                                             self.rust_constructor_resource.remove(id);
                                                                         };
-                                                                    };
                                                                     if let Ok(id) = self
                                                                         .get_resource_index(
                                                                             "MessageBox",
@@ -3405,18 +3366,6 @@ impl App {
                                                                         mb.box_size[1] + 15_f32;
                                                                 };
                                                             };
-                                                        };
-                                                    };
-                                                };
-                                            };
-                                        };
-                                    };
-                                };
-                            };
-                        };
-                    };
-                };
-            };
         }
     }
 
@@ -3459,28 +3408,24 @@ impl App {
         let mut text_origin_position = [0_f32, 0_f32];
         if let Ok(id) =
             self.get_resource_index("Image", name_switch_image_name_text_name_and_sound_path[1])
-        {
-            if let RCR::Image(mut im) = self.rust_constructor_resource[id].clone() {
+            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone() {
                 im.use_overlay_color = true;
                 if self.check_resource_exists(
                     "Text",
                     name_switch_image_name_text_name_and_sound_path[2],
-                ) {
-                    if let Ok(id2) = self.get_resource_index(
+                )
+                    && let Ok(id2) = self.get_resource_index(
                         "Text",
                         name_switch_image_name_text_name_and_sound_path[2],
-                    ) {
-                        if let RCR::Text(t) = &mut self.rust_constructor_resource[id2] {
+                    )
+                        && let RCR::Text(t) = &mut self.rust_constructor_resource[id2] {
                             t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
                             t.x_grid = [0, 0];
                             t.y_grid = [0, 0];
                             text_origin_position = t.origin_position;
                         };
-                    };
-                };
                 self.rust_constructor_resource[id] = RCR::Image(im);
             };
-        };
         if !appearance.iter().any(|x| x.hint_text.is_empty()) {
             self.add_text(
                 [
@@ -3560,11 +3505,10 @@ impl App {
                             if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
                                 // 判断是否在矩形内
                                 if rect.contains(mouse_pos) {
-                                    if !s.hint_text_name.is_empty() {
-                                        if let Ok(id3) =
+                                    if !s.hint_text_name.is_empty()
+                                        && let Ok(id3) =
                                             self.get_resource_index("Text", &s.hint_text_name)
-                                        {
-                                            if let RCR::Text(mut t) =
+                                            && let RCR::Text(mut t) =
                                                 self.rust_constructor_resource[id3].clone()
                                             {
                                                 if !s.last_time_hovered {
@@ -3607,8 +3551,6 @@ impl App {
                                                 };
                                                 self.rust_constructor_resource[id3] = RCR::Text(t);
                                             };
-                                        };
-                                    };
                                     hovered = true;
                                     let mut clicked = vec![];
                                     let mut active = false;
@@ -3680,8 +3622,8 @@ impl App {
                             if s.last_time_hovered {
                                 self.add_split_time(&format!("{}HintFadeAnimation", s.name), true);
                             };
-                            if let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name) {
-                                if let RCR::Text(mut t) =
+                            if let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name)
+                                && let RCR::Text(mut t) =
                                     self.rust_constructor_resource[id3].clone()
                                 {
                                     if self.timer.total_time
@@ -3695,7 +3637,6 @@ impl App {
                                     };
                                     self.rust_constructor_resource[id3] = RCR::Text(t);
                                 };
-                            };
                         };
                         im.overlay_color = s.appearance
                             [(s.state * s.animation_count + appearance_count) as usize]
@@ -3706,16 +3647,15 @@ impl App {
                                 [(s.state * s.animation_count + appearance_count) as usize]
                                 .texture
                                 .clone(),
-                        ) {
-                            if let RCR::ImageTexture(it) =
+                        )
+                            && let RCR::ImageTexture(it) =
                                 self.rust_constructor_resource[id4].clone()
                             {
                                 im.image_texture = it.texture.clone();
                             };
-                        };
-                        if !s.hint_text_name.is_empty() {
-                            if let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name) {
-                                if let RCR::Text(mut t) =
+                        if !s.hint_text_name.is_empty()
+                            && let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name)
+                                && let RCR::Text(mut t) =
                                     self.rust_constructor_resource[id3].clone()
                                 {
                                     t.background_rgb[3] = t.rgba[3];
@@ -3725,16 +3665,14 @@ impl App {
                                         .clone();
                                     self.rust_constructor_resource[id3] = RCR::Text(t);
                                 };
-                            };
-                        };
                         s.last_time_hovered = hovered;
                         activated[1] = s.state as usize;
                         self.rust_constructor_resource[id] = RCR::Switch(s.clone());
                         self.rust_constructor_resource[id2] = RCR::Image(im.clone());
                         self.image(ui, &s.switch_image_name.clone(), ctx);
                         if self.check_resource_exists("Text", &s.text_name) {
-                            if let Ok(id4) = self.get_resource_index("Text", &s.text_name) {
-                                if let RCR::Text(mut t2) =
+                            if let Ok(id4) = self.get_resource_index("Text", &s.text_name)
+                                && let RCR::Text(mut t2) =
                                     self.rust_constructor_resource[id4].clone()
                                 {
                                     t2.origin_position = [
@@ -3747,7 +3685,6 @@ impl App {
                                         .clone();
                                     self.rust_constructor_resource[id4] = RCR::Text(t2);
                                 };
-                            };
                             self.text(ui, &s.text_name, ctx);
                         };
                         if self.check_resource_exists("Text", &s.hint_text_name) {
