@@ -1,10 +1,9 @@
-//! Rust Constructor
-//! 开发者: Cheple_Bob
+//! Rust Constructor V2
 //! 一个强大的跨平台GUI框架，在Rust中开发GUI项目的最简单方法。
 use anyhow::Context;
 use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
 use egui::{
-    Color32, FontData, FontDefinitions, FontId, Frame, PointerButton, Pos2, Ui, Vec2, text::CCursor,
+    Color32, FontData, FontDefinitions, FontId, PointerButton, Pos2, Ui, Vec2, text::CCursor,
 };
 use json::JsonValue;
 use kira::{
@@ -25,8 +24,8 @@ use tray_icon::{Icon, TrayIconBuilder, menu::Menu};
 pub fn load_icon_from_file(path: &str) -> Result<Icon, Box<dyn std::error::Error>> {
     let image = image::open(path)?.into_rgba8();
     let (width, height) = image.dimensions();
-    let rgba = image.into_raw();
-    Ok(Icon::from_rgba(rgba, width, height)?)
+    let color = image.into_raw();
+    Ok(Icon::from_rgba(color, width, height)?)
 }
 
 /// 创建格式化的JSON文件。
@@ -141,16 +140,17 @@ pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, s
             // 递归处理子目录
             matches.extend(list_files_recursive(&path, prefix)?);
         } else if let Some(file_name) = path.file_name()
-            && file_name.to_string_lossy().contains(prefix) {
-                matches.push(path);
-            }
+            && file_name.to_string_lossy().contains(prefix)
+        {
+            matches.push(path);
+        }
     }
 
     Ok(matches)
 }
 
 /// 配置文件。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Config {
     /// 显示的语言（注意：此值修改到大于实际语言数目极有可能导致程序崩溃！）。
     pub language: u8,
@@ -163,8 +163,8 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_json_value(value: &JsonValue) -> Option<Config> {
-        Some(Config {
+    pub fn from_json_value(value: &JsonValue) -> Option<Self> {
+        Some(Self {
             language: value["language"].as_u8()?,
             amount_languages: value["amount_languages"].as_u8()?,
             rc_strict_mode: value["rc_strict_mode"].as_bool()?,
@@ -182,21 +182,21 @@ impl Config {
 }
 
 /// 统一的文本调用处。
-#[derive(Debug, Clone)]
-pub struct GameText {
-    pub game_text: HashMap<String, Vec<String>>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppText {
+    pub app_text: HashMap<String, Vec<String>>,
 }
 
-impl GameText {
-    pub fn from_json_value(value: &JsonValue) -> Option<GameText> {
-        // 检查 game_text 字段是否为对象
-        if !value["game_text"].is_object() {
+impl AppText {
+    pub fn from_json_value(value: &JsonValue) -> Option<Self> {
+        // 检查 app_text 字段是否为对象
+        if !value["app_text"].is_object() {
             return None;
         }
 
         // 遍历对象键值对
         let mut parsed = HashMap::new();
-        for (key, val) in value["game_text"].entries() {
+        for (key, val) in value["app_text"].entries() {
             if let JsonValue::Array(arr) = val {
                 let str_vec: Vec<String> = arr
                     .iter()
@@ -206,12 +206,12 @@ impl GameText {
             }
         }
 
-        Some(GameText { game_text: parsed })
+        Some(Self { app_text: parsed })
     }
 }
 
 /// 存储特定值的枚举。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Bool(bool),
     Int(i32),
@@ -258,7 +258,7 @@ impl From<String> for Value {
 }
 
 /// 报告发生问题时的状态。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ReportState {
     /// 问题发生时所在页面。
     pub current_page: String,
@@ -269,7 +269,7 @@ pub struct ReportState {
 }
 
 /// 出现问题时用于存储问题内容、状态及注释的结构体。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Problem {
     /// 问题严重程度。
     pub severity_level: SeverityLevel,
@@ -284,7 +284,7 @@ pub struct Problem {
 }
 
 /// 衡量问题的严重等级。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SeverityLevel {
     /// 弱警告：一般情况下不会产生影响。
     MildWarning,
@@ -329,7 +329,7 @@ impl RustConstructorResource for PageData {
 }
 
 /// 用于存储页面数据的RC资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PageData {
     pub discern_type: String,
     pub name: String,
@@ -341,8 +341,34 @@ pub struct PageData {
     pub enter_page_updated: bool,
 }
 
+impl Default for PageData {
+    fn default() -> Self {
+        PageData {
+            discern_type: String::from("PageData"),
+            name: String::from("PageData"),
+            forced_update: true,
+            change_page_updated: false,
+            enter_page_updated: false,
+        }
+    }
+}
+
+impl PageData {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn forced_update(mut self, forced_update: bool) -> Self {
+        self.forced_update = forced_update;
+        self
+    }
+}
+
 /// 用于存储运行时间的计时器。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Timer {
     /// 进入页面的时间。
     pub start_time: f32,
@@ -372,7 +398,7 @@ impl RustConstructorResource for ImageTexture {
 }
 
 /// 用于存储图片纹理的RC资源。
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ImageTexture {
     pub discern_type: String,
     pub name: String,
@@ -380,6 +406,25 @@ pub struct ImageTexture {
     pub texture: Option<egui::TextureHandle>,
     /// 图片路径。
     pub cite_path: String,
+}
+
+impl Default for ImageTexture {
+    fn default() -> Self {
+        ImageTexture {
+            discern_type: String::from("ImageTexture"),
+            name: String::from("ImageTexture"),
+            texture: None,
+            cite_path: String::from(""),
+        }
+    }
+}
+
+impl ImageTexture {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
 }
 
 impl RustConstructorResource for CustomRect {
@@ -400,7 +445,7 @@ impl RustConstructorResource for CustomRect {
 }
 
 /// RC的矩形资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CustomRect {
     pub discern_type: String,
     pub name: String,
@@ -426,6 +471,91 @@ pub struct CustomRect {
     pub origin_position: [f32; 2],
 }
 
+impl Default for CustomRect {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("CustomRect"),
+            name: String::from("CustomRect"),
+            position: [0_f32, 0_f32],
+            size: [100_f32, 100_f32],
+            rounding: 2_f32,
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            color: [255, 255, 255, 255],
+            border_width: 2_f32,
+            border_color: [0, 0, 0, 255],
+            origin_position: [0_f32, 0_f32],
+        }
+    }
+}
+
+impl CustomRect {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn rounding(mut self, rounding: f32) -> Self {
+        self.rounding = rounding;
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn border_width(mut self, border_width: f32) -> Self {
+        self.border_width = border_width;
+        self
+    }
+
+    #[inline]
+    pub fn border_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.border_color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
+        self
+    }
+}
+
 impl RustConstructorResource for Image {
     fn name(&self) -> &str {
         &self.name
@@ -444,16 +574,16 @@ impl RustConstructorResource for Image {
 }
 
 /// RC的图片资源。
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Image {
     pub discern_type: String,
     pub name: String,
     /// 图片纹理。
-    pub image_texture: Option<egui::TextureHandle>,
+    pub texture: Option<egui::TextureHandle>,
     /// 图片位置。
-    pub image_position: [f32; 2],
+    pub position: [f32; 2],
     /// 图片大小。
-    pub image_size: [f32; 2],
+    pub size: [f32; 2],
     /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
     pub x_grid: [u32; 2],
     /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
@@ -474,6 +604,87 @@ pub struct Image {
     pub last_frame_cite_texture: String,
 }
 
+impl Default for Image {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("Image"),
+            name: String::from("Image"),
+            texture: None,
+            position: [0_f32, 0_f32],
+            size: [100_f32, 100_f32],
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            alpha: 255,
+            overlay_color: [255, 255, 255, 255],
+            use_overlay_color: true,
+            origin_position: [0_f32, 0_f32],
+            cite_texture: String::from("ImageTexture"),
+            last_frame_cite_texture: String::from("ImageTexture"),
+        }
+    }
+}
+
+impl Image {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn alpha(mut self, alpha: u8) -> Self {
+        self.alpha = alpha;
+        self
+    }
+
+    #[inline]
+    pub fn overlay_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.overlay_color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn use_overlay_color(mut self, use_overlay_color: bool) -> Self {
+        self.use_overlay_color = use_overlay_color;
+        self
+    }
+}
+
 impl RustConstructorResource for Text {
     fn name(&self) -> &str {
         &self.name
@@ -491,17 +702,26 @@ impl RustConstructorResource for Text {
     }
 }
 
+/// 控制超链接选取方法。
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum HyperlinkSelectMethod {
+    /// 选取所有匹配项。
+    All(String),
+    /// 选取指定的匹配项。
+    Segment(Vec<(usize, String)>),
+}
+
 /// RC的文本资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Text {
     pub discern_type: String,
     pub name: String,
     /// 文本内容。
-    pub text_content: String,
+    pub content: String,
     /// 字号。
     pub font_size: f32,
     /// 文本颜色。
-    pub rgba: [u8; 4],
+    pub color: [u8; 4],
     /// 文本位置。
     pub position: [f32; 2],
     /// 对齐方法。
@@ -511,9 +731,9 @@ pub struct Text {
     /// 是否有背景。
     pub write_background: bool,
     /// 背景颜色。
-    pub background_rgb: [u8; 4],
+    pub background_color: [u8; 4],
     /// 圆角。
-    pub rounding: f32,
+    pub background_rounding: f32,
     /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
     pub x_grid: [u32; 2],
     /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
@@ -527,44 +747,139 @@ pub struct Text {
     /// 是否可框选。
     pub selectable: bool,
     /// 超链接文本。
-    pub hyperlink_text: Vec<(usize, usize, String)>,
+    pub hyperlink_text: Vec<(String, HyperlinkSelectMethod)>,
+    /// 超链接选取索引值与链接。
+    pub hyperlink_index: Vec<(usize, usize, String)>,
+    /// 上一帧的文本内容(用于优化超链接文本选取)。
+    pub last_frame_content: String,
 }
 
-impl RustConstructorResource for ScrollBackground {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+impl Default for Text {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("Text"),
+            name: String::from("Text"),
+            content: String::from("Hello world"),
+            font_size: 16_f32,
+            color: [255, 255, 255, 255],
+            position: [0_f32, 0_f32],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            wrap_width: 200_f32,
+            write_background: true,
+            background_color: [0, 0, 0, 255],
+            background_rounding: 2_f32,
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            origin_position: [0_f32, 0_f32],
+            font: String::new(),
+            selection: None,
+            selectable: true,
+            hyperlink_text: Vec::new(),
+            hyperlink_index: Vec::new(),
+            last_frame_content: String::from("Hello world"),
+        }
     }
 }
 
-/// RC的滚动背景资源。
-#[derive(Clone, Debug)]
-pub struct ScrollBackground {
-    pub discern_type: String,
-    pub name: String,
-    /// 所有图片名称。
-    pub image_name: Vec<String>,
-    /// true：横向滚动；false：纵向滚动。
-    pub horizontal_or_vertical: bool,
-    /// 横向true：往左；横向false：往右。
-    /// 纵向true：往上；纵向false：往下。
-    pub left_and_top_or_right_and_bottom: bool,
-    /// 滚动速度。
-    pub scroll_speed: u32,
-    /// 边界（到达此处会复位）。
-    pub boundary: f32,
-    /// 恢复点（复位时会回到此处）。
-    pub resume_point: f32,
+impl Text {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn content(mut self, content: &str) -> Self {
+        self.content = content.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn font_size(mut self, font_size: f32) -> Self {
+        self.font_size = font_size;
+        self
+    }
+
+    #[inline]
+    pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn wrap_width(mut self, wrap_width: f32) -> Self {
+        self.wrap_width = wrap_width;
+        self
+    }
+
+    #[inline]
+    pub fn write_background(mut self, write_background: bool) -> Self {
+        self.write_background = write_background;
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.background_color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn background_rounding(mut self, background_rounding: f32) -> Self {
+        self.background_rounding = background_rounding;
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
+        self
+    }
+
+    #[inline]
+    pub fn font(mut self, font: &str) -> Self {
+        self.font = font.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
+        self
+    }
+
+    #[inline]
+    pub fn hyperlink_text(
+        mut self,
+        target_text: &str,
+        select_method: HyperlinkSelectMethod,
+    ) -> Self {
+        self.hyperlink_text
+            .push((target_text.to_string(), select_method));
+        self
+    }
 }
 
 impl RustConstructorResource for Variable {
@@ -585,7 +900,7 @@ impl RustConstructorResource for Variable {
 }
 
 /// RC的变量资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Variable {
     pub discern_type: String,
     pub name: String,
@@ -593,8 +908,76 @@ pub struct Variable {
     pub value: Value,
 }
 
+impl Default for Variable {
+    fn default() -> Self {
+        Variable {
+            discern_type: String::from("Variable"),
+            name: String::from("Variable"),
+            value: Value::String(String::from("Hello world")),
+        }
+    }
+}
+
+impl Variable {
+    pub fn new<T: Into<Value>>(self, name: &str, value: T) -> Self {
+        Self {
+            discern_type: String::from("Variable"),
+            name: String::from(name),
+            value: value.into(),
+        }
+    }
+
+    pub fn from_bool(self, name: &str, value: bool) -> Self {
+        Self {
+            name: String::from(name),
+            value: Value::Bool(value),
+            ..self
+        }
+    }
+
+    pub fn from_int(self, name: &str, value: i32) -> Self {
+        Self {
+            name: String::from(name),
+            value: Value::Int(value),
+            ..self
+        }
+    }
+
+    pub fn from_uint(self, name: &str, value: u32) -> Self {
+        Self {
+            name: String::from(name),
+            value: Value::UInt(value),
+            ..self
+        }
+    }
+
+    pub fn from_float(self, name: &str, value: f32) -> Self {
+        Self {
+            name: String::from(name),
+            value: Value::Float(value),
+            ..self
+        }
+    }
+
+    pub fn from_vec(self, name: &str, value: Vec<Value>) -> Self {
+        Self {
+            name: String::from(name),
+            value: Value::Vec(value),
+            ..self
+        }
+    }
+
+    pub fn from_string<T: Into<String>>(self, name: &str, value: T) -> Self {
+        Self {
+            name: String::from(name),
+            value: Value::String(value.into()),
+            ..self
+        }
+    }
+}
+
 /// RC的字体资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Font {
     pub name: String,
     pub discern_type: String,
@@ -602,6 +985,31 @@ pub struct Font {
     pub font_definitions: FontDefinitions,
     /// 字体路径。
     pub path: String,
+}
+
+impl Default for Font {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("Font"),
+            name: String::from("Font"),
+            font_definitions: FontDefinitions::default(),
+            path: String::from(""),
+        }
+    }
+}
+
+impl Font {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn path(mut self, path: &str) -> Self {
+        self.path = path.to_string();
+        self
+    }
 }
 
 impl RustConstructorResource for Font {
@@ -639,12 +1047,30 @@ impl RustConstructorResource for SplitTime {
 }
 
 /// RC的时间分段资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct SplitTime {
     pub discern_type: String,
     pub name: String,
     /// 时间点（第一个值为页面运行时间，第二个值为总运行时间）。
     pub time: [f32; 2],
+}
+
+impl Default for SplitTime {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("SplitTime"),
+            name: String::from("SplitTime"),
+            time: [0_f32, 0_f32],
+        }
+    }
+}
+
+impl SplitTime {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
 }
 
 impl RustConstructorResource for Switch {
@@ -665,7 +1091,7 @@ impl RustConstructorResource for Switch {
 }
 
 /// RC的开关资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Switch {
     pub discern_type: String,
     pub name: String,
@@ -697,15 +1123,73 @@ pub struct Switch {
     pub sound_path: String,
 }
 
+impl Default for Switch {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("Switch"),
+            name: String::from("Switch"),
+            appearance: vec![],
+            switch_image_name: String::from("Image"),
+            enable_hover_click_image: [false, false],
+            state: 0,
+            click_method: vec![],
+            last_time_hovered: false,
+            last_time_clicked: false,
+            last_time_clicked_index: 0,
+            animation_count: 0,
+            hint_text_name: String::from("HintText"),
+            text_name: String::from("Text"),
+            text_origin_position: [0_f32, 0_f32],
+            sound_path: String::from(""),
+        }
+    }
+}
+
+impl Switch {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn appearance(mut self, appearance: Vec<SwitchData>) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    #[inline]
+    pub fn enable_hover_click_image(
+        mut self,
+        enable_hover_image: bool,
+        enable_click_image: bool,
+    ) -> Self {
+        self.enable_hover_click_image = [enable_hover_image, enable_click_image];
+        self
+    }
+
+    #[inline]
+    pub fn click_method(mut self, click_method: Vec<SwitchClickAction>) -> Self {
+        self.click_method = click_method;
+        self
+    }
+
+    #[inline]
+    pub fn sound_path(mut self, sound_path: &str) -> Self {
+        self.sound_path = sound_path.to_string();
+        self
+    }
+}
+
 /// 渲染的RC资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RenderResource {
     pub discern_type: String,
     pub name: String,
 }
 
 /// 开关的外观。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SwitchData {
     /// 开关的纹理。
     pub texture: String,
@@ -718,7 +1202,7 @@ pub struct SwitchData {
 }
 
 /// 开关的点击方法。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SwitchClickAction {
     /// 开关的点击方法。
     pub click_method: PointerButton,
@@ -727,30 +1211,87 @@ pub struct SwitchClickAction {
 }
 
 /// RC的消息框资源。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct MessageBox {
     pub discern_type: String,
     pub name: String,
     /// 消息框大小。
-    pub box_size: [f32; 2],
+    pub size: [f32; 2],
     /// 框内内容资源名。
-    pub box_content_name: String,
+    pub content_name: String,
     /// 框内标题资源名。
-    pub box_title_name: String,
+    pub title_name: String,
     /// 框内图片资源名。
-    pub box_image_name: String,
+    pub image_name: String,
     /// 消息框是否持续存在。
-    pub box_keep_existing: bool,
+    pub keep_existing: bool,
     /// 如果不持续存在，消息框的持续时间。
-    pub box_existing_time: f32,
+    pub existing_time: f32,
     /// 消息框是否存在（不等于是否显示）。
-    pub box_exist: bool,
+    pub exist: bool,
     /// 消息框移动速度。
-    pub box_speed: f32,
+    pub speed: f32,
     /// 消息框补位速度。
-    pub box_restore_speed: f32,
+    pub restore_speed: f32,
     /// 消息框上一次渲染时的y轴偏移量（用于实现补位动画）。
-    pub box_memory_offset: f32,
+    pub memory_offset: f32,
+}
+
+impl Default for MessageBox {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("MessageBox"),
+            name: String::from("MessageBox"),
+            size: [100_f32, 100_f32],
+            content_name: String::from("Content"),
+            title_name: String::from("Title"),
+            image_name: String::from("Image"),
+            keep_existing: false,
+            existing_time: 3_f32,
+            exist: true,
+            speed: 30_f32,
+            restore_speed: 10_f32,
+            memory_offset: 0_f32,
+        }
+    }
+}
+
+impl MessageBox {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn keep_existing(mut self, keep_existing: bool) -> Self {
+        self.keep_existing = keep_existing;
+        self
+    }
+
+    #[inline]
+    pub fn existing_time(mut self, existing_time: f32) -> Self {
+        self.existing_time = existing_time;
+        self
+    }
+
+    #[inline]
+    pub fn speed(mut self, speed: f32) -> Self {
+        self.speed = speed;
+        self
+    }
+
+    #[inline]
+    pub fn restore_speed(mut self, restore_speed: f32) -> Self {
+        self.restore_speed = restore_speed;
+        self
+    }
 }
 
 impl RustConstructorResource for MessageBox {
@@ -773,29 +1314,38 @@ impl RustConstructorResource for MessageBox {
 /// 用于将RC资源存储进vec的枚举。
 #[derive(Clone)]
 pub enum RCR {
+    /// 图片。
     Image(Image),
+    /// 文本。
     Text(Text),
+    /// 自定义矩形。
     CustomRect(CustomRect),
-    ScrollBackground(ScrollBackground),
+    /// 变量
     Variable(Variable),
+    /// 字体。
     Font(Font),
+    /// 时间分段。
     SplitTime(SplitTime),
+    /// 开关。
     Switch(Switch),
+    /// 消息框。
     MessageBox(MessageBox),
+    /// 图片纹理。
     ImageTexture(ImageTexture),
+    /// 页面数据。
     PageData(PageData),
 }
 
 /// RC资源最基本的错误处理。
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RustConstructorError {
     /// 图片获取失败。
     ImageGetFailed { image_path: String },
-    /// 图片未找到（需在外部自行调用问题报告）。
+    /// 图片未找到。
     ImageNotFound { image_name: String },
-    /// 文本未找到（需在外部自行调用问题报告）。
+    /// 文本未找到。
     TextNotFound { text_name: String },
-    /// 变量未找到（需在外部自行调用问题报告）。
+    /// 变量未找到。
     VariableNotFound { variable_name: String },
     /// 变量获取失败。
     VariableNotInt { variable_name: String },
@@ -809,40 +1359,56 @@ pub enum RustConstructorError {
     VariableNotBool { variable_name: String },
     /// 变量获取失败。
     VariableNotString { variable_name: String },
-    /// 分段时间未找到（需在外部自行调用问题报告）。
+    /// 分段时间未找到。
     SplitTimeNotFound { split_time_name: String },
     /// 开关外观数量不匹配。
     SwitchAppearanceMismatch { switch_name: String, differ: u32 },
-    /// 开关未找到（需在外部自行调用问题报告）。
+    /// 开关未找到。
     SwitchNotFound { switch_name: String },
     /// 消息框已存在。
     MessageBoxAlreadyExists { message_box_name: String },
     /// 获取字体失败。
     FontGetFailed { font_path: String },
-    /// 字体未找到（需在外部自行调用问题报告）。
+    /// 字体未找到。
     FontNotFound { font_name: String },
     /// 资源未找到。
     ResourceNotFound {
         resource_name: String,
         resource_type: String,
     },
-    /// 页面未找到（需在外部自行调用问题报告）。
+    /// 页面未找到。
     PageNotFound { page_name: String },
 }
 
+impl Default for RustConstructorError {
+    fn default() -> Self {
+        RustConstructorError::ImageGetFailed {
+            image_path: "".to_string(),
+        }
+    }
+}
+
 /// 水平对齐方法。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HorizontalAlign {
+    /// 左对齐。
+    #[default]
     Left,
+    /// 居中对齐。
     Center,
+    /// 右对齐。
     Right,
 }
 
 /// 垂直对齐方法。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum VerticalAlign {
+    /// 顶部对齐。
+    #[default]
     Top,
+    /// 居中对齐。
     Center,
+    /// 底部对齐。
     Bottom,
 }
 
@@ -852,15 +1418,13 @@ pub struct App {
     /// 配置项。
     pub config: Config,
     /// 文本。
-    pub game_text: GameText,
+    pub app_text: AppText,
     /// RC资源。
     pub rust_constructor_resource: Vec<RCR>,
     /// 渲染资源列表。
     pub render_resource_list: Vec<RenderResource>,
     /// 问题列表。
     pub problem_list: Vec<Problem>,
-    /// 窗口样式。
-    pub frame: Frame,
     /// RC资源刷新率。
     pub vertrefresh: f32,
     /// 当前页面。
@@ -879,33 +1443,13 @@ pub struct App {
 
 impl App {
     /// 初始化程序。
-    pub fn new(config_path: &str, game_text_path: &str) -> Self {
-        let mut config = Config {
-            language: 0,
-            amount_languages: 0,
-            rc_strict_mode: false,
-            problem_report_sound: String::new(),
-        };
-        let mut game_text = GameText {
-            game_text: HashMap::new(),
-        };
-        if let Ok(json_value) = read_from_json(config_path)
-            && let Some(read_config) = Config::from_json_value(&json_value) {
-                config = read_config;
-            }
-        if let Ok(json_value) = read_from_json(game_text_path)
-            && let Some(read_game_text) = GameText::from_json_value(&json_value) {
-                game_text = read_game_text;
-            }
+    pub fn new(config: Config, app_text: AppText) -> Self {
         Self {
             config,
-            game_text,
+            app_text,
             rust_constructor_resource: vec![],
             render_resource_list: Vec::new(),
             problem_list: Vec::new(),
-            frame: Frame {
-                ..Default::default()
-            },
             vertrefresh: 0.01,
             page: "Launch".to_string(),
             timer: Timer {
@@ -929,24 +1473,21 @@ impl App {
         self.render_resource_list = Vec::new();
         // 更新计时器
         self.update_timer();
-        if let Ok(id) = self
-            .get_resource_index("PageData", &self.page.clone())
+        if let Ok(id) = self.get_resource_index("PageData", &self.page.clone())
             && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone()
-                && pd.forced_update {
-                    // 请求重新绘制界面
-                    ctx.request_repaint();
-                };
+            && pd.forced_update
+        {
+            // 请求重新绘制界面
+            ctx.request_repaint();
+        };
     }
 
     /// 运行时添加新页面。
-    pub fn add_page(&mut self, name: &str, forced_update: bool) {
-        self.rust_constructor_resource.push(RCR::PageData(PageData {
-            discern_type: "PageData".to_string(),
-            name: name.to_string(),
-            forced_update,
-            change_page_updated: false,
-            enter_page_updated: false,
-        }));
+    pub fn add_page(&mut self, mut page_data: PageData) {
+        page_data.change_page_updated = false;
+        page_data.enter_page_updated = false;
+        self.rust_constructor_resource
+            .push(RCR::PageData(page_data));
     }
 
     /// 切换页面。
@@ -992,11 +1533,6 @@ impl App {
                 }
                 RCR::CustomRect(cr) => {
                     if cr.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::ScrollBackground(sb) => {
-                    if sb.match_resource(resource_name, resource_type) {
                         return true;
                     }
                 }
@@ -1063,11 +1599,6 @@ impl App {
                         return Ok(i);
                     }
                 }
-                RCR::ScrollBackground(sb) => {
-                    if sb.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
                 RCR::Variable(v) => {
                     if v.match_resource(resource_name, resource_type) {
                         return Ok(i);
@@ -1119,12 +1650,12 @@ impl App {
     }
 
     /// 添加字体资源。
-    pub fn add_fonts(&mut self, font_name: &str, font_path: &str) {
+    pub fn add_fonts(&mut self, mut font: Font) {
         let mut fonts = FontDefinitions::default();
-        if let Ok(font_read_data) = std::fs::read(font_path) {
+        if let Ok(font_read_data) = std::fs::read(font.path.clone()) {
             let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
             fonts.font_data.insert(
-                font_name.to_owned(),
+                font.name.to_owned(),
                 Arc::new(FontData::from_owned(
                     Arc::try_unwrap(font_data).ok().unwrap(),
                 )),
@@ -1135,38 +1666,33 @@ impl App {
                 .families
                 .entry(egui::FontFamily::Proportional)
                 .or_default()
-                .insert(0, font_name.to_owned());
+                .insert(0, font.name.to_owned());
 
             fonts
                 .families
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
-                .insert(0, font_name.to_owned());
+                .insert(0, font.name.to_owned());
 
-            self.rust_constructor_resource.push(RCR::Font(Font {
-                name: font_name.to_string(),
-                discern_type: "Font".to_string(),
-                font_definitions: fonts,
-                path: font_path.to_string(),
-            }));
+            font.font_definitions = fonts;
+            self.rust_constructor_resource.push(RCR::Font(font));
         } else {
             self.problem_report(
                 RustConstructorError::FontGetFailed {
-                    font_path: font_path.to_string(),
+                    font_path: font.path.to_string(),
                 },
                 SeverityLevel::SevereWarning,
             );
         };
-        // 应用字体定义
-        // ctx.set_fonts(fonts);
     }
 
     /// 输出字体资源。
     pub fn font(&mut self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
         if let Ok(id) = self.get_resource_index("Font", name)
-            && let RCR::Font(f) = &mut self.rust_constructor_resource[id] {
-                return Ok(f.font_definitions.clone());
-            }
+            && let RCR::Font(f) = &mut self.rust_constructor_resource[id]
+        {
+            return Ok(f.font_definitions.clone());
+        }
         self.problem_report(
             RustConstructorError::FontNotFound {
                 font_name: name.to_string(),
@@ -1337,12 +1863,13 @@ impl App {
     /// 检查页面是否已完成首次加载。
     pub fn check_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
         if let Ok(id) = self.get_resource_index("PageData", name)
-            && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone() {
-                if !pd.change_page_updated {
-                    self.new_page_update(name);
-                };
-                return Ok(pd.change_page_updated);
+            && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone()
+        {
+            if !pd.change_page_updated {
+                self.new_page_update(name);
             };
+            return Ok(pd.change_page_updated);
+        };
         self.problem_report(
             RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
@@ -1357,11 +1884,12 @@ impl App {
     /// 检查页面是否已完成加载。
     pub fn check_enter_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
         if let Ok(id) = self.get_resource_index("PageData", name)
-            && let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
-                let return_value = pd.enter_page_updated;
-                pd.enter_page_updated = true;
-                return Ok(return_value);
-            };
+            && let RCR::PageData(pd) = &mut self.rust_constructor_resource[id]
+        {
+            let return_value = pd.enter_page_updated;
+            pd.enter_page_updated = true;
+            return Ok(return_value);
+        };
         self.problem_report(
             RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
@@ -1409,28 +1937,34 @@ impl App {
     }
 
     /// 添加分段时间。
-    pub fn add_split_time(&mut self, name: &str, reset: bool) {
-        if reset {
-            if let Ok(id) = self.get_resource_index("SplitTime", name)
-                && let RCR::SplitTime(st) = &mut self.rust_constructor_resource[id] {
-                    st.time = [self.timer.now_time, self.timer.total_time];
-                };
-        } else {
-            self.rust_constructor_resource
-                .push(RCR::SplitTime(SplitTime {
-                    discern_type: "SplitTime".to_string(),
-                    name: name.to_string(),
-                    time: [self.timer.now_time, self.timer.total_time],
-                }));
+    pub fn add_split_time(&mut self, mut split_time: SplitTime) {
+        split_time.time = [self.timer.now_time, self.timer.total_time];
+        self.rust_constructor_resource
+            .push(RCR::SplitTime(split_time));
+    }
+
+    /// 重置分段时间。
+    pub fn reset_split_time(&mut self, name: &str) {
+        if let Ok(id) = self.get_resource_index("SplitTime", name)
+            && let RCR::SplitTime(st) = &mut self.rust_constructor_resource[id]
+        {
+            st.time = [self.timer.now_time, self.timer.total_time];
         };
+        self.problem_report(
+            RustConstructorError::SplitTimeNotFound {
+                split_time_name: name.to_string(),
+            },
+            SeverityLevel::SevereWarning,
+        );
     }
 
     /// 输出分段时间。
     pub fn split_time(&mut self, name: &str) -> Result<[f32; 2], RustConstructorError> {
         if let Ok(id) = self.get_resource_index("SplitTime", name)
-            && let RCR::SplitTime(st) = self.rust_constructor_resource[id].clone() {
-                return Ok(st.time);
-            };
+            && let RCR::SplitTime(st) = self.rust_constructor_resource[id].clone()
+        {
+            return Ok(st.time);
+        };
         self.problem_report(
             RustConstructorError::SplitTimeNotFound {
                 split_time_name: name.to_string(),
@@ -1452,514 +1986,350 @@ impl App {
     }
 
     /// 添加矩形资源。
-    pub fn add_rect(
-        &mut self,
-        name: &str,
-        position_size_and_rounding: [f32; 5],
-        grid: [u32; 4],
-        center_display: (HorizontalAlign, VerticalAlign),
-        color: [u8; 8],
-        border_width: f32,
-    ) {
+    pub fn add_custom_rect(&mut self, custom_rect: CustomRect) {
         self.rust_constructor_resource
-            .push(RCR::CustomRect(CustomRect {
-                discern_type: "CustomRect".to_string(),
-                name: name.to_string(),
-                position: [position_size_and_rounding[0], position_size_and_rounding[1]],
-                size: [position_size_and_rounding[2], position_size_and_rounding[3]],
-                rounding: position_size_and_rounding[4],
-                x_grid: [grid[0], grid[1]],
-                y_grid: [grid[2], grid[3]],
-                center_display,
-                color: [color[0], color[1], color[2], color[3]],
-                border_width,
-                border_color: [color[4], color[5], color[6], color[7]],
-                origin_position: [position_size_and_rounding[0], position_size_and_rounding[1]],
-            }));
+            .push(RCR::CustomRect(custom_rect));
     }
 
     /// 显示矩形资源。
-    pub fn rect(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
+    pub fn custom_rect(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("CustomRect", name)
-            && let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id] {
-                cr.reg_render_resource(&mut self.render_resource_list);
-                cr.position[0] = match cr.x_grid[1] {
-                    0 => cr.origin_position[0],
-                    _ => {
-                        (ctx.available_rect().width() as f64 / cr.x_grid[1] as f64
-                            * cr.x_grid[0] as f64) as f32
-                            + cr.origin_position[0]
-                    }
-                };
-                cr.position[1] = match cr.y_grid[1] {
-                    0 => cr.origin_position[1],
-                    _ => {
-                        (ctx.available_rect().height() as f64 / cr.y_grid[1] as f64
-                            * cr.y_grid[0] as f64) as f32
-                            + cr.origin_position[1]
-                    }
-                };
-                let pos_x = match cr.center_display.0 {
-                    HorizontalAlign::Left => cr.position[0],
-                    HorizontalAlign::Center => cr.position[0] - cr.size[0] / 2.0,
-                    HorizontalAlign::Right => cr.position[0] - cr.size[0],
-                };
-                let pos_y = match cr.center_display.1 {
-                    VerticalAlign::Top => cr.position[1],
-                    VerticalAlign::Center => cr.position[1] - cr.size[1] / 2.0,
-                    VerticalAlign::Bottom => cr.position[1] - cr.size[1],
-                };
-                ui.painter().rect(
-                    Rect::from_min_max(
-                        Pos2::new(pos_x, pos_y),
-                        Pos2::new(pos_x + cr.size[0], pos_y + cr.size[1]),
-                    ),
-                    cr.rounding,
-                    Color32::from_rgba_unmultiplied(
-                        cr.color[0],
-                        cr.color[1],
-                        cr.color[2],
-                        cr.color[3],
-                    ),
-                    Stroke {
-                        width: cr.border_width,
-                        color: Color32::from_rgba_unmultiplied(
-                            cr.border_color[0],
-                            cr.border_color[1],
-                            cr.border_color[2],
-                            cr.border_color[3],
-                        ),
-                    },
-                    egui::StrokeKind::Inside,
-                );
+            && let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id]
+        {
+            cr.reg_render_resource(&mut self.render_resource_list);
+            cr.position[0] = match cr.x_grid[1] {
+                0 => cr.origin_position[0],
+                _ => {
+                    (ctx.available_rect().width() as f64 / cr.x_grid[1] as f64
+                        * cr.x_grid[0] as f64) as f32
+                        + cr.origin_position[0]
+                }
             };
+            cr.position[1] = match cr.y_grid[1] {
+                0 => cr.origin_position[1],
+                _ => {
+                    (ctx.available_rect().height() as f64 / cr.y_grid[1] as f64
+                        * cr.y_grid[0] as f64) as f32
+                        + cr.origin_position[1]
+                }
+            };
+            let pos_x = match cr.center_display.0 {
+                HorizontalAlign::Left => cr.position[0],
+                HorizontalAlign::Center => cr.position[0] - cr.size[0] / 2.0,
+                HorizontalAlign::Right => cr.position[0] - cr.size[0],
+            };
+            let pos_y = match cr.center_display.1 {
+                VerticalAlign::Top => cr.position[1],
+                VerticalAlign::Center => cr.position[1] - cr.size[1] / 2.0,
+                VerticalAlign::Bottom => cr.position[1] - cr.size[1],
+            };
+            ui.painter().rect(
+                Rect::from_min_max(
+                    Pos2::new(pos_x, pos_y),
+                    Pos2::new(pos_x + cr.size[0], pos_y + cr.size[1]),
+                ),
+                cr.rounding,
+                Color32::from_rgba_unmultiplied(cr.color[0], cr.color[1], cr.color[2], cr.color[3]),
+                Stroke {
+                    width: cr.border_width,
+                    color: Color32::from_rgba_unmultiplied(
+                        cr.border_color[0],
+                        cr.border_color[1],
+                        cr.border_color[2],
+                        cr.border_color[3],
+                    ),
+                },
+                egui::StrokeKind::Inside,
+            );
+        };
     }
 
     /// 添加文本资源。
-    pub fn add_text(
-        &mut self,
-        name_content_and_font: [&str; 3],
-        position_font_size_wrap_width_rounding: [f32; 5],
-        color: [u8; 8],
-        center_display_write_background_and_enable_copy: (
-            HorizontalAlign,
-            VerticalAlign,
-            bool,
-            bool,
-        ),
-        grid: [u32; 4],
-        hyperlink_text: Vec<(usize, usize, &str)>,
-    ) {
-        self.rust_constructor_resource.push(RCR::Text(Text {
-            discern_type: "Text".to_string(),
-            name: name_content_and_font[0].to_string(),
-            text_content: name_content_and_font[1].to_string(),
-            font_size: position_font_size_wrap_width_rounding[2],
-            rgba: [color[0], color[1], color[2], color[3]],
-            position: [
-                position_font_size_wrap_width_rounding[0],
-                position_font_size_wrap_width_rounding[1],
-            ],
-            center_display: (
-                center_display_write_background_and_enable_copy.0,
-                center_display_write_background_and_enable_copy.1,
-            ),
-            wrap_width: position_font_size_wrap_width_rounding[3],
-            write_background: center_display_write_background_and_enable_copy.2,
-            background_rgb: [color[4], color[5], color[6], color[7]],
-            rounding: position_font_size_wrap_width_rounding[4],
-            x_grid: [grid[0], grid[1]],
-            y_grid: [grid[2], grid[3]],
-            origin_position: [
-                position_font_size_wrap_width_rounding[0],
-                position_font_size_wrap_width_rounding[1],
-            ],
-            font: name_content_and_font[2].to_string(),
-            selection: None,
-            selectable: center_display_write_background_and_enable_copy.3,
-            hyperlink_text: hyperlink_text
-                .into_iter()
-                .map(|(a, b, c)| {
-                    (
-                        a,
-                        if b > name_content_and_font[1].len() {
-                            name_content_and_font[1].len()
-                        } else {
-                            b
-                        },
-                        c.to_string(),
-                    )
-                })
-                .collect(),
-        }));
+    pub fn add_text(&mut self, text: Text) {
+        self.rust_constructor_resource.push(RCR::Text(text));
     }
 
     /// 显示文本资源。
     pub fn text(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("Text", name)
-            && let RCR::Text(mut t) = self.rust_constructor_resource[id].clone() {
-                t.reg_render_resource(&mut self.render_resource_list);
-                // 计算文本大小
-                let galley = ui.fonts(|f| {
-                    f.layout(
-                        t.text_content.to_string(),
-                        if self.check_resource_exists("Font", &t.font.clone()) {
-                            FontId::new(t.font_size, egui::FontFamily::Name(t.font.clone().into()))
-                        } else {
-                            FontId::proportional(t.font_size)
-                        },
-                        Color32::from_rgba_unmultiplied(t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3]),
-                        t.wrap_width,
-                    )
-                });
-                let text_size = galley.size();
-                t.position[0] = match t.x_grid[1] {
-                    0 => t.origin_position[0],
-                    _ => {
-                        (ctx.available_rect().width() as f64 / t.x_grid[1] as f64
-                            * t.x_grid[0] as f64) as f32
-                            + t.origin_position[0]
-                    }
-                };
-                t.position[1] = match t.y_grid[1] {
-                    0 => t.origin_position[1],
-                    _ => {
-                        (ctx.available_rect().height() as f64 / t.y_grid[1] as f64
-                            * t.y_grid[0] as f64) as f32
-                            + t.origin_position[1]
-                    }
-                };
-                let pos_x = match t.center_display.0 {
-                    HorizontalAlign::Left => t.position[0],
-                    HorizontalAlign::Center => t.position[0] - text_size.x / 2.0,
-                    HorizontalAlign::Right => t.position[0] - text_size.x,
-                };
-                let pos_y = match t.center_display.1 {
-                    VerticalAlign::Top => t.position[1],
-                    VerticalAlign::Center => t.position[1] - text_size.y / 2.0,
-                    VerticalAlign::Bottom => t.position[1] - text_size.y,
-                };
-                // 使用绝对定位放置文本
-                let position = Pos2::new(pos_x, pos_y);
+            && let RCR::Text(mut t) = self.rust_constructor_resource[id].clone()
+        {
+            t.reg_render_resource(&mut self.render_resource_list);
+            // 计算文本大小
+            let galley = ui.fonts(|f| {
+                f.layout(
+                    t.content.to_string(),
+                    if self.check_resource_exists("Font", &t.font.clone()) {
+                        FontId::new(t.font_size, egui::FontFamily::Name(t.font.clone().into()))
+                    } else {
+                        FontId::proportional(t.font_size)
+                    },
+                    Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]),
+                    t.wrap_width,
+                )
+            });
+            let text_size = galley.size();
+            t.position[0] = match t.x_grid[1] {
+                0 => t.origin_position[0],
+                _ => {
+                    (ctx.available_rect().width() as f64 / t.x_grid[1] as f64 * t.x_grid[0] as f64)
+                        as f32
+                        + t.origin_position[0]
+                }
+            };
+            t.position[1] = match t.y_grid[1] {
+                0 => t.origin_position[1],
+                _ => {
+                    (ctx.available_rect().height() as f64 / t.y_grid[1] as f64 * t.y_grid[0] as f64)
+                        as f32
+                        + t.origin_position[1]
+                }
+            };
+            let pos_x = match t.center_display.0 {
+                HorizontalAlign::Left => t.position[0],
+                HorizontalAlign::Center => t.position[0] - text_size.x / 2.0,
+                HorizontalAlign::Right => t.position[0] - text_size.x,
+            };
+            let pos_y = match t.center_display.1 {
+                VerticalAlign::Top => t.position[1],
+                VerticalAlign::Center => t.position[1] - text_size.y / 2.0,
+                VerticalAlign::Bottom => t.position[1] - text_size.y,
+            };
+            // 使用绝对定位放置文本
+            let position = Pos2::new(pos_x, pos_y);
 
-                if t.write_background {
-                    let rect = Rect::from_min_size(position, text_size);
-                    // 绘制背景颜色
-                    ui.painter().rect_filled(
-                        rect,
-                        t.rounding,
-                        Color32::from_rgba_unmultiplied(
-                            t.background_rgb[0],
-                            t.background_rgb[1],
-                            t.background_rgb[2],
-                            t.background_rgb[3],
-                        ),
-                    ); // 背景色
-                };
-                // 绘制文本
-                ui.painter().galley(
-                    position,
-                    galley.clone(),
+            if t.write_background {
+                let rect = Rect::from_min_size(position, text_size);
+                // 绘制背景颜色
+                ui.painter().rect_filled(
+                    rect,
+                    t.background_rounding,
                     Color32::from_rgba_unmultiplied(
-                        t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3], // 应用透明度
+                        t.background_color[0],
+                        t.background_color[1],
+                        t.background_color[2],
+                        t.background_color[3],
                     ),
-                );
+                ); // 背景色
+            };
+            // 绘制文本
+            ui.painter().galley(
+                position,
+                galley.clone(),
+                Color32::from_rgba_unmultiplied(
+                    t.color[0], t.color[1], t.color[2], t.color[3], // 应用透明度
+                ),
+            );
 
-                if t.selectable {
-                    let rect = Rect::from_min_size(
-                        [position[0] - 20_f32, position[1] - 5_f32].into(),
-                        [text_size[0] + 40_f32, text_size[1] + 10_f32].into(),
-                    );
-
-                    let rect2 = Rect::from_min_size(
-                        [0_f32, 0_f32].into(),
-                        [ctx.available_rect().width(), ctx.available_rect().height()].into(),
-                    );
-
-                    // 创建可交互的区域
-                    let response = ui.interact(
-                        rect,
-                        egui::Id::new(format!("text_{}_click_and_drag", t.name)),
-                        egui::Sense::click_and_drag(),
-                    );
-
-                    let response2 = ui.interact(
-                        rect2,
-                        egui::Id::new(format!("text_{}_total", t.name)),
-                        egui::Sense::click(),
-                    );
-
-                    // 处理选择逻辑
-                    let cursor_at_pointer = |pointer_pos: Vec2| -> usize {
-                        let relative_pos = pointer_pos - position.to_vec2();
-                        let cursor = galley.cursor_from_pos(relative_pos);
-                        cursor.index
-                    };
-
-                    if !response.clicked() && response2.clicked() {
-                        t.selection = None;
-                    };
-
-                    if response.clicked() || response.drag_started() {
-                        if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
-                            let cursor = cursor_at_pointer(pointer_pos.to_vec2());
-                            t.selection = Some((cursor, cursor));
-                        };
-                        response.request_focus();
-                    };
-
-                    if response.dragged() && t.selection.is_some()
-                        && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
-                            let cursor = cursor_at_pointer(pointer_pos.to_vec2());
-                            if let Some((start, _)) = t.selection {
-                                t.selection = Some((start, cursor));
+            // 查找超链接索引值
+            if t.last_frame_content != t.content {
+                t.hyperlink_index.clear();
+                for (text, method) in &t.hyperlink_text {
+                    let matches: Vec<(usize, &str)> = t.content.match_indices(text).collect();
+                    if let HyperlinkSelectMethod::All(url) = method {
+                        for (index, _) in matches {
+                            t.hyperlink_index
+                                .push((index, index + text.len(), url.clone()));
+                        }
+                    } else if let HyperlinkSelectMethod::Segment(list) = method {
+                        for (index, url) in list {
+                            if *index >= matches.len() {
+                                continue;
                             };
-                        };
-
-                    // 处理复制操作
-                    if response.has_focus() {
-                        // 处理复制操作 - 使用按键释放事件
-                        let copy_triggered = ui.input(|input| {
-                            let c_released = input.key_released(egui::Key::C);
-                            let cmd_pressed = input.modifiers.command || input.modifiers.mac_cmd;
-                            let ctrl_pressed = input.modifiers.ctrl;
-                            c_released && (cmd_pressed || ctrl_pressed)
-                        });
-                        if copy_triggered
-                            && let Some((start, end)) = t.selection {
-                                let (start, end) = (start.min(end), start.max(end));
-                                let chars: Vec<char> = t.text_content.chars().collect();
-                                if start <= chars.len() && end <= chars.len() && start < end {
-                                    let selected_text: String = chars[start..end].iter().collect();
-                                    ui.ctx().copy_text(selected_text);
-                                };
-                            };
+                            t.hyperlink_index.push((
+                                matches[*index].0,
+                                matches[*index].0 + text.len(),
+                                url.clone(),
+                            ));
+                        }
                     };
+                }
+            };
 
-                    // 绘制选择区域背景
-                    if let Some((start, end)) = t.selection {
-                        let (start, end) = (start.min(end), start.max(end));
-                        if start != end {
-                            // 获取选择区域的范围
-                            let start_cursor = galley.pos_from_cursor(CCursor::new(start));
-                            let end_cursor = galley.pos_from_cursor(CCursor::new(end));
+            // 绘制超链接
+            for (start, end, _) in &t.hyperlink_index {
+                // 获取超链接文本的范围
+                let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
+                let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
 
-                            let start_pos = start_cursor.left_top();
-                            let end_pos = end_cursor.right_top();
-                            // 选择框绘制
-                            if start_pos.y == end_pos.y {
-                                // 单行选择
-                                // 修复：使用实际行的高度而不是整个文本的高度除以行数
-                                let rows = &galley.rows;
-                                let row_height = if !rows.is_empty() {
-                                    // 获取实际行的高度
-                                    if let Some(row) = rows.first() {
-                                        row.height()
-                                    } else {
-                                        text_size.y / t.text_content.lines().count() as f32
-                                    }
-                                } else {
-                                    text_size.y / t.text_content.lines().count() as f32
-                                };
+                let start_pos = start_cursor.left_top();
+                let end_pos = end_cursor.right_top();
+                // 绘制超链接下划线
+                // 检查超链接是否跨行
+                if start_cursor.min.y == end_cursor.min.y {
+                    // 单行超链接
+                    let underline_y = position.y
+                        + start_pos.y
+                        + galley.rows.first().map_or(14.0, |row| row.height())
+                        - 2.0;
 
-                                let selection_rect = Rect::from_min_max(
-                                    Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
-                                    Pos2::new(
-                                        position.x + end_pos.x,
-                                        position.y + start_pos.y + row_height,
-                                    ),
+                    // 绘制下划线
+                    let color = Color32::from_rgba_unmultiplied(
+                        t.color[0], t.color[1], t.color[2], t.color[3],
+                    );
+
+                    ui.painter().line_segment(
+                        [
+                            Pos2::new(position.x + start_pos.x, underline_y),
+                            Pos2::new(position.x + end_pos.x, underline_y),
+                        ],
+                        Stroke::new(t.font_size / 10_f32, color),
+                    );
+                } else {
+                    // 多行超链接
+                    let row_height = galley.rows.first().map_or(14.0, |row| row.height()); // 默认行高14.0
+
+                    // 计算起始行和结束行的索引
+                    let start_row = (start_pos.y / row_height).round() as usize;
+                    let end_row = (end_pos.y / row_height).round() as usize;
+
+                    for row in start_row..=end_row {
+                        let row_y = position.y + row as f32 * row_height + row_height - 2.0; // 行底部稍微上移一点绘制下划线
+
+                        // 获取当前行的矩形范围
+                        if let Some(current_row) = galley.rows.get(row) {
+                            let row_rect = current_row.rect();
+
+                            let color = Color32::from_rgba_unmultiplied(
+                                t.color[0], t.color[1], t.color[2], t.color[3],
+                            );
+
+                            if row == start_row {
+                                // 第一行从文本开始位置到行尾
+                                ui.painter().line_segment(
+                                    [
+                                        Pos2::new(position.x + start_pos.x, row_y),
+                                        Pos2::new(position.x + row_rect.max.x, row_y),
+                                    ],
+                                    Stroke::new(t.font_size / 10_f32, color),
                                 );
-                                ui.painter().rect_filled(
-                                    selection_rect,
-                                    0.0,
-                                    Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                            } else if row == end_row {
+                                // 最后一行从行首到文本结束位置
+                                ui.painter().line_segment(
+                                    [
+                                        Pos2::new(position.x + row_rect.min.x, row_y),
+                                        Pos2::new(position.x + end_pos.x, row_y),
+                                    ],
+                                    Stroke::new(t.font_size / 10_f32, color),
                                 );
                             } else {
-                                // 多行选择 - 为每行创建精确的矩形
-                                let rows = &galley.rows;
-                                let row_height = if !rows.is_empty() {
-                                    rows[0].height()
-                                } else {
-                                    text_size.y / t.text_content.lines().count() as f32
-                                };
-
-                                // 计算选择的上下边界
-                                let selection_top = position.y + start_pos.y.min(end_pos.y);
-                                let selection_bottom = position.y + start_pos.y.max(end_pos.y);
-
-                                // 确定起始行和结束行的索引
-                                let start_row_index = (start_pos.y / row_height).floor() as usize;
-                                let end_row_index = (end_pos.y / row_height).floor() as usize;
-                                let (first_row_index, last_row_index) =
-                                    if start_row_index <= end_row_index {
-                                        (start_row_index, end_row_index)
-                                    } else {
-                                        (end_row_index, start_row_index)
-                                    };
-
-                                for (i, row) in rows.iter().enumerate() {
-                                    let row_y = position.y + row_height * i as f32;
-                                    let row_bottom = row_y + row_height;
-                                    // 检查当前行是否与选择区域相交
-                                    if row_bottom > selection_top && row_y <= selection_bottom {
-                                        let left = if i == first_row_index {
-                                            // 首行 - 从选择开始位置开始
-                                            position.x + start_pos.x
-                                        } else {
-                                            // 非首行 - 从行首开始
-                                            position.x + row.rect().min.x
-                                        };
-
-                                        let right = if i == last_row_index {
-                                            // 尾行 - 到选择结束位置结束
-                                            position.x + end_pos.x
-                                        } else {
-                                            // 非尾行 - 到行尾结束
-                                            position.x + row.rect().max.x
-                                        };
-
-                                        let selection_rect = Rect::from_min_max(
-                                            Pos2::new(left, row_y),
-                                            Pos2::new(right, row_bottom),
-                                        );
-
-                                        // 确保矩形有效
-                                        if selection_rect.width() > 0.0
-                                            && selection_rect.height() > 0.0
-                                        {
-                                            ui.painter().rect_filled(
-                                                selection_rect,
-                                                0.0,
-                                                Color32::from_rgba_unmultiplied(0, 120, 255, 100),
-                                            );
-                                        };
-                                    };
-                                }
+                                // 中间整行下划线
+                                ui.painter().line_segment(
+                                    [
+                                        Pos2::new(position.x + row_rect.min.x, row_y),
+                                        Pos2::new(position.x + row_rect.max.x, row_y),
+                                    ],
+                                    Stroke::new(t.font_size / 10_f32, color),
+                                );
                             };
+                        };
+                    }
+                };
+            }
+
+            if t.selectable {
+                let rect = Rect::from_min_size(
+                    [position[0] - 20_f32, position[1] - 5_f32].into(),
+                    [text_size[0] + 40_f32, text_size[1] + 10_f32].into(),
+                );
+
+                let rect2 = Rect::from_min_size(
+                    [0_f32, 0_f32].into(),
+                    [ctx.available_rect().width(), ctx.available_rect().height()].into(),
+                );
+
+                // 创建可交互的区域
+                let response = ui.interact(
+                    rect,
+                    egui::Id::new(format!("text_{}_click_and_drag", t.name)),
+                    egui::Sense::click_and_drag(),
+                );
+
+                let response2 = ui.interact(
+                    rect2,
+                    egui::Id::new(format!("text_{}_total", t.name)),
+                    egui::Sense::click(),
+                );
+
+                // 处理选择逻辑
+                let cursor_at_pointer = |pointer_pos: Vec2| -> usize {
+                    let relative_pos = pointer_pos - position.to_vec2();
+                    let cursor = galley.cursor_from_pos(relative_pos);
+                    cursor.index
+                };
+
+                if !response.clicked() && response2.clicked() {
+                    t.selection = None;
+                };
+
+                if response.clicked() || response.drag_started() {
+                    if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                        let cursor = cursor_at_pointer(pointer_pos.to_vec2());
+                        t.selection = Some((cursor, cursor));
+                    };
+                    response.request_focus();
+                };
+
+                if response.dragged()
+                    && t.selection.is_some()
+                    && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
+                {
+                    let cursor = cursor_at_pointer(pointer_pos.to_vec2());
+                    if let Some((start, _)) = t.selection {
+                        t.selection = Some((start, cursor));
+                    };
+                };
+
+                // 处理复制操作
+                if response.has_focus() {
+                    // 处理复制操作 - 使用按键释放事件
+                    let copy_triggered = ui.input(|input| {
+                        let c_released = input.key_released(egui::Key::C);
+                        let cmd_pressed = input.modifiers.command || input.modifiers.mac_cmd;
+                        let ctrl_pressed = input.modifiers.ctrl;
+                        c_released && (cmd_pressed || ctrl_pressed)
+                    });
+                    if copy_triggered && let Some((start, end)) = t.selection {
+                        let (start, end) = (start.min(end), start.max(end));
+                        let chars: Vec<char> = t.content.chars().collect();
+                        if start <= chars.len() && end <= chars.len() && start < end {
+                            let selected_text: String = chars[start..end].iter().collect();
+                            ui.ctx().copy_text(selected_text);
                         };
                     };
                 };
 
-                // 绘制超链接
-                for (start, end, url) in &t.hyperlink_text {
-                    // 获取超链接文本的范围
-                    let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
-                    let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
+                // 绘制选择区域背景
+                if let Some((start, end)) = t.selection {
+                    let (start, end) = (start.min(end), start.max(end));
+                    if start != end {
+                        // 获取选择区域的范围
+                        let start_cursor = galley.pos_from_cursor(CCursor::new(start));
+                        let end_cursor = galley.pos_from_cursor(CCursor::new(end));
 
-                    let start_pos = start_cursor.left_top();
-                    let end_pos = end_cursor.right_top();
-
-                    let row_height = galley.rows.first().map_or(14.0, |row| row.height());
-
-                    // 为超链接创建交互响应对象
-                    let link_responses = if start_cursor.min.y == end_cursor.min.y {
-                        // 单行超链接
-                        let link_rect = Rect::from_min_max(
-                            Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
-                            Pos2::new(
-                                position.x + end_pos.x,
-                                position.y + start_pos.y + row_height,
-                            ),
-                        );
-                        vec![ui.interact(
-                            link_rect,
-                            egui::Id::new(format!("link_{}_{}_{}", t.name, start, end)),
-                            egui::Sense::click(),
-                        )]
-                    } else {
-                        // 多行超链接
-                        let start_row = (start_pos.y / row_height).round() as usize;
-                        let end_row = (end_pos.y / row_height).round() as usize;
-                        let mut responses = Vec::new();
-
-                        for row in start_row..=end_row {
-                            if let Some(current_row) = galley.rows.get(row) {
-                                let row_rect = current_row.rect();
-                                let row_y = position.y + row as f32 * row_height;
-
-                                let link_rect = if row == start_row {
-                                    // 第一行从文本开始位置到行尾
-                                    Rect::from_min_max(
-                                        Pos2::new(position.x + start_pos.x, row_y),
-                                        Pos2::new(position.x + row_rect.max.x, row_y + row_height),
-                                    )
-                                } else if row == end_row {
-                                    // 最后一行从行首到文本结束位置
-                                    Rect::from_min_max(
-                                        Pos2::new(position.x + row_rect.min.x, row_y),
-                                        Pos2::new(position.x + end_pos.x, row_y + row_height),
-                                    )
+                        let start_pos = start_cursor.left_top();
+                        let end_pos = end_cursor.right_top();
+                        // 选择框绘制
+                        if start_pos.y == end_pos.y {
+                            // 单行选择
+                            // 修复：使用实际行的高度而不是整个文本的高度除以行数
+                            let rows = &galley.rows;
+                            let row_height = if !rows.is_empty() {
+                                // 获取实际行的高度
+                                if let Some(row) = rows.first() {
+                                    row.height()
                                 } else {
-                                    // 中间整行
-                                    Rect::from_min_max(
-                                        Pos2::new(position.x + row_rect.min.x, row_y),
-                                        Pos2::new(position.x + row_rect.max.x, row_y + row_height),
-                                    )
-                                };
-
-                                responses.push(ui.interact(
-                                    link_rect,
-                                    egui::Id::new(format!(
-                                        "link_{}_{}_{}_row_{}",
-                                        t.name, start, end, row
-                                    )),
-                                    egui::Sense::click(),
-                                ));
+                                    text_size.y / t.content.lines().count() as f32
+                                }
+                            } else {
+                                text_size.y / t.content.lines().count() as f32
                             };
-                        }
-                        responses
-                    };
 
-                    // 检查是否正在点击这个超链接
-                    let mut is_pressing_link = false;
-                    for link_response in &link_responses {
-                        if link_response.is_pointer_button_down_on()
-                            && !link_response.drag_started()
-                        {
-                            t.selection = None;
-                            if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                let relative_pos = pointer_pos - position.to_vec2();
-                                let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
-                                if cursor.index >= *start && cursor.index <= *end {
-                                    is_pressing_link = true;
-                                    break;
-                                };
-                            };
-                        };
-                    }
-
-                    // 检查是否释放了鼠标（点击完成）
-                    let mut clicked_on_link = false;
-                    for link_response in &link_responses {
-                        if link_response.clicked()
-                            && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                let relative_pos = pointer_pos - position.to_vec2();
-                                let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
-                                if cursor.index >= *start && cursor.index <= *end {
-                                    clicked_on_link = true;
-                                    break;
-                                };
-                            };
-                    }
-
-                    if clicked_on_link {
-                        // 执行超链接跳转
-                        if !url.is_empty() {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab(url));
-                        };
-                    };
-
-                    // 绘制超链接高亮（如果正在点击或悬停）
-                    if is_pressing_link {
-                        if start_cursor.min.y == end_cursor.min.y {
-                            // 单行超链接高亮
                             let selection_rect = Rect::from_min_max(
                                 Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
                                 Pos2::new(
                                     position.x + end_pos.x,
-                                    position.y
-                                        + start_pos.y
-                                        + galley.rows.first().map_or(14.0, |row| row.height()),
+                                    position.y + start_pos.y + row_height,
                                 ),
                             );
                             ui.painter().rect_filled(
@@ -1968,61 +2338,57 @@ impl App {
                                 Color32::from_rgba_unmultiplied(0, 120, 255, 100),
                             );
                         } else {
-                            // 多行超链接高亮
-                            let row_height = galley.rows.first().map_or(14.0, |row| row.height());
-                            let start_row = (start_pos.y / row_height).round() as usize;
-                            let end_row = (end_pos.y / row_height).round() as usize;
+                            // 多行选择 - 为每行创建精确的矩形
+                            let rows = &galley.rows;
+                            let row_height = if !rows.is_empty() {
+                                rows[0].height()
+                            } else {
+                                text_size.y / t.content.lines().count() as f32
+                            };
 
-                            for row in start_row..=end_row {
-                                if let Some(current_row) = galley.rows.get(row) {
-                                    let row_rect = current_row.rect();
+                            // 计算选择的上下边界
+                            let selection_top = position.y + start_pos.y.min(end_pos.y);
+                            let selection_bottom = position.y + start_pos.y.max(end_pos.y);
 
-                                    if row == start_row {
-                                        // 第一行从文本开始位置到行尾
-                                        let selection_rect = Rect::from_min_max(
-                                            Pos2::new(
-                                                position.x + start_pos.x,
-                                                position.y + row as f32 * row_height,
-                                            ),
-                                            Pos2::new(
-                                                position.x + row_rect.max.x,
-                                                position.y + row as f32 * row_height + row_height,
-                                            ),
-                                        );
-                                        ui.painter().rect_filled(
-                                            selection_rect,
-                                            0.0,
-                                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
-                                        );
-                                    } else if row == end_row {
-                                        // 最后一行从行首到文本结束位置
-                                        let selection_rect = Rect::from_min_max(
-                                            Pos2::new(
-                                                position.x + row_rect.min.x,
-                                                position.y + row as f32 * row_height,
-                                            ),
-                                            Pos2::new(
-                                                position.x + end_pos.x,
-                                                position.y + row as f32 * row_height + row_height,
-                                            ),
-                                        );
-                                        ui.painter().rect_filled(
-                                            selection_rect,
-                                            0.0,
-                                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
-                                        );
+                            // 确定起始行和结束行的索引
+                            let start_row_index = (start_pos.y / row_height).floor() as usize;
+                            let end_row_index = (end_pos.y / row_height).floor() as usize;
+                            let (first_row_index, last_row_index) =
+                                if start_row_index <= end_row_index {
+                                    (start_row_index, end_row_index)
+                                } else {
+                                    (end_row_index, start_row_index)
+                                };
+
+                            for (i, row) in rows.iter().enumerate() {
+                                let row_y = position.y + row_height * i as f32;
+                                let row_bottom = row_y + row_height;
+                                // 检查当前行是否与选择区域相交
+                                if row_bottom > selection_top && row_y <= selection_bottom {
+                                    let left = if i == first_row_index {
+                                        // 首行 - 从选择开始位置开始
+                                        position.x + start_pos.x
                                     } else {
-                                        // 中间整行高亮
-                                        let selection_rect = Rect::from_min_max(
-                                            Pos2::new(
-                                                position.x + row_rect.min.x,
-                                                position.y + row as f32 * row_height,
-                                            ),
-                                            Pos2::new(
-                                                position.x + row_rect.max.x,
-                                                position.y + row as f32 * row_height + row_height,
-                                            ),
-                                        );
+                                        // 非首行 - 从行首开始
+                                        position.x + row.rect().min.x
+                                    };
+
+                                    let right = if i == last_row_index {
+                                        // 尾行 - 到选择结束位置结束
+                                        position.x + end_pos.x
+                                    } else {
+                                        // 非尾行 - 到行尾结束
+                                        position.x + row.rect().max.x
+                                    };
+
+                                    let selection_rect = Rect::from_min_max(
+                                        Pos2::new(left, row_y),
+                                        Pos2::new(right, row_bottom),
+                                    );
+
+                                    // 确保矩形有效
+                                    if selection_rect.width() > 0.0 && selection_rect.height() > 0.0
+                                    {
                                         ui.painter().rect_filled(
                                             selection_rect,
                                             0.0,
@@ -2033,81 +2399,205 @@ impl App {
                             }
                         };
                     };
+                };
+            };
 
-                    // 绘制超链接下划线
-                    // 检查超链接是否跨行
+            // 处理超链接操作
+            for (start, end, url) in &t.hyperlink_index {
+                // 获取超链接文本的范围
+                let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
+                let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
+
+                let start_pos = start_cursor.left_top();
+                let end_pos = end_cursor.right_top();
+
+                let row_height = galley.rows.first().map_or(14.0, |row| row.height());
+
+                // 为超链接创建交互响应对象
+                let link_responses = if start_cursor.min.y == end_cursor.min.y {
+                    // 单行超链接
+                    let link_rect = Rect::from_min_max(
+                        Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                        Pos2::new(
+                            position.x + end_pos.x,
+                            position.y + start_pos.y + row_height,
+                        ),
+                    );
+                    vec![ui.interact(
+                        link_rect,
+                        egui::Id::new(format!("link_{}_{}_{}", t.name, start, end)),
+                        egui::Sense::click(),
+                    )]
+                } else {
+                    // 多行超链接
+                    let start_row = (start_pos.y / row_height).round() as usize;
+                    let end_row = (end_pos.y / row_height).round() as usize;
+                    let mut responses = Vec::new();
+
+                    for row in start_row..=end_row {
+                        if let Some(current_row) = galley.rows.get(row) {
+                            let row_rect = current_row.rect();
+                            let row_y = position.y + row as f32 * row_height;
+
+                            let link_rect = if row == start_row {
+                                // 第一行从文本开始位置到行尾
+                                Rect::from_min_max(
+                                    Pos2::new(position.x + start_pos.x, row_y),
+                                    Pos2::new(position.x + row_rect.max.x, row_y + row_height),
+                                )
+                            } else if row == end_row {
+                                // 最后一行从行首到文本结束位置
+                                Rect::from_min_max(
+                                    Pos2::new(position.x + row_rect.min.x, row_y),
+                                    Pos2::new(position.x + end_pos.x, row_y + row_height),
+                                )
+                            } else {
+                                // 中间整行
+                                Rect::from_min_max(
+                                    Pos2::new(position.x + row_rect.min.x, row_y),
+                                    Pos2::new(position.x + row_rect.max.x, row_y + row_height),
+                                )
+                            };
+
+                            responses.push(ui.interact(
+                                link_rect,
+                                egui::Id::new(format!(
+                                    "link_{}_{}_{}_row_{}",
+                                    t.name, start, end, row
+                                )),
+                                egui::Sense::click(),
+                            ));
+                        };
+                    }
+                    responses
+                };
+
+                // 检查是否正在点击这个超链接
+                let mut is_pressing_link = false;
+                for link_response in &link_responses {
+                    if link_response.is_pointer_button_down_on() && !link_response.drag_started() {
+                        t.selection = None;
+                        if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                            let relative_pos = pointer_pos - position.to_vec2();
+                            let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                            if cursor.index >= *start && cursor.index <= *end {
+                                is_pressing_link = true;
+                                break;
+                            };
+                        };
+                    };
+                }
+
+                // 检查是否释放了鼠标（点击完成）
+                let mut clicked_on_link = false;
+                for link_response in &link_responses {
+                    if link_response.clicked()
+                        && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
+                    {
+                        let relative_pos = pointer_pos - position.to_vec2();
+                        let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                        if cursor.index >= *start && cursor.index <= *end {
+                            clicked_on_link = true;
+                            break;
+                        };
+                    };
+                }
+
+                if clicked_on_link {
+                    // 执行超链接跳转
+                    if !url.is_empty() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                    };
+                };
+
+                // 绘制超链接高亮（如果正在点击或悬停）
+                if is_pressing_link {
                     if start_cursor.min.y == end_cursor.min.y {
-                        // 单行超链接
-                        let underline_y = position.y
-                            + start_pos.y
-                            + galley.rows.first().map_or(14.0, |row| row.height())
-                            - 2.0;
-
-                        // 绘制下划线
-                        let color = Color32::from_rgba_unmultiplied(
-                            t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3],
+                        // 单行超链接高亮
+                        let selection_rect = Rect::from_min_max(
+                            Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                            Pos2::new(
+                                position.x + end_pos.x,
+                                position.y
+                                    + start_pos.y
+                                    + galley.rows.first().map_or(14.0, |row| row.height()),
+                            ),
                         );
-
-                        ui.painter().line_segment(
-                            [
-                                Pos2::new(position.x + start_pos.x, underline_y),
-                                Pos2::new(position.x + end_pos.x, underline_y),
-                            ],
-                            Stroke::new(t.font_size / 10_f32, color),
+                        ui.painter().rect_filled(
+                            selection_rect,
+                            0.0,
+                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
                         );
                     } else {
-                        // 多行超链接
-                        let row_height = galley.rows.first().map_or(14.0, |row| row.height()); // 默认行高14.0
-
-                        // 计算起始行和结束行的索引
+                        // 多行超链接高亮
+                        let row_height = galley.rows.first().map_or(14.0, |row| row.height());
                         let start_row = (start_pos.y / row_height).round() as usize;
                         let end_row = (end_pos.y / row_height).round() as usize;
 
                         for row in start_row..=end_row {
-                            let row_y = position.y + row as f32 * row_height + row_height - 2.0; // 行底部稍微上移一点绘制下划线
-
-                            // 获取当前行的矩形范围
                             if let Some(current_row) = galley.rows.get(row) {
                                 let row_rect = current_row.rect();
 
-                                let color = Color32::from_rgba_unmultiplied(
-                                    t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3],
-                                );
-
                                 if row == start_row {
                                     // 第一行从文本开始位置到行尾
-                                    ui.painter().line_segment(
-                                        [
-                                            Pos2::new(position.x + start_pos.x, row_y),
-                                            Pos2::new(position.x + row_rect.max.x, row_y),
-                                        ],
-                                        Stroke::new(t.font_size / 10_f32, color),
+                                    let selection_rect = Rect::from_min_max(
+                                        Pos2::new(
+                                            position.x + start_pos.x,
+                                            position.y + row as f32 * row_height,
+                                        ),
+                                        Pos2::new(
+                                            position.x + row_rect.max.x,
+                                            position.y + row as f32 * row_height + row_height,
+                                        ),
+                                    );
+                                    ui.painter().rect_filled(
+                                        selection_rect,
+                                        0.0,
+                                        Color32::from_rgba_unmultiplied(0, 120, 255, 100),
                                     );
                                 } else if row == end_row {
                                     // 最后一行从行首到文本结束位置
-                                    ui.painter().line_segment(
-                                        [
-                                            Pos2::new(position.x + row_rect.min.x, row_y),
-                                            Pos2::new(position.x + end_pos.x, row_y),
-                                        ],
-                                        Stroke::new(t.font_size / 10_f32, color),
+                                    let selection_rect = Rect::from_min_max(
+                                        Pos2::new(
+                                            position.x + row_rect.min.x,
+                                            position.y + row as f32 * row_height,
+                                        ),
+                                        Pos2::new(
+                                            position.x + end_pos.x,
+                                            position.y + row as f32 * row_height + row_height,
+                                        ),
+                                    );
+                                    ui.painter().rect_filled(
+                                        selection_rect,
+                                        0.0,
+                                        Color32::from_rgba_unmultiplied(0, 120, 255, 100),
                                     );
                                 } else {
-                                    // 中间整行下划线
-                                    ui.painter().line_segment(
-                                        [
-                                            Pos2::new(position.x + row_rect.min.x, row_y),
-                                            Pos2::new(position.x + row_rect.max.x, row_y),
-                                        ],
-                                        Stroke::new(t.font_size / 10_f32, color),
+                                    // 中间整行高亮
+                                    let selection_rect = Rect::from_min_max(
+                                        Pos2::new(
+                                            position.x + row_rect.min.x,
+                                            position.y + row as f32 * row_height,
+                                        ),
+                                        Pos2::new(
+                                            position.x + row_rect.max.x,
+                                            position.y + row as f32 * row_height + row_height,
+                                        ),
+                                    );
+                                    ui.painter().rect_filled(
+                                        selection_rect,
+                                        0.0,
+                                        Color32::from_rgba_unmultiplied(0, 120, 255, 100),
                                     );
                                 };
                             };
                         }
                     };
-                }
-                self.rust_constructor_resource[id] = RCR::Text(t);
-            };
+                };
+            }
+            t.last_frame_content = t.content.clone();
+            self.rust_constructor_resource[id] = RCR::Text(t);
+        };
     }
 
     /// 获取文本大小。
@@ -2117,17 +2607,18 @@ impl App {
         ui: &mut Ui,
     ) -> Result<[f32; 2], RustConstructorError> {
         if let Ok(id) = self.get_resource_index("Text", resource_name)
-            && let RCR::Text(t) = self.rust_constructor_resource[id].clone() {
-                let galley = ui.fonts(|f| {
-                    f.layout(
-                        t.text_content.to_string(),
-                        FontId::proportional(t.font_size),
-                        Color32::from_rgba_unmultiplied(t.rgba[0], t.rgba[1], t.rgba[2], t.rgba[3]),
-                        t.wrap_width,
-                    )
-                });
-                return Ok([galley.size().x, galley.size().y]);
-            };
+            && let RCR::Text(t) = self.rust_constructor_resource[id].clone()
+        {
+            let galley = ui.fonts(|f| {
+                f.layout(
+                    t.content.to_string(),
+                    FontId::proportional(t.font_size),
+                    Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]),
+                    t.wrap_width,
+                )
+            });
+            return Ok([galley.size().x, galley.size().y]);
+        };
         self.problem_report(
             RustConstructorError::TextNotFound {
                 text_name: resource_name.to_string(),
@@ -2140,28 +2631,26 @@ impl App {
     }
 
     /// 添加变量资源。
-    pub fn add_var<T: Into<Value>>(&mut self, name: &str, value: T) {
-        self.rust_constructor_resource.push(RCR::Variable(Variable {
-            discern_type: "Variable".to_string(),
-            name: name.to_string(),
-            value: value.into(),
-        }));
+    pub fn add_var(&mut self, variable: Variable) {
+        self.rust_constructor_resource.push(RCR::Variable(variable));
     }
 
     /// 修改变量资源。
     pub fn modify_var<T: Into<Value>>(&mut self, name: &str, value: T) {
         if let Ok(id) = self.get_resource_index("Variable", name)
-            && let RCR::Variable(v) = &mut self.rust_constructor_resource[id] {
-                v.value = value.into();
-            };
+            && let RCR::Variable(v) = &mut self.rust_constructor_resource[id]
+        {
+            v.value = value.into();
+        };
     }
 
     /// 取出Value变量。
     pub fn var(&mut self, name: &str) -> Result<Value, RustConstructorError> {
         if let Ok(id) = self.get_resource_index("Variable", name)
-            && let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                return Ok(v.clone().value);
-            };
+            && let RCR::Variable(v) = self.rust_constructor_resource[id].clone()
+        {
+            return Ok(v.clone().value);
+        };
         self.problem_report(
             RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2527,146 +3016,12 @@ impl App {
         }
     }
 
-    /// 添加滚动背景资源。
-    pub fn add_scroll_background(
-        &mut self,
-        name: &str,
-        image_name: Vec<String>,
-        horizontal_or_vertical: bool,
-        left_and_top_or_right_and_bottom: bool,
-        scroll_speed: u32,
-        size_position_boundary: [f32; 5],
-    ) {
-        let mut image_id = vec![];
-        for i in image_name.clone() {
-            for u in 0..self.rust_constructor_resource.len() {
-                if let RCR::Image(im) = self.rust_constructor_resource[u].clone()
-                    && im.name == i {
-                        image_id.push(u);
-                    };
-            };
-        };
-        for (count, _) in image_id.clone().into_iter().enumerate() {
-            if let RCR::Image(im) = &mut self.rust_constructor_resource[image_id[count]] {
-                im.x_grid = [0, 0];
-                im.y_grid = [0, 0];
-                im.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
-                im.image_size = [size_position_boundary[0], size_position_boundary[1]];
-                let mut temp_position;
-                if horizontal_or_vertical {
-                    temp_position = size_position_boundary[2];
-                } else {
-                    temp_position = size_position_boundary[3];
-                };
-                if horizontal_or_vertical {
-                    for _ in 0..count {
-                        if left_and_top_or_right_and_bottom {
-                            temp_position += size_position_boundary[0];
-                        } else {
-                            temp_position -= size_position_boundary[0];
-                        };
-                    };
-                    im.origin_position = [temp_position, size_position_boundary[3]];
-                } else {
-                    for _ in 0..count {
-                        if left_and_top_or_right_and_bottom {
-                            temp_position += size_position_boundary[1];
-                        } else {
-                            temp_position -= size_position_boundary[1];
-                        };
-                    };
-                    im.origin_position = [size_position_boundary[2], temp_position];
-                };
-            };
-        };
-        if let RCR::Image(im) = self.rust_constructor_resource[image_id[image_id.len() - 1]].clone()
-        {
-            let resume_point = if horizontal_or_vertical {
-                im.origin_position[0]
-            } else {
-                im.origin_position[1]
-            };
-            self.rust_constructor_resource
-                .push(RCR::ScrollBackground(ScrollBackground {
-                    discern_type: "ScrollBackground".to_string(),
-                    name: name.to_string(),
-                    image_name,
-                    horizontal_or_vertical,
-                    left_and_top_or_right_and_bottom,
-                    scroll_speed,
-                    boundary: size_position_boundary[4],
-                    resume_point,
-                }));
-        };
-    }
-
-    /// 显示滚动背景。
-    pub fn scroll_background(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("ScrollBackground", name)
-            && let RCR::ScrollBackground(sb) = self.rust_constructor_resource[id].clone() {
-                sb.reg_render_resource(&mut self.render_resource_list);
-                if !self.check_resource_exists("SplitTime", name) {
-                    self.add_split_time(name, false);
-                };
-                for i in 0..sb.image_name.len() {
-                    self.image(ui, &sb.image_name[i].clone(), ctx);
-                };
-                if self.timer.now_time - self.split_time(name).unwrap()[0] >= self.vertrefresh {
-                    self.add_split_time(name, true);
-                    for i in 0..sb.image_name.len() {
-                        if let Ok(id2) = self.get_resource_index("Image", &sb.image_name[i].clone())
-                            && let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone()
-                            {
-                                if sb.horizontal_or_vertical {
-                                    if sb.left_and_top_or_right_and_bottom {
-                                        for _ in 0..sb.scroll_speed {
-                                            im.origin_position[0] -= 1_f32;
-                                            if im.origin_position[0] <= sb.boundary {
-                                                im.origin_position[0] = sb.resume_point;
-                                            };
-                                        }
-                                        self.rust_constructor_resource[id2] =
-                                            RCR::Image(im.clone());
-                                    } else {
-                                        for _ in 0..sb.scroll_speed {
-                                            im.origin_position[0] += 1_f32;
-                                            if im.origin_position[0] >= sb.boundary {
-                                                im.origin_position[0] = sb.resume_point;
-                                            };
-                                        }
-                                        self.rust_constructor_resource[id2] =
-                                            RCR::Image(im.clone());
-                                    };
-                                } else if sb.left_and_top_or_right_and_bottom {
-                                    for _ in 0..sb.scroll_speed {
-                                        im.origin_position[1] -= 1_f32;
-                                        if im.origin_position[1] <= sb.boundary {
-                                            im.origin_position[1] = sb.resume_point;
-                                        };
-                                    }
-                                    self.rust_constructor_resource[id2] = RCR::Image(im.clone());
-                                } else {
-                                    for _ in 0..sb.scroll_speed {
-                                        im.origin_position[1] += 1_f32;
-                                        if im.origin_position[1] >= sb.boundary {
-                                            im.origin_position[1] = sb.resume_point;
-                                        };
-                                    }
-                                    self.rust_constructor_resource[id2] = RCR::Image(im.clone());
-                                };
-                            };
-                    };
-                };
-            };
-    }
-
     /// 添加图片纹理资源。
     pub fn add_image_texture(
         &mut self,
-        name: &str,
+        mut image_texture: ImageTexture,
         path: &str,
         flip: [bool; 2],
-        create_new_resource: bool,
         ctx: &egui::Context,
     ) {
         if let Ok(mut file) = File::open(path) {
@@ -2674,41 +3029,26 @@ impl App {
             file.read_to_end(&mut buffer).unwrap();
             let img_bytes = buffer;
             let img = image::load_from_memory(&img_bytes).unwrap();
-            let rgba_data = match flip {
+            let color_data = match flip {
                 [true, true] => img.fliph().flipv().into_rgba8(),
                 [true, false] => img.fliph().into_rgba8(),
                 [false, true] => img.flipv().into_rgba8(),
                 _ => img.into_rgba8(),
             };
-            let (w, h) = (rgba_data.width(), rgba_data.height());
-            let raw_data: Vec<u8> = rgba_data.into_raw();
+            let (w, h) = (color_data.width(), color_data.height());
+            let raw_data: Vec<u8> = color_data.into_raw();
 
             let color_image =
                 egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
-            let image_texture = Some(ctx.load_texture(name, color_image, TextureOptions::LINEAR));
-            if create_new_resource {
-                self.rust_constructor_resource
-                    .push(RCR::ImageTexture(ImageTexture {
-                        discern_type: "ImageTexture".to_string(),
-                        name: name.to_string(),
-                        texture: image_texture,
-                        cite_path: path.to_string(),
-                    }));
-            } else if let Ok(id) = self.get_resource_index("ImageTexture", name) {
-                if let RCR::ImageTexture(it) = &mut self.rust_constructor_resource[id]
-                    && !create_new_resource {
-                        it.texture = image_texture;
-                        it.cite_path = path.to_string();
-                    };
-            } else {
-                self.rust_constructor_resource
-                    .push(RCR::ImageTexture(ImageTexture {
-                        discern_type: "ImageTexture".to_string(),
-                        name: name.to_string(),
-                        texture: image_texture,
-                        cite_path: path.to_string(),
-                    }));
-            };
+            let loaded_image_texture = Some(ctx.load_texture(
+                image_texture.name.clone(),
+                color_image,
+                TextureOptions::LINEAR,
+            ));
+            image_texture.texture = loaded_image_texture;
+            image_texture.cite_path = path.to_string();
+            self.rust_constructor_resource
+                .push(RCR::ImageTexture(image_texture));
         } else {
             self.problem_report(
                 RustConstructorError::ImageGetFailed {
@@ -2719,268 +3059,264 @@ impl App {
         };
     }
 
-    /// 添加图片资源。
-    pub fn add_image(
+    /// 输出图片纹理。
+    pub fn image_texture(
         &mut self,
         name: &str,
-        position_size: [f32; 4],
-        grid: [u32; 4],
-        center_display_and_use_overlay: (HorizontalAlign, VerticalAlign, bool),
-        alpha_and_overlay_color: [u8; 5],
-        image_texture_name: &str,
+    ) -> Result<Option<egui::TextureHandle>, RustConstructorError> {
+        if let Ok(id) = self.get_resource_index("ImageTexture", name)
+            && let RCR::ImageTexture(it) = &self.rust_constructor_resource[id]
+        {
+            return Ok(it.texture.clone());
+        };
+        self.problem_report(
+            RustConstructorError::ImageNotFound {
+                image_name: name.to_string(),
+            },
+            SeverityLevel::SevereWarning,
+        );
+        Err(RustConstructorError::ImageNotFound {
+            image_name: name.to_string(),
+        })
+    }
+
+    /// 重置图片纹理。
+    pub fn reset_image_texture(
+        &mut self,
+        name: &str,
+        path: &str,
+        flip: [bool; 2],
+        ctx: &egui::Context,
     ) {
-        if let Ok(id) = self.get_resource_index("ImageTexture", image_texture_name)
-            && let RCR::ImageTexture(it) = self.rust_constructor_resource[id].clone() {
-                self.rust_constructor_resource.push(RCR::Image(Image {
-                    discern_type: "Image".to_string(),
-                    name: name.to_string(),
-                    image_texture: it.texture.clone(),
-                    image_position: [position_size[0], position_size[1]],
-                    image_size: [position_size[2], position_size[3]],
-                    x_grid: [grid[0], grid[1]],
-                    y_grid: [grid[2], grid[3]],
-                    center_display: (
-                        center_display_and_use_overlay.0,
-                        center_display_and_use_overlay.1,
-                    ),
-                    alpha: alpha_and_overlay_color[0],
-                    overlay_color: [
-                        alpha_and_overlay_color[1],
-                        alpha_and_overlay_color[2],
-                        alpha_and_overlay_color[3],
-                        alpha_and_overlay_color[4],
-                    ],
-                    use_overlay_color: center_display_and_use_overlay.2,
-                    origin_position: [position_size[0], position_size[1]],
-                    cite_texture: image_texture_name.to_string(),
-                    last_frame_cite_texture: image_texture_name.to_string(),
-                }));
+        if let Ok(id) = self.get_resource_index("ImageTexture", name)
+            && let RCR::ImageTexture(it) = &mut self.rust_constructor_resource[id]
+        {
+            if let Ok(mut file) = File::open(path) {
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer).unwrap();
+                let img_bytes = buffer;
+                let img = image::load_from_memory(&img_bytes).unwrap();
+                let color_data = match flip {
+                    [true, true] => img.fliph().flipv().into_rgba8(),
+                    [true, false] => img.fliph().into_rgba8(),
+                    [false, true] => img.flipv().into_rgba8(),
+                    _ => img.into_rgba8(),
+                };
+                let (w, h) = (color_data.width(), color_data.height());
+                let raw_data: Vec<u8> = color_data.into_raw();
+
+                let color_image =
+                    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
+                let image_texture =
+                    Some(ctx.load_texture(it.name.clone(), color_image, TextureOptions::LINEAR));
+                it.texture = image_texture;
+                it.cite_path = path.to_string();
+            } else {
+                self.problem_report(
+                    RustConstructorError::ImageGetFailed {
+                        image_path: path.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                );
             };
+        };
+    }
+
+    /// 添加图片资源。
+    pub fn add_image(&mut self, mut image: Image, image_texture_name: &str) {
+        if let Ok(id) = self.get_resource_index("ImageTexture", image_texture_name)
+            && let RCR::ImageTexture(it) = self.rust_constructor_resource[id].clone()
+        {
+            image.texture = it.texture;
+            image.cite_texture = it.name.clone();
+            image.last_frame_cite_texture = it.name;
+            self.rust_constructor_resource.push(RCR::Image(image));
+        };
     }
 
     /// 显示图片资源。
     pub fn image(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
         if let Ok(id) = self.get_resource_index("Image", name)
-            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone() {
-                if im.cite_texture != im.last_frame_cite_texture
-                    && let Ok(id2) = self.get_resource_index("ImageTexture", &im.cite_texture)
-                        && let RCR::ImageTexture(it) = self.rust_constructor_resource[id2].clone() {
-                            im.image_texture = it.texture;
-                        };
-                im.reg_render_resource(&mut self.render_resource_list);
-                im.image_position[0] = match im.x_grid[1] {
-                    0 => im.origin_position[0],
-                    _ => {
-                        (ctx.available_rect().width() as f64 / im.x_grid[1] as f64
-                            * im.x_grid[0] as f64) as f32
-                            + im.origin_position[0]
-                    }
-                };
-                im.image_position[1] = match im.y_grid[1] {
-                    0 => im.origin_position[1],
-                    _ => {
-                        (ctx.available_rect().height() as f64 / im.y_grid[1] as f64
-                            * im.y_grid[0] as f64) as f32
-                            + im.origin_position[1]
-                    }
-                };
-                match im.center_display.0 {
-                    HorizontalAlign::Left => {}
-                    HorizontalAlign::Center => im.image_position[0] -= im.image_size[0] / 2.0,
-                    HorizontalAlign::Right => im.image_position[0] -= im.image_size[0],
-                };
-                match im.center_display.1 {
-                    VerticalAlign::Top => {}
-                    VerticalAlign::Center => im.image_position[1] -= im.image_size[1] / 2.0,
-                    VerticalAlign::Bottom => im.image_position[1] -= im.image_size[1],
-                };
-                if let Some(texture) = &im.image_texture {
-                    let rect = Rect::from_min_size(
-                        Pos2::new(im.image_position[0], im.image_position[1]),
-                        Vec2::new(im.image_size[0], im.image_size[1]),
-                    );
-                    let color = if im.use_overlay_color {
-                        // 创建颜色覆盖
-                        Color32::from_rgba_unmultiplied(
-                            im.overlay_color[0],
-                            im.overlay_color[1],
-                            im.overlay_color[2],
-                            // 将图片透明度与覆盖颜色透明度相乘
-                            (im.alpha as f32 * im.overlay_color[3] as f32 / 255.0) as u8,
-                        )
-                    } else {
-                        Color32::from_white_alpha(im.alpha)
-                    };
-
-                    // 直接绘制图片
-                    egui::Image::new(egui::ImageSource::Texture(texture.into()))
-                        .tint(color)
-                        .paint_at(ui, rect)
-                };
-                im.last_frame_cite_texture = im.cite_texture.clone();
-                self.rust_constructor_resource[id] = RCR::Image(im);
+            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone()
+        {
+            if im.cite_texture != im.last_frame_cite_texture
+                && let Ok(id2) = self.get_resource_index("ImageTexture", &im.cite_texture)
+                && let RCR::ImageTexture(it) = self.rust_constructor_resource[id2].clone()
+            {
+                im.texture = it.texture;
             };
+            im.reg_render_resource(&mut self.render_resource_list);
+            im.position[0] = match im.x_grid[1] {
+                0 => im.origin_position[0],
+                _ => {
+                    (ctx.available_rect().width() as f64 / im.x_grid[1] as f64
+                        * im.x_grid[0] as f64) as f32
+                        + im.origin_position[0]
+                }
+            };
+            im.position[1] = match im.y_grid[1] {
+                0 => im.origin_position[1],
+                _ => {
+                    (ctx.available_rect().height() as f64 / im.y_grid[1] as f64
+                        * im.y_grid[0] as f64) as f32
+                        + im.origin_position[1]
+                }
+            };
+            match im.center_display.0 {
+                HorizontalAlign::Left => {}
+                HorizontalAlign::Center => im.position[0] -= im.size[0] / 2.0,
+                HorizontalAlign::Right => im.position[0] -= im.size[0],
+            };
+            match im.center_display.1 {
+                VerticalAlign::Top => {}
+                VerticalAlign::Center => im.position[1] -= im.size[1] / 2.0,
+                VerticalAlign::Bottom => im.position[1] -= im.size[1],
+            };
+            if let Some(texture) = &im.texture {
+                let rect = Rect::from_min_size(
+                    Pos2::new(im.position[0], im.position[1]),
+                    Vec2::new(im.size[0], im.size[1]),
+                );
+                let color = if im.use_overlay_color {
+                    // 创建颜色覆盖
+                    Color32::from_rgba_unmultiplied(
+                        im.overlay_color[0],
+                        im.overlay_color[1],
+                        im.overlay_color[2],
+                        // 将图片透明度与覆盖颜色透明度相乘
+                        (im.alpha as f32 * im.overlay_color[3] as f32 / 255.0) as u8,
+                    )
+                } else {
+                    Color32::from_white_alpha(im.alpha)
+                };
+
+                // 直接绘制图片
+                egui::Image::new(egui::ImageSource::Texture(texture.into()))
+                    .tint(color)
+                    .paint_at(ui, rect)
+            };
+            im.last_frame_cite_texture = im.cite_texture.clone();
+            self.rust_constructor_resource[id] = RCR::Image(im);
+        };
     }
 
     /// 添加消息框资源(重要事项：你需要添加一个CloseMessageBox图片纹理资源才可正常使用！)。
     pub fn add_message_box(
         &mut self,
-        box_itself_title_content_image_name_and_sound_path: [&str; 5],
-        box_size: [f32; 2],
-        box_keep_existing: bool,
-        box_existing_time: f32,
-        box_normal_and_restore_speed: [f32; 2],
+        mut message_box: MessageBox,
+        title_name: &str,
+        content_name: &str,
+        image_name: &str,
+        sound_path: &str,
     ) {
-        if !self.check_resource_exists(
-            "MessageBox",
-            box_itself_title_content_image_name_and_sound_path[0],
-        ) {
-            if let Ok(id) = self.get_resource_index(
-                "Image",
-                box_itself_title_content_image_name_and_sound_path[3],
-            )
-                && let RCR::Image(im) = &mut self.rust_constructor_resource[id] {
-                    im.image_size = [box_size[1] - 15_f32, box_size[1] - 15_f32];
-                    im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
-                    im.x_grid = [1, 1];
-                    im.y_grid = [0, 1];
-                    im.name = format!("MessageBox{}", im.name);
-                };
-            if let Ok(id) = self.get_resource_index(
-                "Text",
-                box_itself_title_content_image_name_and_sound_path[1],
-            )
-                && let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
-                    t.x_grid = [1, 1];
-                    t.y_grid = [0, 1];
-                    t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
-                    t.wrap_width = box_size[0] - box_size[1] + 5_f32;
-                    t.name = format!("MessageBox{}", t.name);
-                };
-            if let Ok(id) = self.get_resource_index(
-                "Text",
-                box_itself_title_content_image_name_and_sound_path[2],
-            )
-                && let RCR::Text(t) = &mut self.rust_constructor_resource[id] {
-                    t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
-                    t.x_grid = [1, 1];
-                    t.y_grid = [0, 1];
-                    t.wrap_width = box_size[0] - box_size[1] + 5_f32;
-                    t.name = format!("MessageBox{}", t.name);
-                };
+        if !self.check_resource_exists("MessageBox", &message_box.name) {
+            message_box.exist = true;
+            message_box.memory_offset = 0_f32;
+            message_box.image_name = String::new();
+            if let Ok(id) = self.get_resource_index("Image", image_name)
+                && let RCR::Image(im) = &mut self.rust_constructor_resource[id]
+            {
+                message_box.image_name = image_name.to_string();
+                im.size = [message_box.size[1] - 15_f32, message_box.size[1] - 15_f32];
+                im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
+                im.x_grid = [1, 1];
+                im.y_grid = [0, 1];
+                im.name = format!("MessageBox{}", im.name);
+            };
+            message_box.title_name = String::new();
+            if let Ok(id) = self.get_resource_index("Text", title_name)
+                && let RCR::Text(t) = &mut self.rust_constructor_resource[id]
+            {
+                message_box.title_name = title_name.to_string();
+                t.x_grid = [1, 1];
+                t.y_grid = [0, 1];
+                t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
+                t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
+                t.name = format!("MessageBox{}", t.name);
+            };
+            message_box.content_name = String::new();
+            if let Ok(id) = self.get_resource_index("Text", content_name)
+                && let RCR::Text(t) = &mut self.rust_constructor_resource[id]
+            {
+                message_box.content_name = content_name.to_string();
+                t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
+                t.x_grid = [1, 1];
+                t.y_grid = [0, 1];
+                t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
+                t.name = format!("MessageBox{}", t.name);
+            };
             self.rust_constructor_resource
-                .push(RCR::MessageBox(MessageBox {
-                    discern_type: "MessageBox".to_string(),
-                    name: box_itself_title_content_image_name_and_sound_path[0].to_string(),
-                    box_size,
-                    box_title_name: format!(
-                        "MessageBox{}",
-                        box_itself_title_content_image_name_and_sound_path[1]
-                    ),
-                    box_content_name: format!(
-                        "MessageBox{}",
-                        box_itself_title_content_image_name_and_sound_path[2]
-                    ),
-                    box_image_name: format!(
-                        "MessageBox{}",
-                        box_itself_title_content_image_name_and_sound_path[3]
-                    ),
-                    box_keep_existing,
-                    box_existing_time,
-                    box_exist: true,
-                    box_speed: box_normal_and_restore_speed[0],
-                    box_restore_speed: box_normal_and_restore_speed[1],
-                    box_memory_offset: 0_f32,
-                }));
-            if !box_keep_existing {
+                .push(RCR::MessageBox(message_box.clone()));
+            if !message_box.keep_existing {
                 self.add_split_time(
-                    &format!(
-                        "MessageBox{}",
-                        box_itself_title_content_image_name_and_sound_path[0]
-                    ),
-                    false,
+                    SplitTime::default().name(&format!("MessageBox{}", message_box.name)),
                 );
             };
             self.add_split_time(
-                &format!(
-                    "MessageBox{}Animation",
-                    box_itself_title_content_image_name_and_sound_path[0]
-                ),
-                false,
+                SplitTime::default().name(&format!("MessageBox{}Animation", message_box.name)),
             );
-            self.add_rect(
-                &format!(
-                    "MessageBox{}",
-                    box_itself_title_content_image_name_and_sound_path[0]
-                ),
-                [0_f32, 0_f32, box_size[0], box_size[1], 20_f32],
-                [1, 1, 0, 1],
-                (HorizontalAlign::Left, VerticalAlign::Top),
-                [100, 100, 100, 125, 240, 255, 255, 255],
-                0.0,
+            self.add_custom_rect(
+                CustomRect::default()
+                    .name(&format!("MessageBox{}", message_box.name))
+                    .origin_position(0_f32, 0_f32)
+                    .size(message_box.size[0], message_box.size[1])
+                    .rounding(20_f32)
+                    .x_grid(1, 1)
+                    .y_grid(0, 1)
+                    .center_display(HorizontalAlign::Left, VerticalAlign::Top)
+                    .color(100, 100, 100, 125)
+                    .border_width(0_f32),
             );
             self.add_image(
-                &format!(
-                    "MessageBox{}Close",
-                    box_itself_title_content_image_name_and_sound_path[0]
-                ),
-                [0_f32, 0_f32, 30_f32, 30_f32],
-                [0, 0, 0, 0],
-                (HorizontalAlign::Center, VerticalAlign::Center, false),
-                [255, 0, 0, 0, 0],
+                Image::default()
+                    .name(&format!("MessageBox{}Close", message_box.name))
+                    .use_overlay_color(false)
+                    .size(30_f32, 30_f32)
+                    .center_display(HorizontalAlign::Center, VerticalAlign::Center),
                 "CloseMessageBox",
             );
             self.add_switch(
-                [
-                    &format!(
-                        "MessageBox{}Close",
-                        box_itself_title_content_image_name_and_sound_path[0]
-                    ),
-                    &format!(
-                        "MessageBox{}Close",
-                        box_itself_title_content_image_name_and_sound_path[0]
-                    ),
-                    "",
-                    box_itself_title_content_image_name_and_sound_path[4],
-                ],
-                vec![
-                    SwitchData {
-                        texture: "CloseMessageBox".to_string(),
-                        color: [255, 255, 255, 0],
-                        text: String::new(),
-                        hint_text: String::new(),
-                    },
-                    SwitchData {
-                        texture: "CloseMessageBox".to_string(),
-                        color: [180, 180, 180, 200],
-                        text: String::new(),
-                        hint_text: String::new(),
-                    },
-                    SwitchData {
-                        texture: "CloseMessageBox".to_string(),
-                        color: [255, 255, 255, 200],
-                        text: String::new(),
-                        hint_text: String::new(),
-                    },
-                    SwitchData {
-                        texture: "CloseMessageBox".to_string(),
-                        color: [180, 180, 180, 200],
-                        text: String::new(),
-                        hint_text: String::new(),
-                    },
-                ],
-                [false, true, true],
-                2,
-                vec![SwitchClickAction {
-                    click_method: PointerButton::Primary,
-                    action: true,
-                }],
+                Switch::default()
+                    .name(&format!("MessageBox{}Close", message_box.name))
+                    .appearance(vec![
+                        SwitchData {
+                            texture: "CloseMessageBox".to_string(),
+                            color: [255, 255, 255, 0],
+                            text: String::new(),
+                            hint_text: String::new(),
+                        },
+                        SwitchData {
+                            texture: "CloseMessageBox".to_string(),
+                            color: [180, 180, 180, 200],
+                            text: String::new(),
+                            hint_text: String::new(),
+                        },
+                        SwitchData {
+                            texture: "CloseMessageBox".to_string(),
+                            color: [255, 255, 255, 200],
+                            text: String::new(),
+                            hint_text: String::new(),
+                        },
+                        SwitchData {
+                            texture: "CloseMessageBox".to_string(),
+                            color: [180, 180, 180, 200],
+                            text: String::new(),
+                            hint_text: String::new(),
+                        },
+                    ])
+                    .enable_hover_click_image(false, true)
+                    .click_method(vec![SwitchClickAction {
+                        click_method: PointerButton::Primary,
+                        action: true,
+                    }])
+                    .sound_path(sound_path),
+                &format!("MessageBox{}Close", message_box.name),
+                "",
             );
         } else {
             self.problem_report(
                 RustConstructorError::MessageBoxAlreadyExists {
-                    message_box_name: box_itself_title_content_image_name_and_sound_path[0]
-                        .to_string(),
+                    message_box_name: message_box.name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
             );
@@ -3001,483 +3337,271 @@ impl App {
             let mut deleted = false;
             let i = u - delete_count;
             if let RCR::MessageBox(mut mb) = self.rust_constructor_resource[index_list[i]].clone()
-                && let Ok(id1) = self.get_resource_index("Image", &mb.box_image_name)
-                    && let RCR::Image(mut im1) = self.rust_constructor_resource[id1].clone()
-                        && let Ok(id2) =
-                            self.get_resource_index("CustomRect", &format!("MessageBox{}", mb.name))
-                            && let RCR::CustomRect(mut cr) =
-                                self.rust_constructor_resource[id2].clone()
-                                && let Ok(id3) = self.get_resource_index("Text", &mb.box_title_name)
-                                    && let RCR::Text(mut t1) =
-                                        self.rust_constructor_resource[id3].clone()
-                                        && let Ok(id4) =
-                                            self.get_resource_index("Text", &mb.box_content_name)
-                                            && let RCR::Text(mut t2) =
-                                                self.rust_constructor_resource[id4].clone()
-                                                && let Ok(id5) = self.get_resource_index(
-                                                    "Switch",
-                                                    &format!("MessageBox{}Close", mb.name),
-                                                )
-                                                    && let RCR::Switch(mut s) =
-                                                        self.rust_constructor_resource[id5].clone()
-                                                        && let Ok(id6) = self.get_resource_index(
-                                                            "Image",
-                                                            &format!("MessageBox{}Close", mb.name),
-                                                        )
-                                                            && let RCR::Image(mut im2) = self
-                                                                .rust_constructor_resource[id6]
-                                                                .clone()
-                                                            {
-                                                                if mb.box_size[1]
-                                                                    < self.get_text_size(&mb.box_title_name.clone(), ui).unwrap()[1]
-                                                                        + self.get_text_size(&mb.box_content_name.clone(), ui).unwrap()
-                                                                            [1]
-                                                                        + 10_f32
-                                                                {
-                                                                    mb.box_size[1] = self
-                                                                        .get_text_size(&mb.box_title_name.clone(), ui).unwrap()[1]
-                                                                        + self
-                                                                            .get_text_size(&mb.box_content_name.clone(), ui).unwrap()
-                                                                            [1]
-                                                                        + 10_f32;
-                                                                    cr.size[1] = mb.box_size[1];
-                                                                    im1.image_size = [
-                                                                        mb.box_size[1] - 15_f32,
-                                                                        mb.box_size[1] - 15_f32,
-                                                                    ];
-                                                                    t1.wrap_width = mb.box_size[0]
-                                                                        - mb.box_size[1]
-                                                                        + 5_f32;
-                                                                    t2.wrap_width = mb.box_size[0]
-                                                                        - mb.box_size[1]
-                                                                        + 5_f32;
-                                                                };
-                                                                if self.timer.total_time
-                                                                    - self
-                                                                        .split_time(&format!(
-                                                                            "MessageBox{}Animation",
-                                                                            mb.name
-                                                                        ))
-                                                                        .unwrap()[1]
-                                                                    >= self.vertrefresh
-                                                                {
-                                                                    self.add_split_time(
-                                                                        &format!(
-                                                                            "MessageBox{}Animation",
-                                                                            mb.name
-                                                                        ),
-                                                                        true,
-                                                                    );
-                                                                    if offset
-                                                                        != mb.box_memory_offset
-                                                                    {
-                                                                        if mb.box_memory_offset
-                                                                            < offset
-                                                                        {
-                                                                            if mb.box_memory_offset
-                                                                                + mb.box_restore_speed
-                                                                                >= offset
-                                                                            {
-                                                                                mb.box_memory_offset = offset;
-                                                                            } else {
-                                                                                mb.box_memory_offset +=
-                                                                                    mb.box_restore_speed;
-                                                                            };
-                                                                        } else if mb
-                                                                            .box_memory_offset
-                                                                            - mb.box_restore_speed
-                                                                            <= offset
-                                                                        {
-                                                                            mb.box_memory_offset =
-                                                                                offset;
-                                                                        } else {
-                                                                            mb.box_memory_offset -=
-                                                                                mb.box_restore_speed;
-                                                                        };
-                                                                    };
-                                                                    if cr.origin_position[0]
-                                                                        != -mb.box_size[0] - 5_f32
-                                                                    {
-                                                                        if mb.box_exist {
-                                                                            if cr.origin_position[0]
-                                                                                - mb.box_speed
-                                                                                <= -mb.box_size[0]
-                                                                                    - 5_f32
-                                                                            {
-                                                                                cr.origin_position[0] =
-                                                                                    -mb.box_size[0] - 5_f32;
-                                                                                if self.check_resource_exists("SplitTime", &format!("MessageBox{}", mb.name)) {
-                                                                                    self.add_split_time(
-                                                                                        &format!("MessageBox{}", mb.name),
-                                                                                        true,
-                                                                                    );
-                                                                                };
-                                                                            } else {
-                                                                                cr.origin_position[0] -=
-                                                                                    mb.box_speed;
-                                                                            };
-                                                                        } else if cr.origin_position
-                                                                            [0]
-                                                                            + mb.box_speed
-                                                                            >= 15_f32
-                                                                        {
-                                                                            cr.origin_position[0] =
-                                                                                15_f32;
-                                                                            delete_count += 1;
-                                                                            deleted = true;
-                                                                        } else {
-                                                                            cr.origin_position
-                                                                                [0] += mb.box_speed;
-                                                                        };
-                                                                    };
-                                                                };
-                                                                cr.origin_position[1] =
-                                                                    mb.box_memory_offset + 20_f32;
-                                                                im1.origin_position = [
-                                                                    cr.origin_position[0] + 5_f32,
-                                                                    cr.origin_position[1]
-                                                                        + mb.box_size[1] / 2_f32,
-                                                                ];
-                                                                t1.origin_position = [
-                                                                    im1.origin_position[0]
-                                                                        + im1.image_size[0]
-                                                                        + 5_f32,
-                                                                    cr.origin_position[1] + 5_f32,
-                                                                ];
-                                                                t2.origin_position = [
-                                                                    im1.origin_position[0]
-                                                                        + im1.image_size[0]
-                                                                        + 5_f32,
-                                                                    t1.origin_position[1]
-                                                                        + self
-                                                                            .get_text_size(
-                                                                                &mb.box_title_name
-                                                                                    .clone(),
-                                                                                ui,
-                                                                            )
-                                                                            .unwrap()[1],
-                                                                ];
-                                                                im2.origin_position = cr.position;
-                                                                if !mb.box_keep_existing
-                                                                    && self.timer.total_time
-                                                                        - self
-                                                                            .split_time(&format!(
-                                                                                "MessageBox{}",
-                                                                                mb.name
-                                                                            ))
-                                                                            .unwrap()[1]
-                                                                        >= mb.box_existing_time
-                                                                    && cr.origin_position[0]
-                                                                        == -mb.box_size[0] - 5_f32
-                                                                {
-                                                                    mb.box_exist = false;
-                                                                    if cr.origin_position[0]
-                                                                        + mb.box_speed
-                                                                        >= 15_f32
-                                                                    {
-                                                                        cr.origin_position[0] =
-                                                                            15_f32;
-                                                                    } else {
-                                                                        cr.origin_position[0] +=
-                                                                            mb.box_speed;
-                                                                    };
-                                                                };
-                                                                if let Some(mouse_pos) =
-                                                                    ui.input(|i| {
-                                                                        i.pointer.hover_pos()
-                                                                    })
-                                                                {
-                                                                    let rect =
-                                                                        egui::Rect::from_min_size(
-                                                                            Pos2 {
-                                                                                x: im2
-                                                                                    .image_position
-                                                                                    [0],
-                                                                                y: im2
-                                                                                    .image_position
-                                                                                    [1],
-                                                                            },
-                                                                            Vec2 {
-                                                                                x: cr.size[0]
-                                                                                    + 25_f32,
-                                                                                y: cr.size[1]
-                                                                                    + 25_f32,
-                                                                            },
-                                                                        );
-                                                                    if rect.contains(mouse_pos) {
-                                                                        s.appearance[0].color[3] =
-                                                                            200;
-                                                                    } else {
-                                                                        s.appearance[0].color[3] =
-                                                                            0;
-                                                                    };
-                                                                };
-                                                                self.rust_constructor_resource
-                                                                    [index_list[i]] =
-                                                                    RCR::MessageBox(mb.clone());
-                                                                self.rust_constructor_resource
-                                                                    [id1] = RCR::Image(im1.clone());
-                                                                self.rust_constructor_resource
-                                                                    [id2] =
-                                                                    RCR::CustomRect(cr.clone());
-                                                                self.rust_constructor_resource
-                                                                    [id3] = RCR::Text(t1.clone());
-                                                                self.rust_constructor_resource
-                                                                    [id4] = RCR::Text(t2.clone());
-                                                                self.rust_constructor_resource
-                                                                    [id5] = RCR::Switch(s.clone());
-                                                                self.rust_constructor_resource
-                                                                    [id6] = RCR::Image(im2.clone());
-                                                                self.rect(
-                                                                    ui,
-                                                                    &format!(
-                                                                        "MessageBox{}",
-                                                                        mb.name
-                                                                    ),
-                                                                    ctx,
-                                                                );
-                                                                self.image(
-                                                                    ui,
-                                                                    &mb.box_image_name.clone(),
-                                                                    ctx,
-                                                                );
-                                                                self.text(
-                                                                    ui,
-                                                                    &t1.name.clone(),
-                                                                    ctx,
-                                                                );
-                                                                self.text(
-                                                                    ui,
-                                                                    &t2.name.clone(),
-                                                                    ctx,
-                                                                );
-                                                                if self
-                                                                    .switch(
-                                                                        &format!(
-                                                                            "MessageBox{}Close",
-                                                                            mb.name
-                                                                        ),
-                                                                        ui,
-                                                                        ctx,
-                                                                        s.state == 0
-                                                                            && mb.box_exist,
-                                                                        true,
-                                                                    )
-                                                                    .unwrap()[0]
-                                                                    == 0
-                                                                {
-                                                                    mb.box_exist = false;
-                                                                    if cr.origin_position[0]
-                                                                        + mb.box_speed
-                                                                        >= 15_f32
-                                                                    {
-                                                                        cr.origin_position[0] =
-                                                                            15_f32;
-                                                                    } else {
-                                                                        cr.origin_position[0] +=
-                                                                            mb.box_speed;
-                                                                    };
-                                                                    self.rust_constructor_resource[id2] = RCR::CustomRect(cr.clone());
-                                                                    self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
-                                                                };
-                                                                if deleted {
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "Image",
-                                                                            &mb.box_image_name,
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "CustomRect",
-                                                                            &format!(
-                                                                                "MessageBox{}",
-                                                                                mb.name
-                                                                            ),
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "Text",
-                                                                            &mb.box_title_name,
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "Text",
-                                                                            &mb.box_content_name,
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "Switch",
-                                                                            &format!(
-                                                                                "MessageBox{}Close",
-                                                                                mb.name
-                                                                            ),
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "Image",
-                                                                            &format!(
-                                                                                "MessageBox{}Close",
-                                                                                mb.name
-                                                                            ),
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if let Ok(id) = self.get_resource_index("SplitTime", &format!("MessageBox{}Animation", mb.name)) {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                    if !mb.box_keep_existing
-                                                                        && let Ok(id) = self
-                                                                            .get_resource_index(
-                                                                                "SplitTime",
-                                                                                &format!(
-                                                                                    "MessageBox{}",
-                                                                                    mb.name
-                                                                                ),
-                                                                            )
-                                                                        {
-                                                                            self.rust_constructor_resource.remove(id);
-                                                                        };
-                                                                    if let Ok(id) = self
-                                                                        .get_resource_index(
-                                                                            "MessageBox",
-                                                                            &mb.name,
-                                                                        )
-                                                                    {
-                                                                        self.rust_constructor_resource.remove(id);
-                                                                    };
-                                                                } else {
-                                                                    offset +=
-                                                                        mb.box_size[1] + 15_f32;
-                                                                };
-                                                            };
+                && let Ok(id1) = self.get_resource_index("Image", &mb.image_name)
+                && let RCR::Image(mut im1) = self.rust_constructor_resource[id1].clone()
+                && let Ok(id2) =
+                    self.get_resource_index("CustomRect", &format!("MessageBox{}", mb.name))
+                && let RCR::CustomRect(mut cr) = self.rust_constructor_resource[id2].clone()
+                && let Ok(id3) = self.get_resource_index("Text", &mb.title_name)
+                && let RCR::Text(mut t1) = self.rust_constructor_resource[id3].clone()
+                && let Ok(id4) = self.get_resource_index("Text", &mb.content_name)
+                && let RCR::Text(mut t2) = self.rust_constructor_resource[id4].clone()
+                && let Ok(id5) =
+                    self.get_resource_index("Switch", &format!("MessageBox{}Close", mb.name))
+                && let RCR::Switch(mut s) = self.rust_constructor_resource[id5].clone()
+                && let Ok(id6) =
+                    self.get_resource_index("Image", &format!("MessageBox{}Close", mb.name))
+                && let RCR::Image(mut im2) = self.rust_constructor_resource[id6].clone()
+            {
+                if mb.size[1]
+                    < self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
+                        + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
+                        + 10_f32
+                {
+                    mb.size[1] = self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
+                        + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
+                        + 10_f32;
+                    cr.size[1] = mb.size[1];
+                    im1.size = [mb.size[1] - 15_f32, mb.size[1] - 15_f32];
+                    t1.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
+                    t2.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
+                };
+                if self.timer.total_time
+                    - self
+                        .split_time(&format!("MessageBox{}Animation", mb.name))
+                        .unwrap()[1]
+                    >= self.vertrefresh
+                {
+                    self.reset_split_time(&format!("MessageBox{}Animation", mb.name));
+                    if offset != mb.memory_offset {
+                        if mb.memory_offset < offset {
+                            if mb.memory_offset + mb.restore_speed >= offset {
+                                mb.memory_offset = offset;
+                            } else {
+                                mb.memory_offset += mb.restore_speed;
+                            };
+                        } else if mb.memory_offset - mb.restore_speed <= offset {
+                            mb.memory_offset = offset;
+                        } else {
+                            mb.memory_offset -= mb.restore_speed;
+                        };
+                    };
+                    if cr.origin_position[0] != -mb.size[0] - 5_f32 {
+                        if mb.exist {
+                            if cr.origin_position[0] - mb.speed <= -mb.size[0] - 5_f32 {
+                                cr.origin_position[0] = -mb.size[0] - 5_f32;
+                                if self.check_resource_exists(
+                                    "SplitTime",
+                                    &format!("MessageBox{}", mb.name),
+                                ) {
+                                    self.reset_split_time(&format!("MessageBox{}", mb.name));
+                                };
+                            } else {
+                                cr.origin_position[0] -= mb.speed;
+                            };
+                        } else if cr.origin_position[0] + mb.speed >= 15_f32 {
+                            cr.origin_position[0] = 15_f32;
+                            delete_count += 1;
+                            deleted = true;
+                        } else {
+                            cr.origin_position[0] += mb.speed;
+                        };
+                    };
+                };
+                cr.origin_position[1] = mb.memory_offset + 20_f32;
+                im1.origin_position = [
+                    cr.origin_position[0] + 5_f32,
+                    cr.origin_position[1] + mb.size[1] / 2_f32,
+                ];
+                t1.origin_position = [
+                    im1.origin_position[0] + im1.size[0] + 5_f32,
+                    cr.origin_position[1] + 5_f32,
+                ];
+                t2.origin_position = [
+                    im1.origin_position[0] + im1.size[0] + 5_f32,
+                    t1.origin_position[1]
+                        + self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1],
+                ];
+                im2.origin_position = cr.position;
+                if !mb.keep_existing
+                    && self.timer.total_time
+                        - self.split_time(&format!("MessageBox{}", mb.name)).unwrap()[1]
+                        >= mb.existing_time
+                    && cr.origin_position[0] == -mb.size[0] - 5_f32
+                {
+                    mb.exist = false;
+                    if cr.origin_position[0] + mb.speed >= 15_f32 {
+                        cr.origin_position[0] = 15_f32;
+                    } else {
+                        cr.origin_position[0] += mb.speed;
+                    };
+                };
+                if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                    let rect = egui::Rect::from_min_size(
+                        Pos2 {
+                            x: im2.position[0],
+                            y: im2.position[1],
+                        },
+                        Vec2 {
+                            x: cr.size[0] + 25_f32,
+                            y: cr.size[1] + 25_f32,
+                        },
+                    );
+                    if rect.contains(mouse_pos) {
+                        s.appearance[0].color[3] = 200;
+                    } else {
+                        s.appearance[0].color[3] = 0;
+                    };
+                };
+                self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
+                self.rust_constructor_resource[id1] = RCR::Image(im1.clone());
+                self.rust_constructor_resource[id2] = RCR::CustomRect(cr.clone());
+                self.rust_constructor_resource[id3] = RCR::Text(t1.clone());
+                self.rust_constructor_resource[id4] = RCR::Text(t2.clone());
+                self.rust_constructor_resource[id5] = RCR::Switch(s.clone());
+                self.rust_constructor_resource[id6] = RCR::Image(im2.clone());
+                self.custom_rect(ui, &format!("MessageBox{}", mb.name), ctx);
+                self.image(ui, &mb.image_name.clone(), ctx);
+                self.text(ui, &t1.name.clone(), ctx);
+                self.text(ui, &t2.name.clone(), ctx);
+                if self
+                    .switch(
+                        &format!("MessageBox{}Close", mb.name),
+                        ui,
+                        ctx,
+                        s.state == 0 && mb.exist,
+                        true,
+                    )
+                    .unwrap()[0]
+                    == 0
+                {
+                    mb.exist = false;
+                    if cr.origin_position[0] + mb.speed >= 15_f32 {
+                        cr.origin_position[0] = 15_f32;
+                    } else {
+                        cr.origin_position[0] += mb.speed;
+                    };
+                    self.rust_constructor_resource[id2] = RCR::CustomRect(cr.clone());
+                    self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
+                };
+                if deleted {
+                    if let Ok(id) = self.get_resource_index("Image", &mb.image_name) {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) =
+                        self.get_resource_index("CustomRect", &format!("MessageBox{}", mb.name))
+                    {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) = self.get_resource_index("Text", &mb.title_name) {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) = self.get_resource_index("Text", &mb.content_name) {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) =
+                        self.get_resource_index("Switch", &format!("MessageBox{}Close", mb.name))
+                    {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) =
+                        self.get_resource_index("Image", &format!("MessageBox{}Close", mb.name))
+                    {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) = self
+                        .get_resource_index("SplitTime", &format!("MessageBox{}Animation", mb.name))
+                    {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if !mb.keep_existing
+                        && let Ok(id) =
+                            self.get_resource_index("SplitTime", &format!("MessageBox{}", mb.name))
+                    {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                    if let Ok(id) = self.get_resource_index("MessageBox", &mb.name) {
+                        self.rust_constructor_resource.remove(id);
+                    };
+                } else {
+                    offset += mb.size[1] + 15_f32;
+                };
+            };
         }
     }
 
     /// 添加开关资源。
-    pub fn add_switch(
-        &mut self,
-        name_switch_image_name_text_name_and_sound_path: [&str; 4],
-        mut appearance: Vec<SwitchData>,
-        enable_hover_click_image_and_use_overlay: [bool; 3],
-        switch_amounts_state: u32,
-        click_method: Vec<SwitchClickAction>,
-    ) {
+    pub fn add_switch(&mut self, mut switch: Switch, image_name: &str, text_name: &str) {
         let mut count = 1;
-        if enable_hover_click_image_and_use_overlay[0] {
+        if switch.enable_hover_click_image[0] {
             count += 1;
         };
-        if enable_hover_click_image_and_use_overlay[1] {
+        if switch.enable_hover_click_image[1] {
             count += 1;
         };
-        if appearance.len() as u32 != count * switch_amounts_state {
+        if switch.appearance.len() < count {
             self.problem_report(
                 RustConstructorError::SwitchAppearanceMismatch {
-                    switch_name: name_switch_image_name_text_name_and_sound_path[0].to_string(),
-                    differ: (count as i32 * switch_amounts_state as i32 - appearance.len() as i32)
-                        .unsigned_abs(),
+                    switch_name: switch.name.clone(),
+                    differ: count as u32 - switch.appearance.len() as u32,
                 },
                 SeverityLevel::SevereWarning,
             );
-            for _ in
-                0..(count as i32 * switch_amounts_state as i32 - appearance.len() as i32) as usize
+            return;
+        };
+        for _ in 0..switch.appearance.len() % count {
+            switch.appearance.pop();
+        }
+        switch.text_name = String::new();
+        if let Ok(id) = self.get_resource_index("Image", image_name)
+            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone()
+        {
+            im.use_overlay_color = true;
+            switch.switch_image_name = image_name.to_string();
+            if self.check_resource_exists("Text", text_name)
+                && let Ok(id2) = self.get_resource_index("Text", text_name)
+                && let RCR::Text(t) = &mut self.rust_constructor_resource[id2]
             {
-                appearance.push(SwitchData {
-                    texture: "Error".to_string(),
-                    color: [255, 255, 255, 255],
-                    text: String::new(),
-                    hint_text: String::new(),
-                });
-            }
-        };
-        let mut text_origin_position = [0_f32, 0_f32];
-        if let Ok(id) =
-            self.get_resource_index("Image", name_switch_image_name_text_name_and_sound_path[1])
-            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone() {
-                im.use_overlay_color = true;
-                if self.check_resource_exists(
-                    "Text",
-                    name_switch_image_name_text_name_and_sound_path[2],
-                )
-                    && let Ok(id2) = self.get_resource_index(
-                        "Text",
-                        name_switch_image_name_text_name_and_sound_path[2],
-                    )
-                        && let RCR::Text(t) = &mut self.rust_constructor_resource[id2] {
-                            t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
-                            t.x_grid = [0, 0];
-                            t.y_grid = [0, 0];
-                            text_origin_position = t.origin_position;
-                        };
-                self.rust_constructor_resource[id] = RCR::Image(im);
+                switch.text_name = text_name.to_string();
+                switch.text_origin_position = t.origin_position;
+                t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
+                t.x_grid = [0, 0];
+                t.y_grid = [0, 0];
             };
-        if !appearance.iter().any(|x| x.hint_text.is_empty()) {
+            self.rust_constructor_resource[id] = RCR::Image(im);
+        };
+        switch.hint_text_name = String::new();
+        if switch
+            .appearance
+            .iter()
+            .filter(|x| !x.hint_text.is_empty())
+            .count()
+            > 0
+        {
+            switch.hint_text_name = format!("{}Hint", switch.name);
             self.add_text(
-                [
-                    &format!("{}Hint", name_switch_image_name_text_name_and_sound_path[0]),
-                    "",
-                    "Content",
-                ],
-                [0_f32, 0_f32, 25_f32, 300_f32, 10_f32],
-                [255, 255, 255, 0, 0, 0, 0, 0],
-                (HorizontalAlign::Left, VerticalAlign::Top, true, false),
-                [0, 0, 0, 0],
-                vec![],
+                Text::default()
+                    .name(&format!("{}Hint", switch.name))
+                    .content("")
+                    .origin_position(0_f32, 0_f32)
+                    .font_size(25_f32)
+                    .wrap_width(300_f32)
+                    .background_rounding(10_f32)
+                    .color(255, 255, 255, 0)
+                    .background_color(0, 0, 0, 0)
+                    .center_display(HorizontalAlign::Left, VerticalAlign::Top)
+                    .selectable(false),
             );
             self.add_split_time(
-                &format!(
-                    "{}StartHoverTime",
-                    name_switch_image_name_text_name_and_sound_path[0]
-                ),
-                false,
+                SplitTime::default().name(&format!("{}StartHoverTime", switch.name)),
             );
             self.add_split_time(
-                &format!(
-                    "{}HintFadeAnimation",
-                    name_switch_image_name_text_name_and_sound_path[0]
-                ),
-                false,
+                SplitTime::default().name(&format!("{}HintFadeAnimation", switch.name)),
             );
         };
-        self.rust_constructor_resource.push(RCR::Switch(Switch {
-            discern_type: "Switch".to_string(),
-            name: name_switch_image_name_text_name_and_sound_path[0].to_string(),
-            appearance: appearance.clone(),
-            switch_image_name: name_switch_image_name_text_name_and_sound_path[1].to_string(),
-            enable_hover_click_image: [
-                enable_hover_click_image_and_use_overlay[0],
-                enable_hover_click_image_and_use_overlay[1],
-            ],
-            state: 0,
-            click_method,
-            last_time_hovered: false,
-            last_time_clicked: false,
-            last_time_clicked_index: 0,
-            animation_count: count,
-            hint_text_name: if !appearance.iter().any(|x| x.hint_text.is_empty()) {
-                format!("{}Hint", name_switch_image_name_text_name_and_sound_path[0])
-            } else {
-                "".to_string()
-            },
-            text_name: name_switch_image_name_text_name_and_sound_path[2].to_string(),
-            text_origin_position,
-            sound_path: name_switch_image_name_text_name_and_sound_path[3].to_string(),
-        }));
+        switch.state = 0;
+        switch.animation_count = count as u32;
+        self.rust_constructor_resource.push(RCR::Switch(switch));
     }
 
     /// 显示开关资源并返回点击方法和开关状态。
@@ -3497,8 +3621,8 @@ impl App {
                     if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone() {
                         s.reg_render_resource(&mut self.render_resource_list);
                         let rect = Rect::from_min_size(
-                            Pos2::new(im.image_position[0], im.image_position[1]),
-                            Vec2::new(im.image_size[0], im.image_size[1]),
+                            Pos2::new(im.position[0], im.position[1]),
+                            Vec2::new(im.size[0], im.size[1]),
                         );
                         let mut hovered = false;
                         if enable {
@@ -3508,49 +3632,42 @@ impl App {
                                     if !s.hint_text_name.is_empty()
                                         && let Ok(id3) =
                                             self.get_resource_index("Text", &s.hint_text_name)
-                                            && let RCR::Text(mut t) =
-                                                self.rust_constructor_resource[id3].clone()
-                                            {
-                                                if !s.last_time_hovered {
-                                                    self.add_split_time(
-                                                        &format!("{}StartHoverTime", s.name),
-                                                        true,
-                                                    );
-                                                } else if self.timer.total_time
-                                                    - self
-                                                        .split_time(&format!(
-                                                            "{}StartHoverTime",
-                                                            s.name
-                                                        ))
-                                                        .unwrap()[1]
-                                                    >= 2_f32
-                                                    || t.rgba[3] != 0
-                                                {
-                                                    t.rgba[3] = 255;
-                                                    t.origin_position = [mouse_pos.x, mouse_pos.y];
-                                                };
-                                                t.center_display.0 = if mouse_pos.x
-                                                    + self
-                                                        .get_text_size(&s.hint_text_name, ui)
-                                                        .unwrap()[0]
-                                                    <= ctx.available_rect().width()
-                                                {
-                                                    HorizontalAlign::Left
-                                                } else {
-                                                    HorizontalAlign::Right
-                                                };
-                                                t.center_display.1 = if mouse_pos.y
-                                                    + self
-                                                        .get_text_size(&s.hint_text_name, ui)
-                                                        .unwrap()[1]
-                                                    <= ctx.available_rect().height()
-                                                {
-                                                    VerticalAlign::Top
-                                                } else {
-                                                    VerticalAlign::Bottom
-                                                };
-                                                self.rust_constructor_resource[id3] = RCR::Text(t);
-                                            };
+                                        && let RCR::Text(mut t) =
+                                            self.rust_constructor_resource[id3].clone()
+                                    {
+                                        if !s.last_time_hovered {
+                                            self.reset_split_time(&format!(
+                                                "{}StartHoverTime",
+                                                s.name
+                                            ));
+                                        } else if self.timer.total_time
+                                            - self
+                                                .split_time(&format!("{}StartHoverTime", s.name))
+                                                .unwrap()[1]
+                                            >= 2_f32
+                                            || t.color[3] != 0
+                                        {
+                                            t.color[3] = 255;
+                                            t.origin_position = [mouse_pos.x, mouse_pos.y];
+                                        };
+                                        t.center_display.0 = if mouse_pos.x
+                                            + self.get_text_size(&s.hint_text_name, ui).unwrap()[0]
+                                            <= ctx.available_rect().width()
+                                        {
+                                            HorizontalAlign::Left
+                                        } else {
+                                            HorizontalAlign::Right
+                                        };
+                                        t.center_display.1 = if mouse_pos.y
+                                            + self.get_text_size(&s.hint_text_name, ui).unwrap()[1]
+                                            <= ctx.available_rect().height()
+                                        {
+                                            VerticalAlign::Top
+                                        } else {
+                                            VerticalAlign::Bottom
+                                        };
+                                        self.rust_constructor_resource[id3] = RCR::Text(t);
+                                    };
                                     hovered = true;
                                     let mut clicked = vec![];
                                     let mut active = false;
@@ -3620,23 +3737,23 @@ impl App {
                         };
                         if !hovered && !s.hint_text_name.is_empty() {
                             if s.last_time_hovered {
-                                self.add_split_time(&format!("{}HintFadeAnimation", s.name), true);
+                                self.reset_split_time(&format!("{}HintFadeAnimation", s.name));
                             };
                             if let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name)
                                 && let RCR::Text(mut t) =
                                     self.rust_constructor_resource[id3].clone()
+                            {
+                                if self.timer.total_time
+                                    - self
+                                        .split_time(&format!("{}HintFadeAnimation", s.name))
+                                        .unwrap()[1]
+                                    >= self.vertrefresh
                                 {
-                                    if self.timer.total_time
-                                        - self
-                                            .split_time(&format!("{}HintFadeAnimation", s.name))
-                                            .unwrap()[1]
-                                        >= self.vertrefresh
-                                    {
-                                        self.add_split_time(&format!("{}HintFadeAnimation", s.name), true);
-                                        t.rgba[3] = t.rgba[3].saturating_sub(10);
-                                    };
-                                    self.rust_constructor_resource[id3] = RCR::Text(t);
+                                    self.reset_split_time(&format!("{}HintFadeAnimation", s.name));
+                                    t.color[3] = t.color[3].saturating_sub(10);
                                 };
+                                self.rust_constructor_resource[id3] = RCR::Text(t);
+                            };
                         };
                         im.overlay_color = s.appearance
                             [(s.state * s.animation_count + appearance_count) as usize]
@@ -3647,24 +3764,22 @@ impl App {
                                 [(s.state * s.animation_count + appearance_count) as usize]
                                 .texture
                                 .clone(),
-                        )
-                            && let RCR::ImageTexture(it) =
-                                self.rust_constructor_resource[id4].clone()
-                            {
-                                im.image_texture = it.texture.clone();
-                            };
+                        ) && let RCR::ImageTexture(it) =
+                            self.rust_constructor_resource[id4].clone()
+                        {
+                            im.texture = it.texture.clone();
+                        };
                         if !s.hint_text_name.is_empty()
                             && let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name)
-                                && let RCR::Text(mut t) =
-                                    self.rust_constructor_resource[id3].clone()
-                                {
-                                    t.background_rgb[3] = t.rgba[3];
-                                    t.text_content = s.appearance
-                                        [(s.state * s.animation_count + appearance_count) as usize]
-                                        .hint_text
-                                        .clone();
-                                    self.rust_constructor_resource[id3] = RCR::Text(t);
-                                };
+                            && let RCR::Text(mut t) = self.rust_constructor_resource[id3].clone()
+                        {
+                            t.background_color[3] = t.color[3];
+                            t.content = s.appearance
+                                [(s.state * s.animation_count + appearance_count) as usize]
+                                .hint_text
+                                .clone();
+                            self.rust_constructor_resource[id3] = RCR::Text(t);
+                        };
                         s.last_time_hovered = hovered;
                         activated[1] = s.state as usize;
                         self.rust_constructor_resource[id] = RCR::Switch(s.clone());
@@ -3674,17 +3789,17 @@ impl App {
                             if let Ok(id4) = self.get_resource_index("Text", &s.text_name)
                                 && let RCR::Text(mut t2) =
                                     self.rust_constructor_resource[id4].clone()
-                                {
-                                    t2.origin_position = [
-                                        im.image_position[0] + s.text_origin_position[0],
-                                        im.image_position[1] + s.text_origin_position[1],
-                                    ];
-                                    t2.text_content = s.appearance
-                                        [(s.state * s.animation_count + appearance_count) as usize]
-                                        .text
-                                        .clone();
-                                    self.rust_constructor_resource[id4] = RCR::Text(t2);
-                                };
+                            {
+                                t2.origin_position = [
+                                    im.position[0] + s.text_origin_position[0],
+                                    im.position[1] + s.text_origin_position[1],
+                                ];
+                                t2.content = s.appearance
+                                    [(s.state * s.animation_count + appearance_count) as usize]
+                                    .text
+                                    .clone();
+                                self.rust_constructor_resource[id4] = RCR::Text(t2);
+                            };
                             self.text(ui, &s.text_name, ctx);
                         };
                         if self.check_resource_exists("Text", &s.hint_text_name) {
