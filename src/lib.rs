@@ -1,16 +1,20 @@
 //! Rust Constructor V2
-//! 一个强大的跨平台GUI框架，在Rust中开发GUI项目的最简单方法。
+//! 基于egui构建的跨平台GUI框架, 用Rust开发GUI项目最简单的方式。
 use anyhow::Context;
 use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
 use egui::{
-    Color32, FontData, FontDefinitions, FontId, PointerButton, Pos2, Ui, Vec2, text::CCursor,
+    Color32, FontData, FontDefinitions, FontId, Galley, PointerButton, Pos2, TextureHandle, Ui,
+    Vec2, text::CCursor,
 };
 use json::JsonValue;
 use kira::{
     AudioManager, AudioManagerSettings, DefaultBackend, sound::static_sound::StaticSoundData,
 };
 use std::{
+    any::Any,
     collections::HashMap,
+    error::Error,
+    fmt::Debug,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
@@ -18,15 +22,6 @@ use std::{
     time::Instant,
     vec::Vec,
 };
-use tray_icon::{Icon, TrayIconBuilder, menu::Menu};
-
-/// 从文件中加载图标。
-pub fn load_icon_from_file(path: &str) -> Result<Icon, Box<dyn std::error::Error>> {
-    let image = image::open(path)?.into_rgba8();
-    let (width, height) = image.dimensions();
-    let color = image.into_raw();
-    Ok(Icon::from_rgba(color, width, height)?)
-}
 
 /// 创建格式化的JSON文件。
 pub fn create_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
@@ -152,42 +147,60 @@ pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, s
 /// 配置文件。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Config {
-    /// 显示的语言（注意：此值修改到大于实际语言数目极有可能导致程序崩溃！）。
-    pub language: u8,
-    /// 总共有多少种语言已被支持（注意：此值修改到大于实际语言数目极有可能导致程序崩溃！）。
-    pub amount_languages: u8,
     /// 是否启用严格模式：严格模式下，当遇到无法处理的情况时，将直接panic；若未启用严格模式，则会发出一条问题报告来描述情况。
-    pub rc_strict_mode: bool,
+    pub strict_mode: bool,
     /// 问题反馈音效（留空即可禁用）。
     pub problem_report_sound: String,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            strict_mode: true,
+            problem_report_sound: String::new(),
+        }
+    }
+}
+
 impl Config {
+    #[inline]
+    pub fn strict_mode(mut self, strict_mode: bool) -> Self {
+        self.strict_mode = strict_mode;
+        self
+    }
+
+    #[inline]
+    pub fn problem_report_sound(mut self, problem_report_sound: &str) -> Self {
+        self.problem_report_sound = problem_report_sound.to_string();
+        self
+    }
+
     pub fn from_json_value(value: &JsonValue) -> Option<Self> {
         Some(Self {
-            language: value["language"].as_u8()?,
-            amount_languages: value["amount_languages"].as_u8()?,
-            rc_strict_mode: value["rc_strict_mode"].as_bool()?,
+            strict_mode: value["strict_mode"].as_bool()?,
             problem_report_sound: value["problem_report_sound"].as_str()?.to_string(),
         })
     }
 
     pub fn to_json_value(&self) -> JsonValue {
         json::object! {
-            language: self.language,
-            amount_languages: self.amount_languages,
-            rc_strict_mode: self.rc_strict_mode,
+            strict_mode: self.strict_mode,
+            problem_report_sound: self.problem_report_sound.clone(),
         }
     }
 }
 
 /// 统一的文本调用处。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AppText {
     pub app_text: HashMap<String, Vec<String>>,
 }
 
 impl AppText {
+    pub fn new(app_text: HashMap<String, Vec<String>>) -> Self {
+        Self { app_text }
+    }
+
     pub fn from_json_value(value: &JsonValue) -> Option<Self> {
         // 检查 app_text 字段是否为对象
         if !value["app_text"].is_object() {
@@ -295,7 +308,7 @@ pub enum SeverityLevel {
 }
 
 /// 核心特征，用于统一管理Rust Constructor资源。
-pub trait RustConstructorResource {
+pub trait RustConstructorResource: Debug {
     /// 返回资源名称。
     fn name(&self) -> &str;
 
@@ -303,12 +316,18 @@ pub trait RustConstructorResource {
     fn expose_type(&self) -> &str;
 
     /// 注册资源。
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>);
-
-    /// 匹配资源。
-    fn match_resource(&self, resource_name: &str, resource_type: &str) -> bool {
-        resource_name == self.name() && resource_type == self.expose_type()
+    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
+        render_list.push(RenderResource {
+            discern_type: self.expose_type().to_string(),
+            name: self.name().to_string(),
+        });
     }
+
+    /// 用于不可变类型转换。
+    fn as_any(&self) -> &dyn Any;
+
+    /// 用于可变类型转换。
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl RustConstructorResource for PageData {
@@ -320,11 +339,12 @@ impl RustConstructorResource for PageData {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -380,6 +400,17 @@ pub struct Timer {
     pub now_time: f32,
 }
 
+impl Default for Timer {
+    fn default() -> Self {
+        Timer {
+            start_time: 0_f32,
+            total_time: 0_f32,
+            timer: Instant::now(),
+            now_time: 0_f32,
+        }
+    }
+}
+
 impl RustConstructorResource for ImageTexture {
     fn name(&self) -> &str {
         &self.name
@@ -389,21 +420,39 @@ impl RustConstructorResource for ImageTexture {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+/// 为图片纹理支持派生Debug特征。
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct DebugTextureHandle(TextureHandle);
+
+impl std::fmt::Debug for DebugTextureHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 只输出类型信息，不输出具体纹理数据
+        f.debug_struct("DebugTextureHandle").finish()
+    }
+}
+
+impl DebugTextureHandle {
+    pub fn new(texture_handle: TextureHandle) -> Self {
+        Self(texture_handle)
     }
 }
 
 /// 用于存储图片纹理的RC资源。
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ImageTexture {
     pub discern_type: String,
     pub name: String,
     /// 图片纹理。
-    pub texture: Option<egui::TextureHandle>,
+    pub texture: Option<DebugTextureHandle>,
     /// 图片路径。
     pub cite_path: String,
 }
@@ -436,11 +485,12 @@ impl RustConstructorResource for CustomRect {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -565,21 +615,22 @@ impl RustConstructorResource for Image {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
 /// RC的图片资源。
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Image {
     pub discern_type: String,
     pub name: String,
     /// 图片纹理。
-    pub texture: Option<egui::TextureHandle>,
+    pub texture: Option<DebugTextureHandle>,
     /// 图片位置。
     pub position: [f32; 2],
     /// 图片大小。
@@ -694,11 +745,12 @@ impl RustConstructorResource for Text {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -891,11 +943,12 @@ impl RustConstructorResource for Variable {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -919,7 +972,19 @@ impl Default for Variable {
 }
 
 impl Variable {
-    pub fn new<T: Into<Value>>(self, name: &str, value: T) -> Self {
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn value<T: Into<Value>>(mut self, value: T) -> Self {
+        self.value = value.into();
+        self
+    }
+
+    pub fn new<T: Into<Value>>(name: &str, value: T) -> Self {
         Self {
             discern_type: String::from("Variable"),
             name: String::from(name),
@@ -927,51 +992,51 @@ impl Variable {
         }
     }
 
-    pub fn from_bool(self, name: &str, value: bool) -> Self {
+    pub fn from_bool(name: &str, value: bool) -> Self {
         Self {
+            discern_type: String::from("Variable"),
             name: String::from(name),
             value: Value::Bool(value),
-            ..self
         }
     }
 
-    pub fn from_int(self, name: &str, value: i32) -> Self {
+    pub fn from_int(name: &str, value: i32) -> Self {
         Self {
+            discern_type: String::from("Variable"),
             name: String::from(name),
             value: Value::Int(value),
-            ..self
         }
     }
 
-    pub fn from_uint(self, name: &str, value: u32) -> Self {
+    pub fn from_uint(name: &str, value: u32) -> Self {
         Self {
+            discern_type: String::from("Variable"),
             name: String::from(name),
             value: Value::UInt(value),
-            ..self
         }
     }
 
-    pub fn from_float(self, name: &str, value: f32) -> Self {
+    pub fn from_float(name: &str, value: f32) -> Self {
         Self {
+            discern_type: String::from("Variable"),
             name: String::from(name),
             value: Value::Float(value),
-            ..self
         }
     }
 
-    pub fn from_vec(self, name: &str, value: Vec<Value>) -> Self {
+    pub fn from_vec(name: &str, value: Vec<Value>) -> Self {
         Self {
+            discern_type: String::from("Variable"),
             name: String::from(name),
             value: Value::Vec(value),
-            ..self
         }
     }
 
-    pub fn from_string<T: Into<String>>(self, name: &str, value: T) -> Self {
+    pub fn from_string<T: Into<String>>(name: &str, value: T) -> Self {
         Self {
+            discern_type: String::from("Variable"),
             name: String::from(name),
             value: Value::String(value.into()),
-            ..self
         }
     }
 }
@@ -1021,11 +1086,12 @@ impl RustConstructorResource for Font {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -1038,11 +1104,12 @@ impl RustConstructorResource for SplitTime {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -1082,11 +1149,12 @@ impl RustConstructorResource for Switch {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -1303,37 +1371,13 @@ impl RustConstructorResource for MessageBox {
         &self.discern_type
     }
 
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name.to_string(),
-        });
+    fn as_any(&self) -> &dyn Any {
+        self
     }
-}
 
-/// 用于将RC资源存储进vec的枚举。
-#[derive(Clone)]
-pub enum RCR {
-    /// 图片。
-    Image(Image),
-    /// 文本。
-    Text(Text),
-    /// 自定义矩形。
-    CustomRect(CustomRect),
-    /// 变量
-    Variable(Variable),
-    /// 字体。
-    Font(Font),
-    /// 时间分段。
-    SplitTime(SplitTime),
-    /// 开关。
-    Switch(Switch),
-    /// 消息框。
-    MessageBox(MessageBox),
-    /// 图片纹理。
-    ImageTexture(ImageTexture),
-    /// 页面数据。
-    PageData(PageData),
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 /// RC资源最基本的错误处理。
@@ -1343,6 +1387,8 @@ pub enum RustConstructorError {
     ImageGetFailed { image_path: String },
     /// 图片未找到。
     ImageNotFound { image_name: String },
+    /// 图片纹理未找到。
+    ImageTextureNotFound { image_texture_name: String },
     /// 文本未找到。
     TextNotFound { text_name: String },
     /// 变量未找到。
@@ -1371,6 +1417,8 @@ pub enum RustConstructorError {
     FontGetFailed { font_path: String },
     /// 字体未找到。
     FontNotFound { font_name: String },
+    /// 矩形未找到。
+    RectNotFound { rect_name: String },
     /// 资源未找到。
     ResourceNotFound {
         resource_name: String,
@@ -1379,6 +1427,14 @@ pub enum RustConstructorError {
     /// 页面未找到。
     PageNotFound { page_name: String },
 }
+
+impl std::fmt::Display for RustConstructorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
+impl Error for RustConstructorError {}
 
 impl Default for RustConstructorError {
     fn default() -> Self {
@@ -1413,56 +1469,53 @@ pub enum VerticalAlign {
 }
 
 /// 程序主体。
-#[derive(Clone)]
+#[derive(Debug, Default)]
 pub struct App {
     /// 配置项。
     pub config: Config,
     /// 文本。
     pub app_text: AppText,
     /// RC资源。
-    pub rust_constructor_resource: Vec<RCR>,
+    pub rust_constructor_resource: Vec<Box<dyn RustConstructorResource>>,
     /// 渲染资源列表。
     pub render_resource_list: Vec<RenderResource>,
     /// 问题列表。
     pub problem_list: Vec<Problem>,
     /// RC资源刷新率。
-    pub vertrefresh: f32,
+    pub tick_interval: f32,
     /// 当前页面。
-    pub page: String,
+    pub current_page: String,
     /// 计时器。
     pub timer: Timer,
     /// 帧时间。
     pub frame_times: Vec<f32>,
     /// 上一帧时间。
     pub last_frame_time: Option<f64>,
-    /// 托盘图标。
-    pub tray_icon: Option<tray_icon::TrayIcon>,
-    /// 托盘图标是否已创建。
-    pub tray_icon_created: bool,
 }
 
 impl App {
-    /// 初始化程序。
-    pub fn new(config: Config, app_text: AppText) -> Self {
-        Self {
-            config,
-            app_text,
-            rust_constructor_resource: vec![],
-            render_resource_list: Vec::new(),
-            problem_list: Vec::new(),
-            vertrefresh: 0.01,
-            page: "Launch".to_string(),
-            timer: Timer {
-                start_time: 0.0,
-                total_time: 0.0,
-                timer: Instant::now(),
-                now_time: 0.0,
-            },
-            frame_times: Vec::new(),
-            last_frame_time: None,
-            tray_icon: None,
-            tray_icon_created: false,
-        }
+    #[inline]
+    pub fn config(mut self, config: Config) -> Self {
+        self.config = config;
+        self
+    }
+
+    #[inline]
+    pub fn app_text(mut self, app_text: AppText) -> Self {
+        self.app_text = app_text;
+        self
+    }
+
+    #[inline]
+    pub fn tick_interval(mut self, tick_interval: f32) -> Self {
+        self.tick_interval = tick_interval;
+        self
+    }
+
+    #[inline]
+    pub fn current_page(mut self, current_page: &str) -> Self {
+        self.current_page = current_page.to_string();
+        self
     }
 
     /// 整合所有页面需要一次性处理的功能。
@@ -1473,8 +1526,7 @@ impl App {
         self.render_resource_list = Vec::new();
         // 更新计时器
         self.update_timer();
-        if let Ok(id) = self.get_resource_index("PageData", &self.page.clone())
-            && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone()
+        if let Ok(pd) = self.get_resource::<PageData>(&self.current_page.clone(), "PageData")
             && pd.forced_update
         {
             // 请求重新绘制界面
@@ -1486,167 +1538,168 @@ impl App {
     pub fn add_page(&mut self, mut page_data: PageData) {
         page_data.change_page_updated = false;
         page_data.enter_page_updated = false;
-        self.rust_constructor_resource
-            .push(RCR::PageData(page_data));
+        self.rust_constructor_resource.push(Box::new(page_data));
     }
 
     /// 切换页面。
-    pub fn switch_page(&mut self, page: &str) {
-        if let Ok(id) = self.get_resource_index("PageData", page) {
-            self.page = page.to_string();
-            if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
-                pd.enter_page_updated = false;
-                self.timer.start_time = self.timer.total_time;
-                self.update_timer();
-            };
-        };
+    pub fn switch_page(&mut self, page: &str) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(page, "PageData") {
+            self.current_page = page.to_string();
+            let pd = self.get_resource_mut::<PageData>(page, "PageData").unwrap();
+            pd.enter_page_updated = false;
+            self.timer.start_time = self.timer.total_time;
+            self.update_timer();
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::PageNotFound {
+                    page_name: page.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::PageNotFound {
+                page_name: page.to_string(),
+            })
+        }
     }
 
-    /// 初始化托盘图标。
-    pub fn tray_icon_init(&mut self, icon_path: &str, tooltip: &str, menu: Box<Menu>) {
-        let icon = load_icon_from_file(icon_path).unwrap();
-        if let Ok(tray_icon) = TrayIconBuilder::new()
-            .with_menu(menu)
-            .with_tooltip(tooltip)
-            .with_icon(icon)
-            .with_icon_as_template(true)
-            .build()
+    /// 从指定列表中替换资源。
+    pub fn replace_resource_custom<T>(
+        &self,
+        name: &str,
+        discern_type: &str,
+        resource: T,
+        mut target: Vec<Box<dyn RustConstructorResource>>,
+    ) -> Result<(), RustConstructorError>
+    where
+        T: RustConstructorResource + 'static,
+    {
+        if let Some(index) = self
+            .rust_constructor_resource
+            .iter()
+            .position(|x| x.name() == name && x.expose_type() == discern_type)
         {
-            self.tray_icon = Some(tray_icon);
-            self.tray_icon_created = true;
-        };
+            target[index] = Box::new(resource);
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
+                    resource_name: name.to_string(),
+                    resource_type: discern_type.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ResourceNotFound {
+                resource_name: name.to_string(),
+                resource_type: discern_type.to_string(),
+            })
+        }
+    }
+
+    /// 从列表中替换资源。
+    pub fn replace_resource<T>(
+        &mut self,
+        name: &str,
+        discern_type: &str,
+        resource: T,
+    ) -> Result<(), RustConstructorError>
+    where
+        T: RustConstructorResource + 'static,
+    {
+        if let Some(index) = self
+            .rust_constructor_resource
+            .iter()
+            .position(|x| x.name() == name && x.expose_type() == discern_type)
+        {
+            self.rust_constructor_resource[index] = Box::new(resource);
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
+                    resource_name: name.to_string(),
+                    resource_type: discern_type.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ResourceNotFound {
+                resource_name: name.to_string(),
+                resource_type: discern_type.to_string(),
+            })
+        }
+    }
+
+    /// 从列表中获取不可变资源。
+    pub fn get_resource<T>(
+        &self,
+        name: &str,
+        discern_type: &str,
+    ) -> Result<&T, RustConstructorError>
+    where
+        T: RustConstructorResource + 'static,
+    {
+        if self.check_resource_exists(name, discern_type) {
+            Ok(self
+                .rust_constructor_resource
+                .iter()
+                .find(|resource| resource.name() == name && resource.expose_type() == discern_type)
+                .and_then(|resource| resource.as_any().downcast_ref::<T>())
+                .unwrap())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
+                    resource_name: name.to_string(),
+                    resource_type: discern_type.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ResourceNotFound {
+                resource_name: name.to_string(),
+                resource_type: discern_type.to_string(),
+            })
+        }
+    }
+
+    /// 从列表中获取可变资源。
+    pub fn get_resource_mut<T>(
+        &mut self,
+        name: &str,
+        discern_type: &str,
+    ) -> Result<&mut T, RustConstructorError>
+    where
+        T: RustConstructorResource + 'static,
+    {
+        if self.check_resource_exists(name, discern_type) {
+            Ok(self
+                .rust_constructor_resource
+                .iter_mut()
+                .find(|resource| resource.name() == name && resource.expose_type() == discern_type)
+                .and_then(|resource| resource.as_any_mut().downcast_mut::<T>())
+                .unwrap())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
+                    resource_name: name.to_string(),
+                    resource_type: discern_type.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ResourceNotFound {
+                resource_name: name.to_string(),
+                resource_type: discern_type.to_string(),
+            })
+        }
     }
 
     /// 检查是否存在特定资源。
-    pub fn check_resource_exists(&mut self, resource_type: &str, resource_name: &str) -> bool {
-        for i in 0..self.rust_constructor_resource.len() {
-            match self.rust_constructor_resource[i].clone() {
-                RCR::Image(im) => {
-                    if im.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::Text(t) => {
-                    if t.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::CustomRect(cr) => {
-                    if cr.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::Variable(v) => {
-                    if v.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::Font(f) => {
-                    if f.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::SplitTime(st) => {
-                    if st.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::Switch(s) => {
-                    if s.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::MessageBox(mb) => {
-                    if mb.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::ImageTexture(it) => {
-                    if it.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-                RCR::PageData(pd) => {
-                    if pd.match_resource(resource_name, resource_type) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    /// 获取资源索引。
-    pub fn get_resource_index(
-        &mut self,
-        resource_type: &str,
-        resource_name: &str,
-    ) -> Result<usize, RustConstructorError> {
-        for i in 0..self.rust_constructor_resource.len() {
-            match self.rust_constructor_resource[i].clone() {
-                RCR::Image(im) => {
-                    if im.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::Text(t) => {
-                    if t.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::CustomRect(cr) => {
-                    if cr.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::Variable(v) => {
-                    if v.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::Font(f) => {
-                    if f.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::SplitTime(st) => {
-                    if st.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::Switch(s) => {
-                    if s.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::MessageBox(mb) => {
-                    if mb.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::ImageTexture(it) => {
-                    if it.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-                RCR::PageData(pd) => {
-                    if pd.match_resource(resource_name, resource_type) {
-                        return Ok(i);
-                    }
-                }
-            };
-        }
-        self.problem_report(
-            RustConstructorError::ResourceNotFound {
-                resource_name: resource_name.to_string(),
-                resource_type: resource_type.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::ResourceNotFound {
-            resource_name: resource_name.to_string(),
-            resource_type: resource_type.to_string(),
-        })
+    pub fn check_resource_exists(&self, name: &str, discern_type: &str) -> bool {
+        self.rust_constructor_resource
+            .iter()
+            .any(|x| x.name() == name && x.expose_type() == discern_type)
     }
 
     /// 添加字体资源。
@@ -1675,29 +1728,29 @@ impl App {
                 .insert(0, font.name.to_owned());
 
             font.font_definitions = fonts;
-            self.rust_constructor_resource.push(RCR::Font(font));
+            self.rust_constructor_resource.push(Box::new(font));
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::FontGetFailed {
                     font_path: font.path.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
         };
     }
 
     /// 输出字体资源。
     pub fn font(&mut self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Font", name)
-            && let RCR::Font(f) = &mut self.rust_constructor_resource[id]
-        {
+        if let Ok(f) = self.get_resource::<Font>(name, "Font") {
             return Ok(f.font_definitions.clone());
         }
-        self.problem_report(
+        self.problem_report_custom(
             RustConstructorError::FontNotFound {
                 font_name: name.to_string(),
             },
             SeverityLevel::SevereWarning,
+            self.problem_list.clone(),
         );
         Err(RustConstructorError::FontNotFound {
             font_name: name.to_string(),
@@ -1709,7 +1762,10 @@ impl App {
         let mut font_definitions = egui::FontDefinitions::default();
         let mut font_resources = Vec::new();
         for i in 0..self.rust_constructor_resource.len() {
-            if let RCR::Font(f) = &self.rust_constructor_resource[i] {
+            if let Some(f) = self.rust_constructor_resource[i]
+                .as_any()
+                .downcast_ref::<Font>()
+            {
                 font_resources.push(f.clone());
             };
         }
@@ -1769,12 +1825,16 @@ impl App {
                 format!("Image not found: {}", image_name,),
                 "Please check whether the image has been added.",
             ),
+            RustConstructorError::ImageTextureNotFound { image_texture_name } => (
+                format!("Image texture not found: {}", image_texture_name,),
+                "Please check whether the image texture has been added.",
+            ),
             RustConstructorError::TextNotFound { text_name } => (
                 format!("Text not found: {}", text_name,),
                 "Please check whether the text has been added.",
             ),
             RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
-                format!("Message box already exists: {}", message_box_name),
+                format!("Message box already exists: {}", message_box_name,),
                 "Please check whether the code for generating the message box has been accidentally called multiple times.",
             ),
             RustConstructorError::SplitTimeNotFound { split_time_name } => (
@@ -1827,6 +1887,10 @@ impl App {
                 format!("Variable is not vec: {}", variable_name,),
                 "Please check whether the variable names and types are correct and whether there are duplicate items.",
             ),
+            RustConstructorError::RectNotFound { rect_name } => (
+                format!("Rect not found: {}", rect_name,),
+                "Please check whether the rect has been added.",
+            ),
             RustConstructorError::ResourceNotFound {
                 resource_name,
                 resource_type,
@@ -1839,7 +1903,7 @@ impl App {
             ),
         };
         // 如果处于严格模式下，则直接崩溃！
-        if self.config.rc_strict_mode {
+        if self.config.strict_mode {
             panic!("{}", problem);
         } else {
             let sound = self.config.problem_report_sound.clone();
@@ -1851,7 +1915,130 @@ impl App {
                 problem,
                 annotation: annotation.to_string(),
                 report_state: ReportState {
-                    current_page: self.page.clone(),
+                    current_page: self.current_page.clone(),
+                    current_total_runtime: self.timer.total_time,
+                    current_page_runtime: self.timer.now_time,
+                },
+                problem_type: problem_type.clone(),
+            });
+        };
+    }
+
+    /// 发生问题时向指定列表推送报告。
+    pub fn problem_report_custom(
+        &self,
+        problem_type: RustConstructorError,
+        severity_level: SeverityLevel,
+        mut problem_storage: Vec<Problem>,
+    ) {
+        let (problem, annotation) = match problem_type.clone() {
+            RustConstructorError::FontGetFailed { font_path } => (
+                format!("Font get failed: {}", font_path,),
+                "Please check if the font file exists and the path is correct.",
+            ),
+            RustConstructorError::FontNotFound { font_name } => (
+                format!("Font not found: {}", font_name,),
+                "Please check whether the font has been added.",
+            ),
+            RustConstructorError::ImageGetFailed { image_path } => (
+                format!("Image get failed: {}", image_path,),
+                "Please check whether the image path is correct and whether the image has been added.",
+            ),
+            RustConstructorError::ImageNotFound { image_name } => (
+                format!("Image not found: {}", image_name,),
+                "Please check whether the image has been added.",
+            ),
+            RustConstructorError::ImageTextureNotFound { image_texture_name } => (
+                format!("Image texture not found: {}", image_texture_name,),
+                "Please check whether the image texture has been added.",
+            ),
+            RustConstructorError::TextNotFound { text_name } => (
+                format!("Text not found: {}", text_name,),
+                "Please check whether the text has been added.",
+            ),
+            RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
+                format!("Message box already exists: {}", message_box_name,),
+                "Please check whether the code for generating the message box has been accidentally called multiple times.",
+            ),
+            RustConstructorError::SplitTimeNotFound { split_time_name } => (
+                format!("Split time not found: {}", split_time_name,),
+                "Please check whether the split time has been added.",
+            ),
+            RustConstructorError::SwitchAppearanceMismatch {
+                switch_name,
+                differ,
+            } => (
+                format!(
+                    "Switch appearance list's number of items is large / small {} more: {}",
+                    differ, switch_name
+                ),
+                "Please check whether the number of appearance list items matches the number of enabled animations.",
+            ),
+            RustConstructorError::SwitchNotFound { switch_name } => (
+                format!("Switch not found: {}", switch_name,),
+                "Please check whether the switch has been added.",
+            ),
+            RustConstructorError::PageNotFound { page_name } => (
+                format!("Page not found: {}", page_name,),
+                "Please check whether the page has been added.",
+            ),
+            RustConstructorError::VariableNotFound { variable_name } => (
+                format!("Variable not found: {}", variable_name,),
+                "Please check whether the variable has been added.",
+            ),
+            RustConstructorError::VariableNotBool { variable_name } => (
+                format!("Variable is not bool: {}", variable_name,),
+                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+            ),
+            RustConstructorError::VariableNotFloat { variable_name } => (
+                format!("Variable is not f32: {}", variable_name,),
+                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+            ),
+            RustConstructorError::VariableNotInt { variable_name } => (
+                format!("Variable is not int: {}", variable_name,),
+                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+            ),
+            RustConstructorError::VariableNotString { variable_name } => (
+                format!("Variable is not string: {}", variable_name,),
+                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+            ),
+            RustConstructorError::VariableNotUInt { variable_name } => (
+                format!("Variable is not uint: {}", variable_name,),
+                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+            ),
+            RustConstructorError::VariableNotVec { variable_name } => (
+                format!("Variable is not vec: {}", variable_name,),
+                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+            ),
+            RustConstructorError::RectNotFound { rect_name } => (
+                format!("Rect not found: {}", rect_name,),
+                "Please check whether the rect has been added.",
+            ),
+            RustConstructorError::ResourceNotFound {
+                resource_name,
+                resource_type,
+            } => (
+                format!(
+                    "Resource not found: {}(\"{}\")",
+                    resource_type, resource_name,
+                ),
+                "Please check whether the resource has been added.",
+            ),
+        };
+        // 如果处于严格模式下，则直接崩溃！
+        if self.config.strict_mode {
+            panic!("{}", problem);
+        } else {
+            let sound = self.config.problem_report_sound.clone();
+            std::thread::spawn(move || {
+                play_wav(&sound).unwrap_or(0_f64);
+            });
+            problem_storage.push(Problem {
+                severity_level,
+                problem,
+                annotation: annotation.to_string(),
+                report_state: ReportState {
+                    current_page: self.current_page.clone(),
                     current_total_runtime: self.timer.total_time,
                     current_page_runtime: self.timer.now_time,
                 },
@@ -1862,54 +2049,70 @@ impl App {
 
     /// 检查页面是否已完成首次加载。
     pub fn check_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("PageData", name)
-            && let RCR::PageData(pd) = self.rust_constructor_resource[id].clone()
-        {
+        if self.check_resource_exists(name, "PageData") {
+            let pd = self
+                .get_resource::<PageData>(name, "PageData")
+                .unwrap()
+                .clone();
             if !pd.change_page_updated {
-                self.new_page_update(name);
+                self.new_page_update(name).unwrap();
             };
-            return Ok(pd.change_page_updated);
-        };
-        self.problem_report(
-            RustConstructorError::PageNotFound {
+            Ok(pd.change_page_updated)
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::PageNotFound {
+                    page_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::PageNotFound {
-            page_name: name.to_string(),
-        })
+            })
+        }
     }
 
     /// 检查页面是否已完成加载。
     pub fn check_enter_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("PageData", name)
-            && let RCR::PageData(pd) = &mut self.rust_constructor_resource[id]
-        {
+        if self.check_resource_exists(name, "PageData") {
+            let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
             let return_value = pd.enter_page_updated;
             pd.enter_page_updated = true;
-            return Ok(return_value);
-        };
-        self.problem_report(
-            RustConstructorError::PageNotFound {
+            Ok(return_value)
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::PageNotFound {
+                    page_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::PageNotFound {
-            page_name: name.to_string(),
-        })
+            })
+        }
     }
 
     /// 进入新页面时的更新。
-    pub fn new_page_update(&mut self, name: &str) {
-        if let Ok(id) = self.get_resource_index("PageData", name) {
+    pub fn new_page_update(&mut self, name: &str) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "PageData") {
             self.timer.start_time = self.timer.total_time;
             self.update_timer();
-            if let RCR::PageData(pd) = &mut self.rust_constructor_resource[id] {
-                pd.change_page_updated = true;
-            };
-        };
+            let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
+            pd.change_page_updated = true;
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::PageNotFound {
+                    page_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::PageNotFound {
+                page_name: name.to_string(),
+            })
+        }
     }
 
     /// 更新帧数。
@@ -1939,41 +2142,49 @@ impl App {
     /// 添加分段时间。
     pub fn add_split_time(&mut self, mut split_time: SplitTime) {
         split_time.time = [self.timer.now_time, self.timer.total_time];
-        self.rust_constructor_resource
-            .push(RCR::SplitTime(split_time));
+        self.rust_constructor_resource.push(Box::new(split_time));
     }
 
     /// 重置分段时间。
-    pub fn reset_split_time(&mut self, name: &str) {
-        if let Ok(id) = self.get_resource_index("SplitTime", name)
-            && let RCR::SplitTime(st) = &mut self.rust_constructor_resource[id]
-        {
-            st.time = [self.timer.now_time, self.timer.total_time];
-        };
-        self.problem_report(
-            RustConstructorError::SplitTimeNotFound {
+    pub fn reset_split_time(&mut self, name: &str) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "SplitTime") {
+            let new_time = [self.timer.now_time, self.timer.total_time];
+            let st = self
+                .get_resource_mut::<SplitTime>(name, "SplitTime")
+                .unwrap();
+            st.time = new_time;
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::SplitTimeNotFound {
+                    split_time_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::SplitTimeNotFound {
                 split_time_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
+            })
+        }
     }
 
     /// 输出分段时间。
-    pub fn split_time(&mut self, name: &str) -> Result<[f32; 2], RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("SplitTime", name)
-            && let RCR::SplitTime(st) = self.rust_constructor_resource[id].clone()
-        {
-            return Ok(st.time);
-        };
-        self.problem_report(
-            RustConstructorError::SplitTimeNotFound {
+    pub fn split_time(&self, name: &str) -> Result<[f32; 2], RustConstructorError> {
+        if self.check_resource_exists(name, "SplitTime") {
+            let st = self.get_resource::<SplitTime>(name, "SplitTime").unwrap();
+            Ok(st.time)
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::SplitTimeNotFound {
+                    split_time_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::SplitTimeNotFound {
                 split_time_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::SplitTimeNotFound {
-            split_time_name: name.to_string(),
-        })
+            })
+        }
     }
 
     /// 更新计时器。
@@ -1987,16 +2198,22 @@ impl App {
 
     /// 添加矩形资源。
     pub fn add_custom_rect(&mut self, custom_rect: CustomRect) {
-        self.rust_constructor_resource
-            .push(RCR::CustomRect(custom_rect));
+        self.rust_constructor_resource.push(Box::new(custom_rect));
     }
 
     /// 显示矩形资源。
-    pub fn custom_rect(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("CustomRect", name)
-            && let RCR::CustomRect(cr) = &mut self.rust_constructor_resource[id]
-        {
-            cr.reg_render_resource(&mut self.render_resource_list);
+    pub fn custom_rect(
+        &mut self,
+        name: &str,
+        ui: &mut Ui,
+        ctx: &egui::Context,
+    ) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "CustomRect") {
+            let render_resource_list = &mut self.render_resource_list.clone();
+            let cr = self
+                .get_resource_mut::<CustomRect>(name, "CustomRect")
+                .unwrap();
+            cr.reg_render_resource(render_resource_list);
             cr.position[0] = match cr.x_grid[1] {
                 0 => cr.origin_position[0],
                 _ => {
@@ -2041,27 +2258,52 @@ impl App {
                 },
                 egui::StrokeKind::Inside,
             );
-        };
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::RectNotFound {
+                    rect_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::RectNotFound {
+                rect_name: name.to_string(),
+            })
+        }
     }
 
     /// 添加文本资源。
     pub fn add_text(&mut self, text: Text) {
-        self.rust_constructor_resource.push(RCR::Text(text));
+        self.rust_constructor_resource.push(Box::new(text));
     }
 
     /// 显示文本资源。
-    pub fn text(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("Text", name)
-            && let RCR::Text(mut t) = self.rust_constructor_resource[id].clone()
-        {
+    pub fn text(
+        &mut self,
+        name: &str,
+        ui: &mut Ui,
+        ctx: &egui::Context,
+    ) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "Text") {
+            let mut t = self.get_resource::<Text>(name, "Text").unwrap().clone();
             t.reg_render_resource(&mut self.render_resource_list);
             // 计算文本大小
-            let galley = ui.fonts(|f| {
+            let galley: Arc<Galley> = ui.fonts_mut(|f| {
                 f.layout(
                     t.content.to_string(),
-                    if self.check_resource_exists("Font", &t.font.clone()) {
+                    if self.check_resource_exists(&t.font.clone(), "Font") {
                         FontId::new(t.font_size, egui::FontFamily::Name(t.font.clone().into()))
                     } else {
+                        if !t.font.is_empty() {
+                            self.problem_report_custom(
+                                RustConstructorError::FontNotFound {
+                                    font_name: t.font.clone(),
+                                },
+                                SeverityLevel::MildWarning,
+                                self.problem_list.clone(),
+                            );
+                        };
                         FontId::proportional(t.font_size)
                     },
                     Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]),
@@ -2596,20 +2838,27 @@ impl App {
                 };
             }
             t.last_frame_content = t.content.clone();
-            self.rust_constructor_resource[id] = RCR::Text(t);
-        };
+            self.replace_resource(name, "Text", t).unwrap();
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::TextNotFound {
+                    text_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::TextNotFound {
+                text_name: name.to_string(),
+            })
+        }
     }
 
     /// 获取文本大小。
-    pub fn get_text_size(
-        &mut self,
-        resource_name: &str,
-        ui: &mut Ui,
-    ) -> Result<[f32; 2], RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Text", resource_name)
-            && let RCR::Text(t) = self.rust_constructor_resource[id].clone()
-        {
-            let galley = ui.fonts(|f| {
+    pub fn get_text_size(&self, name: &str, ui: &mut Ui) -> Result<[f32; 2], RustConstructorError> {
+        if self.check_resource_exists(name, "Text") {
+            let t = self.get_resource::<Text>(name, "Text").unwrap();
+            let galley = ui.fonts_mut(|f| {
                 f.layout(
                     t.content.to_string(),
                     FontId::proportional(t.font_size),
@@ -2617,82 +2866,96 @@ impl App {
                     t.wrap_width,
                 )
             });
-            return Ok([galley.size().x, galley.size().y]);
-        };
-        self.problem_report(
-            RustConstructorError::TextNotFound {
-                text_name: resource_name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::TextNotFound {
-            text_name: resource_name.to_string(),
-        })
+            Ok([galley.size().x, galley.size().y])
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::TextNotFound {
+                    text_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::TextNotFound {
+                text_name: name.to_string(),
+            })
+        }
     }
 
     /// 添加变量资源。
     pub fn add_var(&mut self, variable: Variable) {
-        self.rust_constructor_resource.push(RCR::Variable(variable));
+        self.rust_constructor_resource.push(Box::new(variable));
     }
 
     /// 修改变量资源。
-    pub fn modify_var<T: Into<Value>>(&mut self, name: &str, value: T) {
-        if let Ok(id) = self.get_resource_index("Variable", name)
-            && let RCR::Variable(v) = &mut self.rust_constructor_resource[id]
-        {
+    pub fn modify_var<T: Into<Value>>(
+        &mut self,
+        name: &str,
+        value: T,
+    ) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource_mut::<Variable>(name, "Variable").unwrap();
             v.value = value.into();
-        };
-    }
-
-    /// 取出Value变量。
-    pub fn var(&mut self, name: &str) -> Result<Value, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name)
-            && let RCR::Variable(v) = self.rust_constructor_resource[id].clone()
-        {
-            return Ok(v.clone().value);
-        };
-        self.problem_report(
-            RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::VariableNotFound {
-            variable_name: name.to_string(),
-        })
-    }
-
-    /// 取出i32变量。
-    pub fn var_i(&mut self, name: &str) -> Result<i32, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                match &v.value {
-                    // 直接访问 value 字段
-                    Value::Int(i) => Ok(*i),
-                    _ => {
-                        self.problem_report(
-                            RustConstructorError::VariableNotInt {
-                                variable_name: name.to_string(),
-                            },
-                            SeverityLevel::SevereWarning,
-                        );
-                        Err(RustConstructorError::VariableNotInt {
-                            variable_name: name.to_string(),
-                        })
-                    }
-                }
-            } else {
-                // 正常情况下不会触发。
-                Err(RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                })
-            }
+            Ok(())
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::VariableNotFound {
+                variable_name: name.to_string(),
+            })
+        }
+    }
+
+    /// 取出Value变量。
+    pub fn var(&self, name: &str) -> Result<Value, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            Ok(v.value.clone())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::VariableNotFound {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::VariableNotFound {
+                variable_name: name.to_string(),
+            })
+        }
+    }
+
+    /// 取出i32变量。
+    pub fn var_i(&self, name: &str) -> Result<i32, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            match &v.value {
+                // 直接访问 value 字段
+                Value::Int(i) => Ok(*i),
+                _ => {
+                    self.problem_report_custom(
+                        RustConstructorError::VariableNotInt {
+                            variable_name: name.to_string(),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    Err(RustConstructorError::VariableNotInt {
+                        variable_name: name.to_string(),
+                    })
+                }
+            }
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::VariableNotFound {
+                    variable_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2701,36 +2964,32 @@ impl App {
     }
 
     /// 取出u32资源。
-    pub fn var_u(&mut self, name: &str) -> Result<u32, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                match &v.value {
-                    // 直接访问 value 字段
-                    Value::UInt(u) => Ok(*u),
-                    _ => {
-                        self.problem_report(
-                            RustConstructorError::VariableNotUInt {
-                                variable_name: name.to_string(),
-                            },
-                            SeverityLevel::SevereWarning,
-                        );
-                        Err(RustConstructorError::VariableNotUInt {
+    pub fn var_u(&self, name: &str) -> Result<u32, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            match &v.value {
+                // 直接访问 value 字段
+                Value::UInt(u) => Ok(*u),
+                _ => {
+                    self.problem_report_custom(
+                        RustConstructorError::VariableNotUInt {
                             variable_name: name.to_string(),
-                        })
-                    }
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    Err(RustConstructorError::VariableNotUInt {
+                        variable_name: name.to_string(),
+                    })
                 }
-            } else {
-                // 正常情况下不会触发。
-                Err(RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                })
             }
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2739,36 +2998,32 @@ impl App {
     }
 
     /// 取出f32资源。
-    pub fn var_f(&mut self, name: &str) -> Result<f32, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                match &v.value {
-                    // 直接访问 value 字段
-                    Value::Float(f) => Ok(*f),
-                    _ => {
-                        self.problem_report(
-                            RustConstructorError::VariableNotFloat {
-                                variable_name: name.to_string(),
-                            },
-                            SeverityLevel::SevereWarning,
-                        );
-                        Err(RustConstructorError::VariableNotFloat {
+    pub fn var_f(&self, name: &str) -> Result<f32, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            match &v.value {
+                // 直接访问 value 字段
+                Value::Float(f) => Ok(*f),
+                _ => {
+                    self.problem_report_custom(
+                        RustConstructorError::VariableNotFloat {
                             variable_name: name.to_string(),
-                        })
-                    }
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    Err(RustConstructorError::VariableNotFloat {
+                        variable_name: name.to_string(),
+                    })
                 }
-            } else {
-                // 正常情况下不会触发。
-                Err(RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                })
             }
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2777,36 +3032,32 @@ impl App {
     }
 
     /// 取出布尔值资源。
-    pub fn var_b(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                match &v.value {
-                    // 直接访问 value 字段
-                    Value::Bool(b) => Ok(*b),
-                    _ => {
-                        self.problem_report(
-                            RustConstructorError::VariableNotBool {
-                                variable_name: name.to_string(),
-                            },
-                            SeverityLevel::SevereWarning,
-                        );
-                        Err(RustConstructorError::VariableNotBool {
+    pub fn var_b(&self, name: &str) -> Result<bool, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            match &v.value {
+                // 直接访问 value 字段
+                Value::Bool(b) => Ok(*b),
+                _ => {
+                    self.problem_report_custom(
+                        RustConstructorError::VariableNotBool {
                             variable_name: name.to_string(),
-                        })
-                    }
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    Err(RustConstructorError::VariableNotBool {
+                        variable_name: name.to_string(),
+                    })
                 }
-            } else {
-                // 正常情况下不会触发。
-                Err(RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                })
             }
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2815,36 +3066,32 @@ impl App {
     }
 
     /// 取出包含Value的Vec资源。
-    pub fn var_v(&mut self, name: &str) -> Result<Vec<Value>, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                match &v.value {
-                    // 直接访问 value 字段
-                    Value::Vec(v) => Ok(v.clone()),
-                    _ => {
-                        self.problem_report(
-                            RustConstructorError::VariableNotVec {
-                                variable_name: name.to_string(),
-                            },
-                            SeverityLevel::SevereWarning,
-                        );
-                        Err(RustConstructorError::VariableNotVec {
+    pub fn var_v(&self, name: &str) -> Result<Vec<Value>, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            match &v.value {
+                // 直接访问 value 字段
+                Value::Vec(v) => Ok(v.clone()),
+                _ => {
+                    self.problem_report_custom(
+                        RustConstructorError::VariableNotVec {
                             variable_name: name.to_string(),
-                        })
-                    }
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    Err(RustConstructorError::VariableNotVec {
+                        variable_name: name.to_string(),
+                    })
                 }
-            } else {
-                // 正常情况下不会触发。
-                Err(RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                })
             }
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2853,36 +3100,32 @@ impl App {
     }
 
     /// 取出字符串资源。
-    pub fn var_s(&mut self, name: &str) -> Result<String, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("Variable", name) {
-            if let RCR::Variable(v) = self.rust_constructor_resource[id].clone() {
-                match &v.value {
-                    // 直接访问 value 字段
-                    Value::String(s) => Ok(s.clone()),
-                    _ => {
-                        self.problem_report(
-                            RustConstructorError::VariableNotString {
-                                variable_name: name.to_string(),
-                            },
-                            SeverityLevel::SevereWarning,
-                        );
-                        Err(RustConstructorError::VariableNotString {
+    pub fn var_s(&self, name: &str) -> Result<String, RustConstructorError> {
+        if self.check_resource_exists(name, "Variable") {
+            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+            match &v.value {
+                // 直接访问 value 字段
+                Value::String(s) => Ok(s.clone()),
+                _ => {
+                    self.problem_report_custom(
+                        RustConstructorError::VariableNotString {
                             variable_name: name.to_string(),
-                        })
-                    }
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    Err(RustConstructorError::VariableNotString {
+                        variable_name: name.to_string(),
+                    })
                 }
-            } else {
-                // 正常情况下不会触发。
-                Err(RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                })
             }
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
@@ -2891,18 +3134,19 @@ impl App {
     }
 
     /// 尝试将Value转换成布尔值。
-    pub fn var_decode_b(&mut self, target: Value) -> Result<bool, RustConstructorError> {
+    pub fn var_decode_b(&self, target: Value) -> Result<bool, RustConstructorError> {
         match target {
             Value::Bool(b) => {
                 // 处理布尔值
                 Ok(b)
             }
             _ => {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::VariableNotBool {
                         variable_name: format!("{:?}", target),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
                 Err(RustConstructorError::VariableNotBool {
                     variable_name: format!("{:?}", target),
@@ -2912,18 +3156,19 @@ impl App {
     }
 
     /// 尝试将Value转换成i32。
-    pub fn var_decode_i(&mut self, target: Value) -> Result<i32, RustConstructorError> {
+    pub fn var_decode_i(&self, target: Value) -> Result<i32, RustConstructorError> {
         match target {
             Value::Int(i) => {
                 // 处理i32整型
                 Ok(i)
             }
             _ => {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::VariableNotInt {
                         variable_name: format!("{:?}", target),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
                 Err(RustConstructorError::VariableNotInt {
                     variable_name: format!("{:?}", target),
@@ -2933,18 +3178,19 @@ impl App {
     }
 
     /// 尝试将Value转换成u32。
-    pub fn var_decode_u(&mut self, target: Value) -> Result<u32, RustConstructorError> {
+    pub fn var_decode_u(&self, target: Value) -> Result<u32, RustConstructorError> {
         match target {
             Value::UInt(u) => {
                 // 处理u32无符号整型
                 Ok(u)
             }
             _ => {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::VariableNotUInt {
                         variable_name: format!("{:?}", target),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
                 Err(RustConstructorError::VariableNotUInt {
                     variable_name: format!("{:?}", target),
@@ -2954,18 +3200,19 @@ impl App {
     }
 
     /// 尝试将Value转换成f32。
-    pub fn var_decode_f(&mut self, target: Value) -> Result<f32, RustConstructorError> {
+    pub fn var_decode_f(&self, target: Value) -> Result<f32, RustConstructorError> {
         match target {
             Value::Float(f) => {
                 // 处理浮点数
                 Ok(f)
             }
             _ => {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::VariableNotFloat {
                         variable_name: format!("{:?}", target),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
                 Err(RustConstructorError::VariableNotFloat {
                     variable_name: format!("{:?}", target),
@@ -2975,18 +3222,19 @@ impl App {
     }
 
     /// 尝试将Value转换成字符串。
-    pub fn var_decode_s(&mut self, target: Value) -> Result<String, RustConstructorError> {
+    pub fn var_decode_s(&self, target: Value) -> Result<String, RustConstructorError> {
         match target {
             Value::String(s) => {
                 // 处理字符串
                 Ok(s)
             }
             _ => {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::VariableNotString {
                         variable_name: format!("{:?}", target),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
                 Err(RustConstructorError::VariableNotString {
                     variable_name: format!("{:?}", target),
@@ -2996,18 +3244,19 @@ impl App {
     }
 
     /// 尝试将Value转换成Vec。
-    pub fn var_decode_v(&mut self, target: Value) -> Result<Vec<Value>, RustConstructorError> {
+    pub fn var_decode_v(&self, target: Value) -> Result<Vec<Value>, RustConstructorError> {
         match target {
             Value::Vec(v) => {
                 // 处理字符串
                 Ok(v)
             }
             _ => {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::VariableNotVec {
                         variable_name: format!("{:?}", target),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
                 Err(RustConstructorError::VariableNotVec {
                     variable_name: format!("{:?}", target),
@@ -3040,44 +3289,47 @@ impl App {
 
             let color_image =
                 egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
-            let loaded_image_texture = Some(ctx.load_texture(
+            let loaded_image_texture = ctx.load_texture(
                 image_texture.name.clone(),
                 color_image,
                 TextureOptions::LINEAR,
-            ));
-            image_texture.texture = loaded_image_texture;
+            );
+            image_texture.texture = Some(DebugTextureHandle::new(loaded_image_texture));
             image_texture.cite_path = path.to_string();
-            self.rust_constructor_resource
-                .push(RCR::ImageTexture(image_texture));
+            self.rust_constructor_resource.push(Box::new(image_texture));
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::ImageGetFailed {
                     image_path: path.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
         };
     }
 
     /// 输出图片纹理。
     pub fn image_texture(
-        &mut self,
+        &self,
         name: &str,
-    ) -> Result<Option<egui::TextureHandle>, RustConstructorError> {
-        if let Ok(id) = self.get_resource_index("ImageTexture", name)
-            && let RCR::ImageTexture(it) = &self.rust_constructor_resource[id]
-        {
-            return Ok(it.texture.clone());
-        };
-        self.problem_report(
-            RustConstructorError::ImageNotFound {
+    ) -> Result<Option<DebugTextureHandle>, RustConstructorError> {
+        if self.check_resource_exists(name, "ImageTexture") {
+            let it = self
+                .get_resource::<ImageTexture>(name, "ImageTexture")
+                .unwrap();
+            Ok(it.texture.clone())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ImageNotFound {
+                    image_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ImageNotFound {
                 image_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-        );
-        Err(RustConstructorError::ImageNotFound {
-            image_name: name.to_string(),
-        })
+            })
+        }
     }
 
     /// 重置图片纹理。
@@ -3087,10 +3339,11 @@ impl App {
         path: &str,
         flip: [bool; 2],
         ctx: &egui::Context,
-    ) {
-        if let Ok(id) = self.get_resource_index("ImageTexture", name)
-            && let RCR::ImageTexture(it) = &mut self.rust_constructor_resource[id]
-        {
+    ) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "ImageTexture") {
+            let it = self
+                .get_resource_mut::<ImageTexture>(name, "ImageTexture")
+                .unwrap();
             if let Ok(mut file) = File::open(path) {
                 let mut buffer = Vec::new();
                 file.read_to_end(&mut buffer).unwrap();
@@ -3108,42 +3361,89 @@ impl App {
                 let color_image =
                     egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
                 let image_texture =
-                    Some(ctx.load_texture(it.name.clone(), color_image, TextureOptions::LINEAR));
-                it.texture = image_texture;
+                    ctx.load_texture(it.name.clone(), color_image, TextureOptions::LINEAR);
+                it.texture = Some(DebugTextureHandle::new(image_texture));
                 it.cite_path = path.to_string();
             } else {
-                self.problem_report(
+                self.problem_report_custom(
                     RustConstructorError::ImageGetFailed {
                         image_path: path.to_string(),
                     },
                     SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
                 );
             };
-        };
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ImageTextureNotFound {
+                    image_texture_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ImageTextureNotFound {
+                image_texture_name: name.to_string(),
+            })
+        }
     }
 
     /// 添加图片资源。
-    pub fn add_image(&mut self, mut image: Image, image_texture_name: &str) {
-        if let Ok(id) = self.get_resource_index("ImageTexture", image_texture_name)
-            && let RCR::ImageTexture(it) = self.rust_constructor_resource[id].clone()
-        {
-            image.texture = it.texture;
+    pub fn add_image(
+        &mut self,
+        mut image: Image,
+        image_texture_name: &str,
+    ) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(image_texture_name, "ImageTexture") {
+            let it = self
+                .get_resource::<ImageTexture>(image_texture_name, "ImageTexture")
+                .unwrap();
+            image.texture = it.texture.clone();
             image.cite_texture = it.name.clone();
-            image.last_frame_cite_texture = it.name;
-            self.rust_constructor_resource.push(RCR::Image(image));
-        };
+            image.last_frame_cite_texture = it.name.clone();
+            self.rust_constructor_resource.push(Box::new(image));
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ImageTextureNotFound {
+                    image_texture_name: image_texture_name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ImageTextureNotFound {
+                image_texture_name: image_texture_name.to_string(),
+            })
+        }
     }
 
     /// 显示图片资源。
-    pub fn image(&mut self, ui: &mut Ui, name: &str, ctx: &egui::Context) {
-        if let Ok(id) = self.get_resource_index("Image", name)
-            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone()
-        {
-            if im.cite_texture != im.last_frame_cite_texture
-                && let Ok(id2) = self.get_resource_index("ImageTexture", &im.cite_texture)
-                && let RCR::ImageTexture(it) = self.rust_constructor_resource[id2].clone()
-            {
-                im.texture = it.texture;
+    pub fn image(
+        &mut self,
+        name: &str,
+        ui: &mut Ui,
+        ctx: &egui::Context,
+    ) -> Result<(), RustConstructorError> {
+        if self.check_resource_exists(name, "Image") {
+            let mut im = self
+                .get_resource_mut::<Image>(name, "Image")
+                .unwrap()
+                .clone();
+            if im.cite_texture != im.last_frame_cite_texture {
+                if self.check_resource_exists(&im.cite_texture, "ImageTexture") {
+                    let it = self
+                        .get_resource::<ImageTexture>(&im.cite_texture, "ImageTexture")
+                        .unwrap();
+                    im.texture = it.texture.clone();
+                } else {
+                    self.problem_report_custom(
+                        RustConstructorError::ImageTextureNotFound {
+                            image_texture_name: im.cite_texture.clone(),
+                        },
+                        SeverityLevel::MildWarning,
+                        self.problem_list.clone(),
+                    );
+                };
             };
             im.reg_render_resource(&mut self.render_resource_list);
             im.position[0] = match im.x_grid[1] {
@@ -3191,13 +3491,25 @@ impl App {
                 };
 
                 // 直接绘制图片
-                egui::Image::new(egui::ImageSource::Texture(texture.into()))
+                egui::Image::new(egui::ImageSource::Texture((&texture.0).into()))
                     .tint(color)
                     .paint_at(ui, rect)
             };
             im.last_frame_cite_texture = im.cite_texture.clone();
-            self.rust_constructor_resource[id] = RCR::Image(im);
-        };
+            self.replace_resource(name, "Image", im).unwrap();
+            Ok(())
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ImageNotFound {
+                    image_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::ImageNotFound {
+                image_name: name.to_string(),
+            })
+        }
     }
 
     /// 添加消息框资源(重要事项：你需要添加一个CloseMessageBox图片纹理资源才可正常使用！)。
@@ -3208,53 +3520,87 @@ impl App {
         content_name: &str,
         image_name: &str,
         sound_path: &str,
-    ) {
-        if !self.check_resource_exists("MessageBox", &message_box.name) {
+    ) -> Result<(), RustConstructorError> {
+        if !self.check_resource_exists(&message_box.name, "MessageBox") {
             message_box.exist = true;
             message_box.memory_offset = 0_f32;
-            message_box.image_name = String::new();
-            if let Ok(id) = self.get_resource_index("Image", image_name)
-                && let RCR::Image(im) = &mut self.rust_constructor_resource[id]
-            {
-                message_box.image_name = image_name.to_string();
+
+            if self.check_resource_exists(image_name, "Image") {
+                let im = self.get_resource_mut::<Image>(image_name, "Image").unwrap();
                 im.size = [message_box.size[1] - 15_f32, message_box.size[1] - 15_f32];
                 im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
                 im.x_grid = [1, 1];
                 im.y_grid = [0, 1];
                 im.name = format!("MessageBox{}", im.name);
-            };
-            message_box.title_name = String::new();
-            if let Ok(id) = self.get_resource_index("Text", title_name)
-                && let RCR::Text(t) = &mut self.rust_constructor_resource[id]
-            {
-                message_box.title_name = title_name.to_string();
+                message_box.image_name = im.name.to_string();
+            } else {
+                self.problem_report_custom(
+                    RustConstructorError::ImageNotFound {
+                        image_name: image_name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::ImageNotFound {
+                    image_name: image_name.to_string(),
+                });
+            }
+
+            if self.check_resource_exists(title_name, "Text") {
+                let t = self.get_resource_mut::<Text>(title_name, "Text").unwrap();
                 t.x_grid = [1, 1];
                 t.y_grid = [0, 1];
                 t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                 t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
                 t.name = format!("MessageBox{}", t.name);
-            };
-            message_box.content_name = String::new();
-            if let Ok(id) = self.get_resource_index("Text", content_name)
-                && let RCR::Text(t) = &mut self.rust_constructor_resource[id]
-            {
-                message_box.content_name = content_name.to_string();
+                message_box.title_name = t.name.to_string();
+            } else {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: title_name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::TextNotFound {
+                    text_name: title_name.to_string(),
+                });
+            }
+
+            if self.check_resource_exists(content_name, "Text") {
+                let t = self.get_resource_mut::<Text>(content_name, "Text").unwrap();
                 t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
                 t.x_grid = [1, 1];
                 t.y_grid = [0, 1];
                 t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
                 t.name = format!("MessageBox{}", t.name);
-            };
+                message_box.content_name = t.name.to_string();
+            } else {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: content_name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::TextNotFound {
+                    text_name: content_name.to_string(),
+                });
+            }
+
             self.rust_constructor_resource
-                .push(RCR::MessageBox(message_box.clone()));
+                .push(Box::new(message_box.clone()));
+
             if !message_box.keep_existing {
                 self.add_split_time(
                     SplitTime::default().name(&format!("MessageBox{}", message_box.name)),
                 );
             };
+
             self.add_split_time(
                 SplitTime::default().name(&format!("MessageBox{}Animation", message_box.name)),
             );
+
             self.add_custom_rect(
                 CustomRect::default()
                     .name(&format!("MessageBox{}", message_box.name))
@@ -3267,6 +3613,7 @@ impl App {
                     .color(100, 100, 100, 125)
                     .border_width(0_f32),
             );
+
             self.add_image(
                 Image::default()
                     .name(&format!("MessageBox{}Close", message_box.name))
@@ -3274,7 +3621,9 @@ impl App {
                     .size(30_f32, 30_f32)
                     .center_display(HorizontalAlign::Center, VerticalAlign::Center),
                 "CloseMessageBox",
-            );
+            )
+            .unwrap();
+
             self.add_switch(
                 Switch::default()
                     .name(&format!("MessageBox{}Close", message_box.name))
@@ -3312,15 +3661,21 @@ impl App {
                     .sound_path(sound_path),
                 &format!("MessageBox{}Close", message_box.name),
                 "",
-            );
+            )
+            .unwrap();
+            Ok(())
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::MessageBoxAlreadyExists {
                     message_box_name: message_box.name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
-        };
+            Err(RustConstructorError::MessageBoxAlreadyExists {
+                message_box_name: message_box.name.to_string(),
+            })
+        }
     }
 
     /// 处理所有已添加的消息框资源。
@@ -3329,209 +3684,272 @@ impl App {
         let mut delete_count = 0;
         let mut index_list = Vec::new();
         for i in 0..self.rust_constructor_resource.len() {
-            if let RCR::MessageBox(_) = self.rust_constructor_resource[i] {
+            if self.rust_constructor_resource[i]
+                .as_any()
+                .downcast_ref::<MessageBox>()
+                .is_some()
+            {
                 index_list.push(i);
             };
         }
         for u in 0..index_list.len() {
             let mut deleted = false;
             let i = u - delete_count;
-            if let RCR::MessageBox(mut mb) = self.rust_constructor_resource[index_list[i]].clone()
-                && let Ok(id1) = self.get_resource_index("Image", &mb.image_name)
-                && let RCR::Image(mut im1) = self.rust_constructor_resource[id1].clone()
-                && let Ok(id2) =
-                    self.get_resource_index("CustomRect", &format!("MessageBox{}", mb.name))
-                && let RCR::CustomRect(mut cr) = self.rust_constructor_resource[id2].clone()
-                && let Ok(id3) = self.get_resource_index("Text", &mb.title_name)
-                && let RCR::Text(mut t1) = self.rust_constructor_resource[id3].clone()
-                && let Ok(id4) = self.get_resource_index("Text", &mb.content_name)
-                && let RCR::Text(mut t2) = self.rust_constructor_resource[id4].clone()
-                && let Ok(id5) =
-                    self.get_resource_index("Switch", &format!("MessageBox{}Close", mb.name))
-                && let RCR::Switch(mut s) = self.rust_constructor_resource[id5].clone()
-                && let Ok(id6) =
-                    self.get_resource_index("Image", &format!("MessageBox{}Close", mb.name))
-                && let RCR::Image(mut im2) = self.rust_constructor_resource[id6].clone()
+            let mut mb = self.rust_constructor_resource[index_list[i]]
+                .as_any()
+                .downcast_ref::<MessageBox>()
+                .unwrap()
+                .clone();
+            let mut im1 = self
+                .get_resource::<Image>(&mb.image_name, "Image")
+                .unwrap()
+                .clone();
+            let mut cr = self
+                .get_resource::<CustomRect>(&format!("MessageBox{}", mb.name), "CustomRect")
+                .unwrap()
+                .clone();
+            let mut t1 = self
+                .get_resource::<Text>(&mb.title_name, "Text")
+                .unwrap()
+                .clone();
+            let mut t2 = self
+                .get_resource::<Text>(&mb.content_name, "Text")
+                .unwrap()
+                .clone();
+            let mut s = self
+                .get_resource::<Switch>(&format!("MessageBox{}Close", mb.name), "Switch")
+                .unwrap()
+                .clone();
+            let mut im2 = self
+                .get_resource::<Image>(&format!("MessageBox{}Close", mb.name), "Image")
+                .unwrap()
+                .clone();
+            mb.reg_render_resource(&mut self.render_resource_list.clone());
+            if mb.size[1]
+                < self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
+                    + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
+                    + 10_f32
             {
-                if mb.size[1]
-                    < self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
-                        + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
-                        + 10_f32
-                {
-                    mb.size[1] = self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
-                        + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
-                        + 10_f32;
-                    cr.size[1] = mb.size[1];
-                    im1.size = [mb.size[1] - 15_f32, mb.size[1] - 15_f32];
-                    t1.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
-                    t2.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
-                };
-                if self.timer.total_time
-                    - self
-                        .split_time(&format!("MessageBox{}Animation", mb.name))
-                        .unwrap()[1]
-                    >= self.vertrefresh
-                {
-                    self.reset_split_time(&format!("MessageBox{}Animation", mb.name));
-                    if offset != mb.memory_offset {
-                        if mb.memory_offset < offset {
-                            if mb.memory_offset + mb.restore_speed >= offset {
-                                mb.memory_offset = offset;
-                            } else {
-                                mb.memory_offset += mb.restore_speed;
-                            };
-                        } else if mb.memory_offset - mb.restore_speed <= offset {
+                mb.size[1] = self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
+                    + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
+                    + 10_f32;
+                cr.size[1] = mb.size[1];
+                im1.size = [mb.size[1] - 15_f32, mb.size[1] - 15_f32];
+                t1.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
+                t2.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
+            };
+            if self.timer.total_time
+                - self
+                    .split_time(&format!("MessageBox{}Animation", mb.name))
+                    .unwrap()[1]
+                >= self.tick_interval
+            {
+                self.reset_split_time(&format!("MessageBox{}Animation", mb.name))
+                    .unwrap();
+                if offset != mb.memory_offset {
+                    if mb.memory_offset < offset {
+                        if mb.memory_offset + mb.restore_speed >= offset {
                             mb.memory_offset = offset;
                         } else {
-                            mb.memory_offset -= mb.restore_speed;
+                            mb.memory_offset += mb.restore_speed;
                         };
+                    } else if mb.memory_offset - mb.restore_speed <= offset {
+                        mb.memory_offset = offset;
+                    } else {
+                        mb.memory_offset -= mb.restore_speed;
                     };
-                    if cr.origin_position[0] != -mb.size[0] - 5_f32 {
-                        if mb.exist {
-                            if cr.origin_position[0] - mb.speed <= -mb.size[0] - 5_f32 {
-                                cr.origin_position[0] = -mb.size[0] - 5_f32;
-                                if self.check_resource_exists(
-                                    "SplitTime",
-                                    &format!("MessageBox{}", mb.name),
-                                ) {
-                                    self.reset_split_time(&format!("MessageBox{}", mb.name));
-                                };
-                            } else {
-                                cr.origin_position[0] -= mb.speed;
+                };
+                if cr.origin_position[0] != -mb.size[0] - 5_f32 {
+                    if mb.exist {
+                        if cr.origin_position[0] - mb.speed <= -mb.size[0] - 5_f32 {
+                            cr.origin_position[0] = -mb.size[0] - 5_f32;
+                            if self.check_resource_exists(
+                                &format!("MessageBox{}", mb.name),
+                                "SplitTime",
+                            ) {
+                                self.reset_split_time(&format!("MessageBox{}", mb.name))
+                                    .unwrap();
                             };
-                        } else if cr.origin_position[0] + mb.speed >= 15_f32 {
-                            cr.origin_position[0] = 15_f32;
-                            delete_count += 1;
-                            deleted = true;
                         } else {
-                            cr.origin_position[0] += mb.speed;
+                            cr.origin_position[0] -= mb.speed;
                         };
-                    };
-                };
-                cr.origin_position[1] = mb.memory_offset + 20_f32;
-                im1.origin_position = [
-                    cr.origin_position[0] + 5_f32,
-                    cr.origin_position[1] + mb.size[1] / 2_f32,
-                ];
-                t1.origin_position = [
-                    im1.origin_position[0] + im1.size[0] + 5_f32,
-                    cr.origin_position[1] + 5_f32,
-                ];
-                t2.origin_position = [
-                    im1.origin_position[0] + im1.size[0] + 5_f32,
-                    t1.origin_position[1]
-                        + self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1],
-                ];
-                im2.origin_position = cr.position;
-                if !mb.keep_existing
-                    && self.timer.total_time
-                        - self.split_time(&format!("MessageBox{}", mb.name)).unwrap()[1]
-                        >= mb.existing_time
-                    && cr.origin_position[0] == -mb.size[0] - 5_f32
-                {
-                    mb.exist = false;
-                    if cr.origin_position[0] + mb.speed >= 15_f32 {
+                    } else if cr.origin_position[0] + mb.speed >= 15_f32 {
                         cr.origin_position[0] = 15_f32;
+                        delete_count += 1;
+                        deleted = true;
                     } else {
                         cr.origin_position[0] += mb.speed;
                     };
                 };
-                if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    let rect = egui::Rect::from_min_size(
-                        Pos2 {
-                            x: im2.position[0],
-                            y: im2.position[1],
-                        },
-                        Vec2 {
-                            x: cr.size[0] + 25_f32,
-                            y: cr.size[1] + 25_f32,
-                        },
-                    );
-                    if rect.contains(mouse_pos) {
-                        s.appearance[0].color[3] = 200;
-                    } else {
-                        s.appearance[0].color[3] = 0;
-                    };
-                };
-                self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
-                self.rust_constructor_resource[id1] = RCR::Image(im1.clone());
-                self.rust_constructor_resource[id2] = RCR::CustomRect(cr.clone());
-                self.rust_constructor_resource[id3] = RCR::Text(t1.clone());
-                self.rust_constructor_resource[id4] = RCR::Text(t2.clone());
-                self.rust_constructor_resource[id5] = RCR::Switch(s.clone());
-                self.rust_constructor_resource[id6] = RCR::Image(im2.clone());
-                self.custom_rect(ui, &format!("MessageBox{}", mb.name), ctx);
-                self.image(ui, &mb.image_name.clone(), ctx);
-                self.text(ui, &t1.name.clone(), ctx);
-                self.text(ui, &t2.name.clone(), ctx);
-                if self
-                    .switch(
-                        &format!("MessageBox{}Close", mb.name),
-                        ui,
-                        ctx,
-                        s.state == 0 && mb.exist,
-                        true,
-                    )
-                    .unwrap()[0]
-                    == 0
-                {
-                    mb.exist = false;
-                    if cr.origin_position[0] + mb.speed >= 15_f32 {
-                        cr.origin_position[0] = 15_f32;
-                    } else {
-                        cr.origin_position[0] += mb.speed;
-                    };
-                    self.rust_constructor_resource[id2] = RCR::CustomRect(cr.clone());
-                    self.rust_constructor_resource[index_list[i]] = RCR::MessageBox(mb.clone());
-                };
-                if deleted {
-                    if let Ok(id) = self.get_resource_index("Image", &mb.image_name) {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) =
-                        self.get_resource_index("CustomRect", &format!("MessageBox{}", mb.name))
-                    {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) = self.get_resource_index("Text", &mb.title_name) {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) = self.get_resource_index("Text", &mb.content_name) {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) =
-                        self.get_resource_index("Switch", &format!("MessageBox{}Close", mb.name))
-                    {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) =
-                        self.get_resource_index("Image", &format!("MessageBox{}Close", mb.name))
-                    {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) = self
-                        .get_resource_index("SplitTime", &format!("MessageBox{}Animation", mb.name))
-                    {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if !mb.keep_existing
-                        && let Ok(id) =
-                            self.get_resource_index("SplitTime", &format!("MessageBox{}", mb.name))
-                    {
-                        self.rust_constructor_resource.remove(id);
-                    };
-                    if let Ok(id) = self.get_resource_index("MessageBox", &mb.name) {
-                        self.rust_constructor_resource.remove(id);
-                    };
+            };
+            cr.origin_position[1] = mb.memory_offset + 20_f32;
+            im1.origin_position = [
+                cr.origin_position[0] + 5_f32,
+                cr.origin_position[1] + mb.size[1] / 2_f32,
+            ];
+            t1.origin_position = [
+                im1.origin_position[0] + im1.size[0] + 5_f32,
+                cr.origin_position[1] + 5_f32,
+            ];
+            t2.origin_position = [
+                im1.origin_position[0] + im1.size[0] + 5_f32,
+                t1.origin_position[1] + self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1],
+            ];
+            im2.origin_position = cr.position;
+            if !mb.keep_existing
+                && self.timer.total_time
+                    - self.split_time(&format!("MessageBox{}", mb.name)).unwrap()[1]
+                    >= mb.existing_time
+                && cr.origin_position[0] == -mb.size[0] - 5_f32
+            {
+                mb.exist = false;
+                if cr.origin_position[0] + mb.speed >= 15_f32 {
+                    cr.origin_position[0] = 15_f32;
                 } else {
-                    offset += mb.size[1] + 15_f32;
+                    cr.origin_position[0] += mb.speed;
                 };
+            };
+            if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                let rect = egui::Rect::from_min_size(
+                    Pos2 {
+                        x: im2.position[0],
+                        y: im2.position[1],
+                    },
+                    Vec2 {
+                        x: cr.size[0] + 25_f32,
+                        y: cr.size[1] + 25_f32,
+                    },
+                );
+                if rect.contains(mouse_pos) {
+                    s.appearance[0].color[3] = 200;
+                } else {
+                    s.appearance[0].color[3] = 0;
+                };
+            };
+            self.rust_constructor_resource[index_list[i]] = Box::new(mb.clone());
+            self.replace_resource(&mb.image_name, "Image", im1.clone())
+                .unwrap();
+            self.replace_resource(&format!("MessageBox{}", mb.name), "CustomRect", cr.clone())
+                .unwrap();
+            self.replace_resource(&mb.title_name, "Text", t1.clone())
+                .unwrap();
+            self.replace_resource(&mb.content_name, "Text", t2.clone())
+                .unwrap();
+            self.replace_resource(&format!("MessageBox{}Close", mb.name), "Switch", s.clone())
+                .unwrap();
+            self.replace_resource(&format!("MessageBox{}Close", mb.name), "Image", im2.clone())
+                .unwrap();
+            self.custom_rect(&format!("MessageBox{}", mb.name), ui, ctx)
+                .unwrap();
+            self.image(&mb.image_name.clone(), ui, ctx).unwrap();
+            self.text(&t1.name.clone(), ui, ctx).unwrap();
+            self.text(&t2.name.clone(), ui, ctx).unwrap();
+            if self
+                .switch(
+                    &format!("MessageBox{}Close", mb.name),
+                    ui,
+                    ctx,
+                    s.state == 0 && mb.exist,
+                    true,
+                )
+                .unwrap()[0]
+                == 0
+            {
+                mb.exist = false;
+                if cr.origin_position[0] + mb.speed >= 15_f32 {
+                    cr.origin_position[0] = 15_f32;
+                } else {
+                    cr.origin_position[0] += mb.speed;
+                };
+                self.rust_constructor_resource[index_list[i]] = Box::new(mb.clone());
+                self.replace_resource(&format!("MessageBox{}", mb.name), "CustomRect", cr.clone())
+                    .unwrap();
+            };
+            if deleted {
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| x.expose_type() == "Image" && x.name() == mb.image_name)
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| {
+                            x.expose_type() == "CustomRect"
+                                && x.name() == format!("MessageBox{}", mb.name)
+                        })
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| x.expose_type() == "Text" && x.name() == mb.title_name)
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| x.expose_type() == "Text" && x.name() == mb.content_name)
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| {
+                            x.expose_type() == "Switch"
+                                && x.name() == format!("MessageBox{}Close", mb.name)
+                        })
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| {
+                            x.expose_type() == "Image"
+                                && x.name() == format!("MessageBox{}Close", mb.name)
+                        })
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| {
+                            x.expose_type() == "SplitTime"
+                                && x.name() == format!("MessageBox{}Animation", mb.name)
+                        })
+                        .unwrap(),
+                );
+                if !mb.keep_existing {
+                    self.rust_constructor_resource.remove(
+                        self.rust_constructor_resource
+                            .iter()
+                            .position(|x| {
+                                x.expose_type() == "SplitTime"
+                                    && x.name() == format!("MessageBox{}", mb.name)
+                            })
+                            .unwrap(),
+                    );
+                };
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| x.expose_type() == "MessageBox" && x.name() == mb.name)
+                        .unwrap(),
+                );
+            } else {
+                offset += mb.size[1] + 15_f32;
             };
         }
     }
 
     /// 添加开关资源。
-    pub fn add_switch(&mut self, mut switch: Switch, image_name: &str, text_name: &str) {
+    pub fn add_switch(
+        &mut self,
+        mut switch: Switch,
+        image_name: &str,
+        text_name: &str,
+    ) -> Result<(), RustConstructorError> {
         let mut count = 1;
         if switch.enable_hover_click_image[0] {
             count += 1;
@@ -3540,35 +3958,53 @@ impl App {
             count += 1;
         };
         if switch.appearance.len() < count {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::SwitchAppearanceMismatch {
                     switch_name: switch.name.clone(),
                     differ: count as u32 - switch.appearance.len() as u32,
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
-            return;
+            return Err(RustConstructorError::SwitchAppearanceMismatch {
+                switch_name: switch.name.clone(),
+                differ: count as u32 - switch.appearance.len() as u32,
+            });
         };
         for _ in 0..switch.appearance.len() % count {
             switch.appearance.pop();
         }
-        switch.text_name = String::new();
-        if let Ok(id) = self.get_resource_index("Image", image_name)
-            && let RCR::Image(mut im) = self.rust_constructor_resource[id].clone()
-        {
+        if self.check_resource_exists(image_name, "Image") {
+            let im = self.get_resource_mut::<Image>(image_name, "Image").unwrap();
             im.use_overlay_color = true;
             switch.switch_image_name = image_name.to_string();
-            if self.check_resource_exists("Text", text_name)
-                && let Ok(id2) = self.get_resource_index("Text", text_name)
-                && let RCR::Text(t) = &mut self.rust_constructor_resource[id2]
-            {
+            if self.check_resource_exists(text_name, "Text") {
+                let t = self.get_resource_mut::<Text>(text_name, "Text").unwrap();
                 switch.text_name = text_name.to_string();
                 switch.text_origin_position = t.origin_position;
                 t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
                 t.x_grid = [0, 0];
                 t.y_grid = [0, 0];
+            } else if !text_name.is_empty() {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: text_name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
             };
-            self.rust_constructor_resource[id] = RCR::Image(im);
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ImageNotFound {
+                    image_name: image_name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::ImageNotFound {
+                image_name: image_name.to_string(),
+            });
         };
         switch.hint_text_name = String::new();
         if switch
@@ -3601,7 +4037,8 @@ impl App {
         };
         switch.state = 0;
         switch.animation_count = count as u32;
-        self.rust_constructor_resource.push(RCR::Switch(switch));
+        self.rust_constructor_resource.push(Box::new(switch));
+        Ok(())
     }
 
     /// 显示开关资源并返回点击方法和开关状态。
@@ -3615,226 +4052,279 @@ impl App {
     ) -> Result<[usize; 2], RustConstructorError> {
         let mut activated = [5, 0];
         let mut appearance_count = 0;
-        if let Ok(id) = self.get_resource_index("Switch", name) {
-            if let RCR::Switch(mut s) = self.rust_constructor_resource[id].clone() {
-                if let Ok(id2) = self.get_resource_index("Image", &s.switch_image_name.clone()) {
-                    if let RCR::Image(mut im) = self.rust_constructor_resource[id2].clone() {
-                        s.reg_render_resource(&mut self.render_resource_list);
-                        let rect = Rect::from_min_size(
-                            Pos2::new(im.position[0], im.position[1]),
-                            Vec2::new(im.size[0], im.size[1]),
-                        );
-                        let mut hovered = false;
-                        if enable {
-                            if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                                // 判断是否在矩形内
-                                if rect.contains(mouse_pos) {
-                                    if !s.hint_text_name.is_empty()
-                                        && let Ok(id3) =
-                                            self.get_resource_index("Text", &s.hint_text_name)
-                                        && let RCR::Text(mut t) =
-                                            self.rust_constructor_resource[id3].clone()
+        if self.check_resource_exists(name, "Switch") {
+            let mut s = self.get_resource::<Switch>(name, "Switch").unwrap().clone();
+            if self.check_resource_exists(&s.switch_image_name.clone(), "Image") {
+                let mut im = self
+                    .get_resource::<Image>(&s.switch_image_name.clone(), "Image")
+                    .unwrap()
+                    .clone();
+                s.reg_render_resource(&mut self.render_resource_list);
+                let rect = Rect::from_min_size(
+                    Pos2::new(im.position[0], im.position[1]),
+                    Vec2::new(im.size[0], im.size[1]),
+                );
+                let mut hovered = false;
+                if enable {
+                    if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                        // 判断是否在矩形内
+                        if rect.contains(mouse_pos) {
+                            if !s.hint_text_name.is_empty() {
+                                if self.check_resource_exists(&s.hint_text_name, "Text") {
+                                    let mut t = self
+                                        .get_resource::<Text>(&s.hint_text_name, "Text")
+                                        .unwrap()
+                                        .clone();
+                                    if !s.last_time_hovered {
+                                        self.reset_split_time(&format!("{}StartHoverTime", s.name))
+                                            .unwrap();
+                                    } else if self.timer.total_time
+                                        - self
+                                            .split_time(&format!("{}StartHoverTime", s.name))
+                                            .unwrap()[1]
+                                        >= 2_f32
+                                        || t.color[3] != 0
                                     {
-                                        if !s.last_time_hovered {
-                                            self.reset_split_time(&format!(
-                                                "{}StartHoverTime",
-                                                s.name
-                                            ));
-                                        } else if self.timer.total_time
-                                            - self
-                                                .split_time(&format!("{}StartHoverTime", s.name))
-                                                .unwrap()[1]
-                                            >= 2_f32
-                                            || t.color[3] != 0
-                                        {
-                                            t.color[3] = 255;
-                                            t.origin_position = [mouse_pos.x, mouse_pos.y];
-                                        };
-                                        t.center_display.0 = if mouse_pos.x
-                                            + self.get_text_size(&s.hint_text_name, ui).unwrap()[0]
-                                            <= ctx.available_rect().width()
-                                        {
-                                            HorizontalAlign::Left
-                                        } else {
-                                            HorizontalAlign::Right
-                                        };
-                                        t.center_display.1 = if mouse_pos.y
-                                            + self.get_text_size(&s.hint_text_name, ui).unwrap()[1]
-                                            <= ctx.available_rect().height()
-                                        {
-                                            VerticalAlign::Top
-                                        } else {
-                                            VerticalAlign::Bottom
-                                        };
-                                        self.rust_constructor_resource[id3] = RCR::Text(t);
+                                        t.color[3] = 255;
+                                        t.origin_position = [mouse_pos.x, mouse_pos.y];
                                     };
-                                    hovered = true;
-                                    let mut clicked = vec![];
-                                    let mut active = false;
-                                    for u in 0..s.click_method.len() as u32 {
-                                        clicked.push(ui.input(|i| {
-                                            i.pointer.button_down(
-                                                s.click_method[u as usize].click_method,
-                                            )
-                                        }));
-                                        if clicked[u as usize] {
-                                            active = true;
-                                            s.last_time_clicked_index = u as usize;
-                                            break;
-                                        };
-                                    }
-                                    if active {
-                                        s.last_time_clicked = true;
-                                        if s.enable_hover_click_image[1] {
-                                            if s.enable_hover_click_image[0] {
-                                                appearance_count = 2;
-                                            } else {
-                                                appearance_count = 1;
-                                            };
-                                        } else if !s.enable_hover_click_image[0] {
-                                            appearance_count = 0;
-                                        };
+                                    t.center_display.0 = if mouse_pos.x
+                                        + self.get_text_size(&s.hint_text_name, ui).unwrap()[0]
+                                        <= ctx.available_rect().width()
+                                    {
+                                        HorizontalAlign::Left
                                     } else {
-                                        if s.last_time_clicked {
-                                            if play_sound {
-                                                general_click_feedback(&s.sound_path);
-                                            };
-                                            let mut count = 1;
-                                            if s.enable_hover_click_image[0] {
-                                                count += 1;
-                                            };
-                                            if s.enable_hover_click_image[1] {
-                                                count += 1;
-                                            };
-                                            if s.click_method[s.last_time_clicked_index].action {
-                                                if s.state < (s.appearance.len() / count - 1) as u32
-                                                {
-                                                    s.state += 1;
-                                                } else {
-                                                    s.state = 0;
-                                                };
-                                            };
-                                            activated[0] = s.last_time_clicked_index;
-                                            s.last_time_clicked = false;
-                                        };
-                                        if s.enable_hover_click_image[0] {
-                                            appearance_count = 1;
-                                        } else {
-                                            appearance_count = 0;
-                                        };
+                                        HorizontalAlign::Right
                                     };
+                                    t.center_display.1 = if mouse_pos.y
+                                        + self.get_text_size(&s.hint_text_name, ui).unwrap()[1]
+                                        <= ctx.available_rect().height()
+                                    {
+                                        VerticalAlign::Top
+                                    } else {
+                                        VerticalAlign::Bottom
+                                    };
+                                    self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                                        .unwrap();
                                 } else {
-                                    s.last_time_clicked = false;
+                                    self.problem_report_custom(
+                                        RustConstructorError::TextNotFound {
+                                            text_name: s.hint_text_name.clone(),
+                                        },
+                                        SeverityLevel::SevereWarning,
+                                        self.problem_list.clone(),
+                                    );
+                                    return Err(RustConstructorError::TextNotFound {
+                                        text_name: s.hint_text_name.clone(),
+                                    });
+                                };
+                            };
+                            hovered = true;
+                            let mut clicked = vec![];
+                            let mut active = false;
+                            for u in 0..s.click_method.len() as u32 {
+                                clicked.push(ui.input(|i| {
+                                    i.pointer
+                                        .button_down(s.click_method[u as usize].click_method)
+                                }));
+                                if clicked[u as usize] {
+                                    active = true;
+                                    s.last_time_clicked_index = u as usize;
+                                    break;
+                                };
+                            }
+                            if active {
+                                s.last_time_clicked = true;
+                                if s.enable_hover_click_image[1] {
+                                    if s.enable_hover_click_image[0] {
+                                        appearance_count = 2;
+                                    } else {
+                                        appearance_count = 1;
+                                    };
+                                } else if !s.enable_hover_click_image[0] {
                                     appearance_count = 0;
                                 };
                             } else {
-                                s.last_time_clicked = false;
-                                appearance_count = 0;
+                                if s.last_time_clicked {
+                                    if play_sound {
+                                        general_click_feedback(&s.sound_path);
+                                    };
+                                    let mut count = 1;
+                                    if s.enable_hover_click_image[0] {
+                                        count += 1;
+                                    };
+                                    if s.enable_hover_click_image[1] {
+                                        count += 1;
+                                    };
+                                    if s.click_method[s.last_time_clicked_index].action {
+                                        if s.state < (s.appearance.len() / count - 1) as u32 {
+                                            s.state += 1;
+                                        } else {
+                                            s.state = 0;
+                                        };
+                                    };
+                                    activated[0] = s.last_time_clicked_index;
+                                    s.last_time_clicked = false;
+                                };
+                                if s.enable_hover_click_image[0] {
+                                    appearance_count = 1;
+                                } else {
+                                    appearance_count = 0;
+                                };
                             };
                         } else {
                             s.last_time_clicked = false;
                             appearance_count = 0;
                         };
-                        if !hovered && !s.hint_text_name.is_empty() {
-                            if s.last_time_hovered {
-                                self.reset_split_time(&format!("{}HintFadeAnimation", s.name));
-                            };
-                            if let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name)
-                                && let RCR::Text(mut t) =
-                                    self.rust_constructor_resource[id3].clone()
-                            {
-                                if self.timer.total_time
-                                    - self
-                                        .split_time(&format!("{}HintFadeAnimation", s.name))
-                                        .unwrap()[1]
-                                    >= self.vertrefresh
-                                {
-                                    self.reset_split_time(&format!("{}HintFadeAnimation", s.name));
-                                    t.color[3] = t.color[3].saturating_sub(10);
-                                };
-                                self.rust_constructor_resource[id3] = RCR::Text(t);
-                            };
+                    } else {
+                        s.last_time_clicked = false;
+                        appearance_count = 0;
+                    };
+                } else {
+                    s.last_time_clicked = false;
+                    appearance_count = 0;
+                };
+                if !hovered && !s.hint_text_name.is_empty() {
+                    if s.last_time_hovered {
+                        self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
+                            .unwrap();
+                    };
+                    if self.check_resource_exists(&s.hint_text_name, "Text") {
+                        let mut t = self
+                            .get_resource::<Text>(&s.hint_text_name, "Text")
+                            .unwrap()
+                            .clone();
+                        if self.timer.total_time
+                            - self
+                                .split_time(&format!("{}HintFadeAnimation", s.name))
+                                .unwrap()[1]
+                            >= self.tick_interval
+                        {
+                            self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
+                                .unwrap();
+                            t.color[3] = t.color[3].saturating_sub(10);
                         };
-                        im.overlay_color = s.appearance
-                            [(s.state * s.animation_count + appearance_count) as usize]
-                            .color;
-                        if let Ok(id4) = self.get_resource_index(
-                            "ImageTexture",
+                        self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                            .unwrap();
+                    } else {
+                        self.problem_report_custom(
+                            RustConstructorError::TextNotFound {
+                                text_name: s.hint_text_name.clone(),
+                            },
+                            SeverityLevel::SevereWarning,
+                            self.problem_list.clone(),
+                        );
+                        return Err(RustConstructorError::TextNotFound {
+                            text_name: s.hint_text_name.clone(),
+                        });
+                    };
+                };
+                im.overlay_color =
+                    s.appearance[(s.state * s.animation_count + appearance_count) as usize].color;
+                if self.check_resource_exists(
+                    &s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                        .texture
+                        .clone(),
+                    "ImageTexture",
+                ) {
+                    im.texture = self
+                        .image_texture(
                             &s.appearance
                                 [(s.state * s.animation_count + appearance_count) as usize]
                                 .texture
                                 .clone(),
-                        ) && let RCR::ImageTexture(it) =
-                            self.rust_constructor_resource[id4].clone()
-                        {
-                            im.texture = it.texture.clone();
-                        };
-                        if !s.hint_text_name.is_empty()
-                            && let Ok(id3) = self.get_resource_index("Text", &s.hint_text_name)
-                            && let RCR::Text(mut t) = self.rust_constructor_resource[id3].clone()
-                        {
-                            t.background_color[3] = t.color[3];
-                            t.content = s.appearance
-                                [(s.state * s.animation_count + appearance_count) as usize]
-                                .hint_text
-                                .clone();
-                            self.rust_constructor_resource[id3] = RCR::Text(t);
-                        };
-                        s.last_time_hovered = hovered;
-                        activated[1] = s.state as usize;
-                        self.rust_constructor_resource[id] = RCR::Switch(s.clone());
-                        self.rust_constructor_resource[id2] = RCR::Image(im.clone());
-                        self.image(ui, &s.switch_image_name.clone(), ctx);
-                        if self.check_resource_exists("Text", &s.text_name) {
-                            if let Ok(id4) = self.get_resource_index("Text", &s.text_name)
-                                && let RCR::Text(mut t2) =
-                                    self.rust_constructor_resource[id4].clone()
-                            {
-                                t2.origin_position = [
-                                    im.position[0] + s.text_origin_position[0],
-                                    im.position[1] + s.text_origin_position[1],
-                                ];
-                                t2.content = s.appearance
-                                    [(s.state * s.animation_count + appearance_count) as usize]
-                                    .text
-                                    .clone();
-                                self.rust_constructor_resource[id4] = RCR::Text(t2);
-                            };
-                            self.text(ui, &s.text_name, ctx);
-                        };
-                        if self.check_resource_exists("Text", &s.hint_text_name) {
-                            self.text(ui, &s.hint_text_name, ctx);
-                        };
-                        Ok(activated)
-                    } else {
-                        // 一般情况下不会触发。
-                        Err(RustConstructorError::ImageNotFound {
-                            image_name: s.switch_image_name,
-                        })
-                    }
+                        )
+                        .unwrap();
                 } else {
-                    self.problem_report(
-                        RustConstructorError::ImageNotFound {
-                            image_name: name.to_string(),
+                    self.problem_report_custom(
+                        RustConstructorError::ImageTextureNotFound {
+                            image_texture_name: s.appearance
+                                [(s.state * s.animation_count + appearance_count) as usize]
+                                .texture
+                                .clone(),
                         },
                         SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
                     );
-                    Err(RustConstructorError::ImageNotFound {
-                        image_name: s.switch_image_name,
-                    })
-                }
+                    return Err(RustConstructorError::ImageTextureNotFound {
+                        image_texture_name: s.appearance
+                            [(s.state * s.animation_count + appearance_count) as usize]
+                            .texture
+                            .clone(),
+                    });
+                };
+                if !s.hint_text_name.is_empty() {
+                    if self.check_resource_exists(&s.hint_text_name, "Text") {
+                        let mut t = self
+                            .get_resource::<Text>(&s.hint_text_name, "Text")
+                            .unwrap()
+                            .clone();
+                        t.background_color[3] = t.color[3];
+                        t.content = s.appearance
+                            [(s.state * s.animation_count + appearance_count) as usize]
+                            .hint_text
+                            .clone();
+                        self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                            .unwrap();
+                    } else {
+                        self.problem_report_custom(
+                            RustConstructorError::TextNotFound {
+                                text_name: s.hint_text_name.clone(),
+                            },
+                            SeverityLevel::SevereWarning,
+                            self.problem_list.clone(),
+                        );
+                        return Err(RustConstructorError::TextNotFound {
+                            text_name: s.hint_text_name,
+                        });
+                    };
+                };
+                s.last_time_hovered = hovered;
+                activated[1] = s.state as usize;
+                self.replace_resource(name, "Switch", s.clone()).unwrap();
+                self.replace_resource(&s.switch_image_name, "Image", im.clone())
+                    .unwrap();
+                self.image(&s.switch_image_name.clone(), ui, ctx).unwrap();
+                if self.check_resource_exists(&s.text_name, "Text") {
+                    let mut t = self
+                        .get_resource::<Text>(&s.text_name, "Text")
+                        .unwrap()
+                        .clone();
+                    t.origin_position = [
+                        im.position[0] + s.text_origin_position[0],
+                        im.position[1] + s.text_origin_position[1],
+                    ];
+                    t.content = s.appearance
+                        [(s.state * s.animation_count + appearance_count) as usize]
+                        .text
+                        .clone();
+                    self.replace_resource(&s.text_name, "Text", t.clone())
+                        .unwrap();
+                    self.text(&s.text_name, ui, ctx).unwrap();
+                };
+                if self.check_resource_exists(&s.hint_text_name, "Text") {
+                    self.text(&s.hint_text_name, ui, ctx).unwrap();
+                };
+                Ok(activated)
             } else {
-                // 一般情况下不会触发。
-                Err(RustConstructorError::SwitchNotFound {
-                    switch_name: name.to_string(),
+                self.problem_report_custom(
+                    RustConstructorError::ImageNotFound {
+                        image_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::ImageNotFound {
+                    image_name: s.switch_image_name.clone(),
                 })
             }
         } else {
-            self.problem_report(
+            self.problem_report_custom(
                 RustConstructorError::SwitchNotFound {
                     switch_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
             );
             Err(RustConstructorError::SwitchNotFound {
                 switch_name: name.to_string(),
