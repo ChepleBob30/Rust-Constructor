@@ -28,23 +28,21 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current latest version is `v2.2.0 Health Update`. Major updates include:
-  - Improved creation methods for some structs.
-  - `RustConstructorResource` now supports `Debug`.
-  - The `reg_render_resource` method of `RustConstructorResource` can now be automatically implemented.
-  - `RustConstructorResource` extends two methods `as_any` and `as_any_mut` for type conversion.
-  - `Image` and `ImageTexture` now implement `Debug`.
-  - Added `DebugTextureHandle` struct to implement `Debug` for `ImageTexture`.
-  - `RustConstructorError` now implements `Display` and `Error`, and added two new error types: `ImageTextureNotFound` and `RectNotFound`.
-  - Fields `page` and `vertrefresh` in `App` are now renamed to `current_page` and `tick_interval`.
-  - The storage content of `rust_constructor_resource` is now `Vec<Box<dyn RustConstructorResource>>`.
-  - Extensively improved error handling.
-  - Removed `get_resource_index`.
-  - Added `get_resource` and `get_resource_mut` methods to directly fetch resources from the list and operate on them.
-  - Added `replace_resource` and `replace_resource_custom` methods to replace specified resources from the list.
-  - Modified many methods to adapt to the new storage approach.
-  - Added `problem_report_custom` method for custom problem reporting lists.
-  - Removed some functions and methods with low relevance to `Rust Constructor`.
+- The current latest version is `v2.3.0 Compatibility Update`. Major updates include:
+  - Removed a large number of useless functions outside of `App`.
+  - Added `FrontResource` trait for managing basic front-end resources.
+  - Added `Config` class structures for quickly customizing front-end resources.
+  - `Image` added multiple fields: `background_color` for managing background color displayed behind the image, `rotate_angle` for managing image rotation angle (clockwise, used with std::f32::consts::PI, does not change other resource detection input range), `rotate_center` controls the image rotation center point (position determined by the ratio of input values to image dimensions).
+  - Removed `Text`'s `write_background` field.
+  - Major refactor of `SwitchData`.
+  - Some fields in `Switch` have been renamed: `switch_image_name` -> `fill_resource_name`, `enable_hover_click_image` -> `enable_hover_click_fill_resource`.
+  - Removed `Switch`'s `sound_path` field and related functionality.
+  - `RustConstructorError` added two new error types: `SwitchFillResourceMismatch` and `CustomError`.
+  - Removed `Config` and `AppText` and their related fields.
+  - Added `strict_mode` field in `App`.
+  - Fixed the issue where `CustomRect`'s `position` would not update with `center_display`.
+  - Major refactor of `Switch`, now multiple resources can be used to fill the `Switch` main part (`Image` or `CustomRect`).
+  - The close button of `MessageBox` now also supports filling with multiple resources.
 
 ---
 

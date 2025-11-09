@@ -28,23 +28,21 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.2.0 健全更新`。主要更新了以下内容：
-  - 完善了部分结构体的创建方法。
-  - `RustConstructorResource`现已支持`Debug`。
-  - 现在`RustConstructorResource`的方法`reg_render_resource`可以自动实现。
-  - `RustConstructorResource`扩展了`as_any`和`as_any_mut`两个方法，用于类型转换。
-  - 现在`Image`和`ImageTexture`也实现了`Debug`。
-  - 新增`DebugTextureHandle`结构体，用于为`ImageTexture`实现`Debug`。
-  - `RustConstructorError`现已实现`Display`和`Error`，并增加了两个新错误类型：`ImageTextureNotFound`和`RectNotFound`。
-  - 现在`App`中的字段`page`和`vertrefresh`被重命名为`current_page`和`tick_interval`。
-  - 现在`rust_constructor_resource`的存储内容变为`Vec<Box<dyn RustConstructorResource>>`。
-  - 大范围完善了错误处理。
-  - 移除了`get_resource_index`。
-  - 添加`get_resource`和`get_resource_mut`方法，可以直接从列表中抓取资源并进行操作。
-  - 添加了`replace_resource`和`replace_resource_custom`方法，可以从列表中替代指定资源。
-  - 对大量方法进行修改以适应新的存储方式。
-  - 添加`problem_report_custom`方法，用于自定义问题推送列表。
-  - 移除了一些与`Rust Constructor`关联性不大的函数及方法。
+- 目前的最新版本为`v2.3.0 兼容更新`。主要更新了以下内容：
+  - 移除了大量`App`外的无用函数。
+  - 添加`FrontResource`特征，用于管理基本的前端资源。
+  - 添加了`Config`类结构体，用于快速自定义前端资源。
+  - `Image`添加了多个字段: `background_color`用于管理显示在图片后方的背景色，`rotate_angle`用于管理图片旋转的角度(顺时针，搭配std::f32::consts::PI使用，不改变其他资源检测输入范围) `rotate_center`控制图片旋转的中心点(根据输入数值大小与图片尺寸的比例决定位置)。
+  - 移除了`Text`的`write_background`字段。
+  - 大改`SwitchData`。
+  - `Switch`的一些字段现已被重命名: `switch_image_name` -> `fill_resource_name`，`enable_hover_click_image` -> `enable_hover_click_fill_resource`。
+  - 移除了`Switch`的`sound_path`字段与相关功能。
+  - `RustConstructorError`添加了`SwitchFillResourceMismatch`和`CustomError`两种新错误类型。
+  - 移除了`Config`和`AppText`及其相关字段。
+  - `App`中添加`strict_mode`字段。
+  - 修复了`CustomRect`的`position`不会随`center_display`更新的问题。
+  - 大改`Switch`，现在可以使用多种资源填充`Switch`主体部分了(`Image`或`CustomRect`)。
+  - 现在`MessageBox`的关闭按钮也支持使用多种资源填充了。
 
 ---
 

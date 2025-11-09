@@ -1,226 +1,56 @@
 //! Rust Constructor V2
 //! 基于egui构建的跨平台GUI框架, 用Rust开发GUI项目最简单的方式。
-use anyhow::Context;
 use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
 use egui::{
-    Color32, FontData, FontDefinitions, FontId, Galley, PointerButton, Pos2, TextureHandle, Ui,
-    Vec2, text::CCursor,
-};
-use json::JsonValue;
-use kira::{
-    AudioManager, AudioManagerSettings, DefaultBackend, sound::static_sound::StaticSoundData,
+    Color32, ColorImage, Context, FontData, FontDefinitions, FontFamily, FontId, Galley, Id,
+    ImageSource, Key, OpenUrl, PointerButton, Pos2, Sense, StrokeKind, TextureHandle, Ui, Vec2,
+    text::CCursor,
 };
 use std::{
     any::Any,
-    collections::HashMap,
     error::Error,
-    fmt::Debug,
-    fs::{self, File},
+    fmt::{Debug, Display, Formatter},
+    fs::{File, read},
     io::Read,
-    path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
     vec::Vec,
 };
 
-/// 创建格式化的JSON文件。
-pub fn create_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
-    let parent_dir = path
-        .as_ref()
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("Invalid file path."))?;
+/// 核心特征，用于统一管理Rust Constructor资源。
+pub trait RustConstructorResource: Debug {
+    /// 返回资源名称。
+    fn name(&self) -> &str;
 
-    // 创建父目录（如果不存在）。
-    fs::create_dir_all(parent_dir)?;
+    /// 返回资源类型。
+    fn expose_type(&self) -> &str;
 
-    // 生成带缩进的JSON字符串（4空格缩进）。
-    let formatted = json::stringify_pretty(data, 4);
-
-    // 写入文件（自动处理换行符）。
-    fs::write(path, formatted)?;
-    Ok(())
-}
-
-/// 复制并重新格式化JSON文件。
-pub fn copy_and_reformat_json<P: AsRef<Path>>(src: P, dest: P) -> anyhow::Result<()> {
-    // 读取原始文件。
-    let content = fs::read_to_string(&src)?;
-
-    // 解析JSON（自动验证格式）。
-    let parsed = json::parse(&content)?;
-
-    // 使用格式化写入新文件。
-    create_json(dest, parsed)?;
-
-    Ok(())
-}
-
-/// 检查文件是否存在。
-pub fn check_file_exists<P: AsRef<Path>>(path: P) -> bool {
-    let path_ref = path.as_ref();
-    if path_ref.exists() {
-        true // 文件已存在时直接返回true。
-    } else {
-        // 文件不存在时，返回false。
-        false
-    }
-}
-
-/// 通用 JSON 写入函数。
-pub fn write_to_json<P: AsRef<Path>>(path: P, data: JsonValue) -> anyhow::Result<()> {
-    let parent_dir = path
-        .as_ref()
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("Invalid file path."))?;
-
-    fs::create_dir_all(parent_dir)?;
-    let formatted = json::stringify_pretty(data, 4);
-    fs::write(path, formatted)?;
-    Ok(())
-}
-
-/// 通用 JSON 读取函数。
-pub fn read_from_json<P: AsRef<Path>>(path: P) -> anyhow::Result<JsonValue> {
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Cannot read the file: {}", path.as_ref().display()))?;
-    json::parse(&content)
-        .with_context(|| format!("Failed to parse JSON: {}", path.as_ref().display()))
-}
-
-/// 播放 WAV 文件。
-pub fn play_wav(path: &str) -> anyhow::Result<f64> {
-    let mut manager = AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())?;
-    let sound_data = StaticSoundData::from_file(path)?;
-    let duration = sound_data.duration().as_secs_f64();
-    manager.play(sound_data)?;
-    std::thread::sleep(std::time::Duration::from_secs_f64(duration));
-    Ok(duration)
-}
-
-/// 通用按键点击反馈函数。
-pub fn general_click_feedback(sound_path: &str) {
-    let sound_path = sound_path.to_string();
-    std::thread::spawn(move || {
-        play_wav(&sound_path).unwrap_or(0_f64);
-    });
-}
-
-/// 检查指定目录下有多少个带有特定名称的文件。
-pub fn count_files_recursive(dir: &Path, target: &str) -> std::io::Result<usize> {
-    let mut count = 0;
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                count += count_files_recursive(&path, target)?;
-            } else if path.file_name().unwrap().to_string_lossy().contains(target) {
-                count += 1;
-            }
-        }
-    }
-    Ok(count)
-}
-
-/// 检查指定目录下有多少个带有特定名称的文件并返回它们的名称。
-pub fn list_files_recursive(path: &Path, prefix: &str) -> Result<Vec<PathBuf>, std::io::Error> {
-    let mut matches = Vec::new();
-
-    for entry in std::fs::read_dir(path)? {
-        // 遍历目录
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_dir() {
-            // 递归处理子目录
-            matches.extend(list_files_recursive(&path, prefix)?);
-        } else if let Some(file_name) = path.file_name()
-            && file_name.to_string_lossy().contains(prefix)
-        {
-            matches.push(path);
-        }
+    /// 注册渲染的资源。
+    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
+        render_list.push(RenderResource {
+            discern_type: self.expose_type().to_string(),
+            name: self.name().to_string(),
+        });
     }
 
-    Ok(matches)
+    /// 用于不可变类型转换。
+    fn as_any(&self) -> &dyn Any;
+
+    /// 用于可变类型转换。
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-/// 配置文件。
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Config {
-    /// 是否启用严格模式：严格模式下，当遇到无法处理的情况时，将直接panic；若未启用严格模式，则会发出一条问题报告来描述情况。
-    pub strict_mode: bool,
-    /// 问题反馈音效（留空即可禁用）。
-    pub problem_report_sound: String,
-}
+/// 标记并管理用于显示给用户的资源。
+pub trait FrontResource: RustConstructorResource {
+    fn size(&self) -> [f32; 2];
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            strict_mode: true,
-            problem_report_sound: String::new(),
-        }
-    }
-}
+    fn position(&self) -> [f32; 2];
 
-impl Config {
-    #[inline]
-    pub fn strict_mode(mut self, strict_mode: bool) -> Self {
-        self.strict_mode = strict_mode;
-        self
-    }
+    fn modify_size(&mut self, width: f32, height: f32);
 
-    #[inline]
-    pub fn problem_report_sound(mut self, problem_report_sound: &str) -> Self {
-        self.problem_report_sound = problem_report_sound.to_string();
-        self
-    }
+    fn modify_position(&mut self, x: f32, y: f32);
 
-    pub fn from_json_value(value: &JsonValue) -> Option<Self> {
-        Some(Self {
-            strict_mode: value["strict_mode"].as_bool()?,
-            problem_report_sound: value["problem_report_sound"].as_str()?.to_string(),
-        })
-    }
-
-    pub fn to_json_value(&self) -> JsonValue {
-        json::object! {
-            strict_mode: self.strict_mode,
-            problem_report_sound: self.problem_report_sound.clone(),
-        }
-    }
-}
-
-/// 统一的文本调用处。
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct AppText {
-    pub app_text: HashMap<String, Vec<String>>,
-}
-
-impl AppText {
-    pub fn new(app_text: HashMap<String, Vec<String>>) -> Self {
-        Self { app_text }
-    }
-
-    pub fn from_json_value(value: &JsonValue) -> Option<Self> {
-        // 检查 app_text 字段是否为对象
-        if !value["app_text"].is_object() {
-            return None;
-        }
-
-        // 遍历对象键值对
-        let mut parsed = HashMap::new();
-        for (key, val) in value["app_text"].entries() {
-            if let JsonValue::Array(arr) = val {
-                let str_vec: Vec<String> = arr
-                    .iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect();
-                parsed.insert(key.to_string(), str_vec);
-            }
-        }
-
-        Some(Self { app_text: parsed })
-    }
+    fn modify_add_position(&mut self, add_x: f32, add_y: f32);
 }
 
 /// 存储特定值的枚举。
@@ -307,27 +137,17 @@ pub enum SeverityLevel {
     Error,
 }
 
-/// 核心特征，用于统一管理Rust Constructor资源。
-pub trait RustConstructorResource: Debug {
-    /// 返回资源名称。
-    fn name(&self) -> &str;
-
-    /// 返回资源类型。
-    fn expose_type(&self) -> &str;
-
-    /// 注册资源。
-    fn reg_render_resource(&self, render_list: &mut Vec<RenderResource>) {
-        render_list.push(RenderResource {
-            discern_type: self.expose_type().to_string(),
-            name: self.name().to_string(),
-        });
-    }
-
-    /// 用于不可变类型转换。
-    fn as_any(&self) -> &dyn Any;
-
-    /// 用于可变类型转换。
-    fn as_any_mut(&mut self) -> &mut dyn Any;
+/// 用于存储页面数据的RC资源。
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PageData {
+    pub discern_type: String,
+    pub name: String,
+    /// 是否强制在每帧都刷新页面(使用ctx.request_repaint())。
+    pub forced_update: bool,
+    /// 是否已经加载完首次进入此页面所需内容。
+    pub change_page_updated: bool,
+    /// 是否已经加载完进入此页面所需内容。
+    pub enter_page_updated: bool,
 }
 
 impl RustConstructorResource for PageData {
@@ -346,19 +166,6 @@ impl RustConstructorResource for PageData {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
-}
-
-/// 用于存储页面数据的RC资源。
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PageData {
-    pub discern_type: String,
-    pub name: String,
-    /// 是否强制在每帧都刷新页面(使用ctx.request_repaint())。
-    pub forced_update: bool,
-    /// 是否已经加载完首次进入此页面所需内容。
-    pub change_page_updated: bool,
-    /// 是否已经加载完进入此页面所需内容。
-    pub enter_page_updated: bool,
 }
 
 impl Default for PageData {
@@ -411,30 +218,12 @@ impl Default for Timer {
     }
 }
 
-impl RustConstructorResource for ImageTexture {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
 /// 为图片纹理支持派生Debug特征。
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct DebugTextureHandle(TextureHandle);
 
-impl std::fmt::Debug for DebugTextureHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for DebugTextureHandle {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // 只输出类型信息，不输出具体纹理数据
         f.debug_struct("DebugTextureHandle").finish()
     }
@@ -457,6 +246,24 @@ pub struct ImageTexture {
     pub cite_path: String,
 }
 
+impl RustConstructorResource for ImageTexture {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 impl Default for ImageTexture {
     fn default() -> Self {
         ImageTexture {
@@ -476,20 +283,115 @@ impl ImageTexture {
     }
 }
 
-impl RustConstructorResource for CustomRect {
-    fn name(&self) -> &str {
-        &self.name
+/// 矩形的可配置项。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct CustomRectConfig {
+    /// 尺寸。
+    pub size: [f32; 2],
+    /// 圆角。
+    pub rounding: f32,
+    /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
+    pub x_grid: [u32; 2],
+    /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
+    pub y_grid: [u32; 2],
+    /// 对齐方法。
+    pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 颜色。
+    pub color: [u8; 4],
+    /// 边框宽度。
+    pub border_width: f32,
+    /// 边框颜色。
+    pub border_color: [u8; 4],
+    /// 原始位置。
+    pub origin_position: [f32; 2],
+}
+
+impl Default for CustomRectConfig {
+    fn default() -> Self {
+        Self {
+            size: [100_f32, 100_f32],
+            rounding: 2_f32,
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            color: [255, 255, 255, 255],
+            border_width: 2_f32,
+            border_color: [0, 0, 0, 255],
+            origin_position: [0_f32, 0_f32],
+        }
+    }
+}
+
+impl CustomRectConfig {
+    pub fn from_custom_rect(custom_rect: CustomRect) -> Self {
+        Self {
+            size: custom_rect.size,
+            rounding: custom_rect.rounding,
+            x_grid: custom_rect.x_grid,
+            y_grid: custom_rect.y_grid,
+            center_display: custom_rect.center_display,
+            color: custom_rect.color,
+            border_width: custom_rect.border_width,
+            border_color: custom_rect.border_color,
+            origin_position: custom_rect.origin_position,
+        }
     }
 
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn as_any(&self) -> &dyn Any {
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    #[inline]
+    pub fn rounding(mut self, rounding: f32) -> Self {
+        self.rounding = rounding;
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn border_width(mut self, border_width: f32) -> Self {
+        self.border_width = border_width;
+        self
+    }
+
+    #[inline]
+    pub fn border_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.border_color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
         self
     }
 }
@@ -521,6 +423,46 @@ pub struct CustomRect {
     pub origin_position: [f32; 2],
 }
 
+impl RustConstructorResource for CustomRect {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl FrontResource for CustomRect {
+    fn position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    fn size(&self) -> [f32; 2] {
+        self.size
+    }
+
+    fn modify_position(&mut self, x: f32, y: f32) {
+        self.origin_position = [x, y];
+    }
+
+    fn modify_size(&mut self, width: f32, height: f32) {
+        self.size = [width, height];
+    }
+
+    fn modify_add_position(&mut self, add_x: f32, add_y: f32) {
+        self.origin_position = [self.position[0] + add_x, self.position[1] + add_y];
+    }
+}
+
 impl Default for CustomRect {
     fn default() -> Self {
         Self {
@@ -541,6 +483,19 @@ impl Default for CustomRect {
 }
 
 impl CustomRect {
+    pub fn from_config(mut self, config: CustomRectConfig) -> Self {
+        self.size = config.size;
+        self.rounding = config.rounding;
+        self.x_grid = config.x_grid;
+        self.y_grid = config.y_grid;
+        self.center_display = config.center_display;
+        self.color = config.color;
+        self.border_width = config.border_width;
+        self.border_color = config.border_color;
+        self.origin_position = config.origin_position;
+        self
+    }
+
     #[inline]
     pub fn name(mut self, name: &str) -> Self {
         self.name = name.to_string();
@@ -606,20 +561,129 @@ impl CustomRect {
     }
 }
 
-impl RustConstructorResource for Image {
-    fn name(&self) -> &str {
-        &self.name
+/// 图片的可配置项。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct ImageConfig {
+    /// 图片大小。
+    pub size: [f32; 2],
+    /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
+    pub x_grid: [u32; 2],
+    /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
+    pub y_grid: [u32; 2],
+    /// 对齐方法。
+    pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 不透明度。
+    pub alpha: u8,
+    /// 叠加颜色。
+    pub overlay_color: [u8; 4],
+    /// 背景颜色。
+    pub background_color: [u8; 4],
+    /// 旋转角度(只能顺时针，建议搭配std::f32::PI使用)。
+    pub rotate_angle: f32,
+    /// 旋转中心。
+    pub rotate_center: [f32; 2],
+    /// 原始位置。
+    pub origin_position: [f32; 2],
+    /// 引用纹理名。
+    pub cite_texture: String,
+}
+
+impl Default for ImageConfig {
+    fn default() -> Self {
+        Self {
+            size: [100_f32, 100_f32],
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            alpha: 255,
+            overlay_color: [255, 255, 255, 255],
+            background_color: [0, 0, 0, 0],
+            rotate_angle: 0_f32,
+            rotate_center: [0_f32, 0_f32],
+            origin_position: [0_f32, 0_f32],
+            cite_texture: String::from("ImageTexture"),
+        }
+    }
+}
+
+impl ImageConfig {
+    pub fn from_image(image: Image) -> Self {
+        Self {
+            size: image.size,
+            x_grid: image.x_grid,
+            y_grid: image.y_grid,
+            center_display: image.center_display,
+            alpha: image.alpha,
+            overlay_color: image.overlay_color,
+            background_color: image.background_color,
+            rotate_angle: image.rotate_angle,
+            rotate_center: image.rotate_center,
+            cite_texture: image.cite_texture,
+            origin_position: image.origin_position,
+        }
     }
 
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn as_any(&self) -> &dyn Any {
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn alpha(mut self, alpha: u8) -> Self {
+        self.alpha = alpha;
+        self
+    }
+
+    #[inline]
+    pub fn overlay_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.overlay_color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
+        self.background_color = background_color;
+        self
+    }
+
+    #[inline]
+    pub fn rotate_angle(mut self, rotate_angle: f32) -> Self {
+        self.rotate_angle = rotate_angle;
+        self
+    }
+
+    #[inline]
+    pub fn rotate_center(mut self, x: f32, y: f32) -> Self {
+        self.rotate_center = [x, y];
         self
     }
 }
@@ -645,14 +709,58 @@ pub struct Image {
     pub alpha: u8,
     /// 叠加颜色。
     pub overlay_color: [u8; 4],
-    /// 是否使用叠加颜色。
-    pub use_overlay_color: bool,
+    /// 背景颜色。
+    pub background_color: [u8; 4],
+    /// 旋转角度(只能顺时针，建议搭配std::f32::consts::PI使用)。
+    pub rotate_angle: f32,
+    /// 旋转中心。
+    pub rotate_center: [f32; 2],
     /// 原始位置。
     pub origin_position: [f32; 2],
     /// 引用纹理名。
     pub cite_texture: String,
     /// 上一帧引用纹理名。
     pub last_frame_cite_texture: String,
+}
+
+impl RustConstructorResource for Image {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl FrontResource for Image {
+    fn position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    fn size(&self) -> [f32; 2] {
+        self.size
+    }
+
+    fn modify_position(&mut self, x: f32, y: f32) {
+        self.origin_position = [x, y];
+    }
+
+    fn modify_size(&mut self, width: f32, height: f32) {
+        self.size = [width, height];
+    }
+
+    fn modify_add_position(&mut self, add_x: f32, add_y: f32) {
+        self.origin_position = [self.position[0] + add_x, self.position[1] + add_y];
+    }
 }
 
 impl Default for Image {
@@ -668,7 +776,9 @@ impl Default for Image {
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
             alpha: 255,
             overlay_color: [255, 255, 255, 255],
-            use_overlay_color: true,
+            background_color: [0, 0, 0, 0],
+            rotate_angle: 0_f32,
+            rotate_center: [0_f32, 0_f32],
             origin_position: [0_f32, 0_f32],
             cite_texture: String::from("ImageTexture"),
             last_frame_cite_texture: String::from("ImageTexture"),
@@ -677,6 +787,21 @@ impl Default for Image {
 }
 
 impl Image {
+    pub fn from_config(mut self, config: ImageConfig) -> Self {
+        self.size = config.size;
+        self.x_grid = config.x_grid;
+        self.y_grid = config.y_grid;
+        self.center_display = config.center_display;
+        self.alpha = config.alpha;
+        self.overlay_color = config.overlay_color;
+        self.background_color = config.background_color;
+        self.rotate_angle = config.rotate_angle;
+        self.rotate_center = config.rotate_center;
+        self.origin_position = config.origin_position;
+        self.cite_texture = config.cite_texture;
+        self
+    }
+
     #[inline]
     pub fn name(mut self, name: &str) -> Self {
         self.name = name.to_string();
@@ -730,26 +855,20 @@ impl Image {
     }
 
     #[inline]
-    pub fn use_overlay_color(mut self, use_overlay_color: bool) -> Self {
-        self.use_overlay_color = use_overlay_color;
-        self
-    }
-}
-
-impl RustConstructorResource for Text {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn as_any(&self) -> &dyn Any {
+    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
+        self.background_color = background_color;
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    #[inline]
+    pub fn rotate_angle(mut self, rotate_angle: f32) -> Self {
+        self.rotate_angle = rotate_angle;
+        self
+    }
+
+    #[inline]
+    pub fn rotate_center(mut self, x: f32, y: f32) -> Self {
+        self.rotate_center = [x, y];
         self
     }
 }
@@ -763,25 +882,19 @@ pub enum HyperlinkSelectMethod {
     Segment(Vec<(usize, String)>),
 }
 
-/// RC的文本资源。
+/// 文本的可配置项。
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Text {
-    pub discern_type: String,
-    pub name: String,
+pub struct TextConfig {
     /// 文本内容。
     pub content: String,
     /// 字号。
     pub font_size: f32,
     /// 文本颜色。
     pub color: [u8; 4],
-    /// 文本位置。
-    pub position: [f32; 2],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
     /// 单行宽度。
     pub wrap_width: f32,
-    /// 是否有背景。
-    pub write_background: bool,
     /// 背景颜色。
     pub background_color: [u8; 4],
     /// 圆角。
@@ -794,50 +907,49 @@ pub struct Text {
     pub origin_position: [f32; 2],
     /// 字体。
     pub font: String,
-    /// 框选选中的文本。
-    pub selection: Option<(usize, usize)>,
     /// 是否可框选。
     pub selectable: bool,
     /// 超链接文本。
     pub hyperlink_text: Vec<(String, HyperlinkSelectMethod)>,
-    /// 超链接选取索引值与链接。
-    pub hyperlink_index: Vec<(usize, usize, String)>,
-    /// 上一帧的文本内容(用于优化超链接文本选取)。
-    pub last_frame_content: String,
 }
 
-impl Default for Text {
+impl Default for TextConfig {
     fn default() -> Self {
         Self {
-            discern_type: String::from("Text"),
-            name: String::from("Text"),
             content: String::from("Hello world"),
             font_size: 16_f32,
             color: [255, 255, 255, 255],
-            position: [0_f32, 0_f32],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
             wrap_width: 200_f32,
-            write_background: true,
-            background_color: [0, 0, 0, 255],
+            background_color: [0, 0, 0, 0],
             background_rounding: 2_f32,
             x_grid: [0, 0],
             y_grid: [0, 0],
             origin_position: [0_f32, 0_f32],
             font: String::new(),
-            selection: None,
             selectable: true,
             hyperlink_text: Vec::new(),
-            hyperlink_index: Vec::new(),
-            last_frame_content: String::from("Hello world"),
         }
     }
 }
 
-impl Text {
-    #[inline]
-    pub fn name(mut self, name: &str) -> Self {
-        self.name = name.to_string();
-        self
+impl TextConfig {
+    pub fn from_text(text: Text) -> Self {
+        Self {
+            content: text.content,
+            font_size: text.font_size,
+            color: text.color,
+            center_display: text.center_display,
+            wrap_width: text.wrap_width,
+            background_color: text.background_color,
+            background_rounding: text.background_rounding,
+            x_grid: text.x_grid,
+            y_grid: text.y_grid,
+            origin_position: text.origin_position,
+            font: text.font,
+            selectable: text.selectable,
+            hyperlink_text: text.hyperlink_text,
+        }
     }
 
     #[inline]
@@ -875,14 +987,8 @@ impl Text {
     }
 
     #[inline]
-    pub fn write_background(mut self, write_background: bool) -> Self {
-        self.write_background = write_background;
-        self
-    }
-
-    #[inline]
-    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.background_color = [r, g, b, a];
+    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
+        self.background_color = background_color;
         self
     }
 
@@ -934,7 +1040,48 @@ impl Text {
     }
 }
 
-impl RustConstructorResource for Variable {
+/// RC的文本资源。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct Text {
+    pub discern_type: String,
+    pub name: String,
+    /// 文本内容。
+    pub content: String,
+    /// 字号。
+    pub font_size: f32,
+    /// 文本颜色。
+    pub color: [u8; 4],
+    /// 文本位置。
+    pub position: [f32; 2],
+    /// 对齐方法。
+    pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 单行宽度。
+    pub wrap_width: f32,
+    /// 背景颜色。
+    pub background_color: [u8; 4],
+    /// 圆角。
+    pub background_rounding: f32,
+    /// x轴的网格式定位：窗口宽 / 第二项 * 第一项 = x轴的原始位置。
+    pub x_grid: [u32; 2],
+    /// y轴的网格式定位：窗口高 / 第二项 * 第一项 = y轴的原始位置。
+    pub y_grid: [u32; 2],
+    /// 原始位置。
+    pub origin_position: [f32; 2],
+    /// 字体。
+    pub font: String,
+    /// 框选选中的文本。
+    pub selection: Option<(usize, usize)>,
+    /// 是否可框选。
+    pub selectable: bool,
+    /// 超链接文本。
+    pub hyperlink_text: Vec<(String, HyperlinkSelectMethod)>,
+    /// 超链接选取索引值与链接。
+    pub hyperlink_index: Vec<(usize, usize, String)>,
+    /// 上一帧的文本内容(用于优化超链接文本选取)。
+    pub last_frame_content: String,
+}
+
+impl RustConstructorResource for Text {
     fn name(&self) -> &str {
         &self.name
     }
@@ -952,6 +1099,166 @@ impl RustConstructorResource for Variable {
     }
 }
 
+impl FrontResource for Text {
+    fn position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    fn size(&self) -> [f32; 2] {
+        [self.wrap_width, -1_f32]
+    }
+
+    fn modify_position(&mut self, x: f32, y: f32) {
+        self.origin_position = [x, y];
+    }
+
+    fn modify_size(&mut self, width: f32, _height: f32) {
+        self.wrap_width = width;
+    }
+
+    fn modify_add_position(&mut self, add_x: f32, add_y: f32) {
+        self.origin_position = [self.position[0] + add_x, self.position[1] + add_y];
+    }
+}
+
+impl Default for Text {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("Text"),
+            name: String::from("Text"),
+            content: String::from("Hello world"),
+            font_size: 16_f32,
+            color: [255, 255, 255, 255],
+            position: [0_f32, 0_f32],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            wrap_width: 200_f32,
+            background_color: [0, 0, 0, 0],
+            background_rounding: 2_f32,
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            origin_position: [0_f32, 0_f32],
+            font: String::new(),
+            selection: None,
+            selectable: true,
+            hyperlink_text: Vec::new(),
+            hyperlink_index: Vec::new(),
+            last_frame_content: String::from("Hello world"),
+        }
+    }
+}
+
+impl Text {
+    pub fn from_config(mut self, config: TextConfig) -> Self {
+        self.content = config.content;
+        self.font_size = config.font_size;
+        self.color = config.color;
+        self.center_display = config.center_display;
+        self.wrap_width = config.wrap_width;
+        self.background_color = config.background_color;
+        self.background_rounding = config.background_rounding;
+        self.x_grid = config.x_grid;
+        self.y_grid = config.y_grid;
+        self.origin_position = config.origin_position;
+        self.font = config.font;
+        self.selectable = config.selectable;
+        self.hyperlink_text = config.hyperlink_text;
+        self
+    }
+
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn content(mut self, content: &str) -> Self {
+        self.content = content.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn font_size(mut self, font_size: f32) -> Self {
+        self.font_size = font_size;
+        self
+    }
+
+    #[inline]
+    pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.color = [r, g, b, a];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn wrap_width(mut self, wrap_width: f32) -> Self {
+        self.wrap_width = wrap_width;
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
+        self.background_color = background_color;
+        self
+    }
+
+    #[inline]
+    pub fn background_rounding(mut self, background_rounding: f32) -> Self {
+        self.background_rounding = background_rounding;
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
+        self
+    }
+
+    #[inline]
+    pub fn font(mut self, font: &str) -> Self {
+        self.font = font.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
+        self
+    }
+
+    #[inline]
+    pub fn hyperlink_text(
+        mut self,
+        target_text: &str,
+        select_method: HyperlinkSelectMethod,
+    ) -> Self {
+        self.hyperlink_text
+            .push((target_text.to_string(), select_method));
+        self
+    }
+}
+
 /// RC的变量资源。
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Variable {
@@ -959,6 +1266,24 @@ pub struct Variable {
     pub name: String,
     /// 变量的值。
     pub value: Value,
+}
+
+impl RustConstructorResource for Variable {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 impl Default for Variable {
@@ -1052,6 +1377,24 @@ pub struct Font {
     pub path: String,
 }
 
+impl RustConstructorResource for Font {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 impl Default for Font {
     fn default() -> Self {
         Self {
@@ -1077,22 +1420,13 @@ impl Font {
     }
 }
 
-impl RustConstructorResource for Font {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
+/// RC的时间分段资源。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct SplitTime {
+    pub discern_type: String,
+    pub name: String,
+    /// 时间点（第一个值为页面运行时间，第二个值为总运行时间）。
+    pub time: [f32; 2],
 }
 
 impl RustConstructorResource for SplitTime {
@@ -1113,15 +1447,6 @@ impl RustConstructorResource for SplitTime {
     }
 }
 
-/// RC的时间分段资源。
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct SplitTime {
-    pub discern_type: String,
-    pub name: String,
-    /// 时间点（第一个值为页面运行时间，第二个值为总运行时间）。
-    pub time: [f32; 2],
-}
-
 impl Default for SplitTime {
     fn default() -> Self {
         Self {
@@ -1138,6 +1463,39 @@ impl SplitTime {
         self.name = name.to_string();
         self
     }
+}
+
+/// RC的开关资源。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Switch {
+    pub discern_type: String,
+    pub name: String,
+    /// 外观（包括各类资源配置项，数量为开启的内容数量*开关状态总数）。
+    pub appearance: Vec<SwitchData>,
+    /// 开关使用的填充资源名称。
+    pub fill_resource_name: String,
+    /// 开关使用的填充资源类型。
+    pub fill_resource_type: String,
+    /// 是否启用鼠标悬浮和点击时的显示内容。
+    pub enable_hover_click_fill_resource: [bool; 2],
+    /// 开关当前状态。
+    pub state: u32,
+    /// 可以用于点击开关的方法（包含点击方式和是否改变开关状态两个参数）。
+    pub click_method: Vec<SwitchClickAction>,
+    /// 上一次渲染是否有鼠标悬浮。
+    pub last_time_hovered: bool,
+    /// 上一次渲染是否被鼠标点击。
+    pub last_time_clicked: bool,
+    /// 上一次点击对应的点击方法的索引。
+    pub last_time_clicked_index: usize,
+    /// 动画总数。
+    pub animation_count: u32,
+    /// 提示文本资源名。
+    pub hint_text_name: String,
+    /// 开关上的文本资源名称（不需要可留空）。
+    pub text_name: String,
+    /// 开关文本资源的原始位置。
+    pub text_origin_position: [f32; 2],
 }
 
 impl RustConstructorResource for Switch {
@@ -1158,57 +1516,24 @@ impl RustConstructorResource for Switch {
     }
 }
 
-/// RC的开关资源。
-#[derive(Debug, Clone, PartialEq)]
-pub struct Switch {
-    pub discern_type: String,
-    pub name: String,
-    /// 外观（包括图片纹理和叠加颜色，数量为开启的动画数量*开关状态总数）。
-    pub appearance: Vec<SwitchData>,
-    /// 开关使用的图片名称。
-    pub switch_image_name: String,
-    /// 是否启用鼠标悬浮和点击时的动画。
-    pub enable_hover_click_image: [bool; 2],
-    /// 开关当前状态。
-    pub state: u32,
-    /// 可以用于点击开关的方法（包含点击方式和是否改变开关状态两个参数）。
-    pub click_method: Vec<SwitchClickAction>,
-    /// 上一次渲染是否有鼠标悬浮。
-    pub last_time_hovered: bool,
-    /// 上一次渲染是否被鼠标点击。
-    pub last_time_clicked: bool,
-    /// 上一次点击对应的点击方法的索引。
-    pub last_time_clicked_index: usize,
-    /// 动画总数。
-    pub animation_count: u32,
-    /// 提示文本资源名。
-    pub hint_text_name: String,
-    /// 开关上的文本资源名称（不需要可留空）。
-    pub text_name: String,
-    /// 开关文本资源的原始位置。
-    pub text_origin_position: [f32; 2],
-    /// 开关点击音效路径。
-    pub sound_path: String,
-}
-
 impl Default for Switch {
     fn default() -> Self {
         Self {
             discern_type: String::from("Switch"),
             name: String::from("Switch"),
             appearance: vec![],
-            switch_image_name: String::from("Image"),
-            enable_hover_click_image: [false, false],
+            fill_resource_name: String::from("FillResource"),
+            fill_resource_type: String::from("Image"),
+            enable_hover_click_fill_resource: [false, false],
             state: 0,
             click_method: vec![],
             last_time_hovered: false,
             last_time_clicked: false,
-            last_time_clicked_index: 0,
+            last_time_clicked_index: 5,
             animation_count: 0,
             hint_text_name: String::from("HintText"),
             text_name: String::from("Text"),
             text_origin_position: [0_f32, 0_f32],
-            sound_path: String::from(""),
         }
     }
 }
@@ -1227,24 +1552,19 @@ impl Switch {
     }
 
     #[inline]
-    pub fn enable_hover_click_image(
+    pub fn enable_hover_click_fill_resource(
         mut self,
-        enable_hover_image: bool,
-        enable_click_image: bool,
+        enable_hover_fill_resource: bool,
+        enable_click_fill_resource: bool,
     ) -> Self {
-        self.enable_hover_click_image = [enable_hover_image, enable_click_image];
+        self.enable_hover_click_fill_resource =
+            [enable_hover_fill_resource, enable_click_fill_resource];
         self
     }
 
     #[inline]
     pub fn click_method(mut self, click_method: Vec<SwitchClickAction>) -> Self {
         self.click_method = click_method;
-        self
-    }
-
-    #[inline]
-    pub fn sound_path(mut self, sound_path: &str) -> Self {
-        self.sound_path = sound_path.to_string();
         self
     }
 }
@@ -1257,14 +1577,16 @@ pub struct RenderResource {
 }
 
 /// 开关的外观。
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct SwitchData {
-    /// 开关的纹理。
+    /// 当填充资源为图片时的配置项。
+    pub image_config: ImageConfig,
+    /// 当填充资源为矩形时的配置项。
+    pub custom_rect_config: CustomRectConfig,
+    /// 当启用文本时，文本的配置项。
+    pub text_config: TextConfig,
+    /// 当填充资源为图片时，开关的纹理。
     pub texture: String,
-    /// 开关的颜色。
-    pub color: [u8; 4],
-    /// 开关上的文本内容。
-    pub text: String,
     /// 开关上的提示文本。
     pub hint_text: String,
 }
@@ -1303,6 +1625,24 @@ pub struct MessageBox {
     pub restore_speed: f32,
     /// 消息框上一次渲染时的y轴偏移量（用于实现补位动画）。
     pub memory_offset: f32,
+}
+
+impl RustConstructorResource for MessageBox {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 impl Default for MessageBox {
@@ -1362,24 +1702,6 @@ impl MessageBox {
     }
 }
 
-impl RustConstructorResource for MessageBox {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn expose_type(&self) -> &str {
-        &self.discern_type
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
 /// RC资源最基本的错误处理。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RustConstructorError {
@@ -1409,6 +1731,12 @@ pub enum RustConstructorError {
     SplitTimeNotFound { split_time_name: String },
     /// 开关外观数量不匹配。
     SwitchAppearanceMismatch { switch_name: String, differ: u32 },
+    /// 开关填充资源类型不匹配。
+    SwitchFillResourceMismatch {
+        switch_name: String,
+        fill_resource_name: String,
+        fill_resource_type: String,
+    },
     /// 开关未找到。
     SwitchNotFound { switch_name: String },
     /// 消息框已存在。
@@ -1426,10 +1754,16 @@ pub enum RustConstructorError {
     },
     /// 页面未找到。
     PageNotFound { page_name: String },
+    /// 自定义错误。
+    CustomError {
+        error_name: String,
+        error_message: String,
+        error_annotation: String,
+    },
 }
 
-impl std::fmt::Display for RustConstructorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for RustConstructorError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(self, f)
     }
 }
@@ -1472,9 +1806,7 @@ pub enum VerticalAlign {
 #[derive(Debug, Default)]
 pub struct App {
     /// 配置项。
-    pub config: Config,
-    /// 文本。
-    pub app_text: AppText,
+    pub strict_mode: bool,
     /// RC资源。
     pub rust_constructor_resource: Vec<Box<dyn RustConstructorResource>>,
     /// 渲染资源列表。
@@ -1495,14 +1827,8 @@ pub struct App {
 
 impl App {
     #[inline]
-    pub fn config(mut self, config: Config) -> Self {
-        self.config = config;
-        self
-    }
-
-    #[inline]
-    pub fn app_text(mut self, app_text: AppText) -> Self {
-        self.app_text = app_text;
+    pub fn strict_mode(mut self, strict_mode: bool) -> Self {
+        self.strict_mode = strict_mode;
         self
     }
 
@@ -1519,7 +1845,7 @@ impl App {
     }
 
     /// 整合所有页面需要一次性处理的功能。
-    pub fn page_handler(&mut self, ctx: &egui::Context) {
+    pub fn page_handler(&mut self, ctx: &Context) {
         // 更新帧数
         self.update_frame_stats(ctx);
         // 更新渲染资源列表
@@ -1705,7 +2031,7 @@ impl App {
     /// 添加字体资源。
     pub fn add_fonts(&mut self, mut font: Font) {
         let mut fonts = FontDefinitions::default();
-        if let Ok(font_read_data) = std::fs::read(font.path.clone()) {
+        if let Ok(font_read_data) = read(font.path.clone()) {
             let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
             fonts.font_data.insert(
                 font.name.to_owned(),
@@ -1717,13 +2043,13 @@ impl App {
             // 将字体添加到字体列表中
             fonts
                 .families
-                .entry(egui::FontFamily::Proportional)
+                .entry(FontFamily::Proportional)
                 .or_default()
                 .insert(0, font.name.to_owned());
 
             fonts
                 .families
-                .entry(egui::FontFamily::Monospace)
+                .entry(FontFamily::Monospace)
                 .or_default()
                 .insert(0, font.name.to_owned());
 
@@ -1758,8 +2084,8 @@ impl App {
     }
 
     /// 将所有已添加到RC的字体资源添加到egui中。
-    pub fn register_all_fonts(&mut self, ctx: &egui::Context) {
-        let mut font_definitions = egui::FontDefinitions::default();
+    pub fn register_all_fonts(&mut self, ctx: &Context) {
+        let mut font_definitions = FontDefinitions::default();
         let mut font_resources = Vec::new();
         for i in 0..self.rust_constructor_resource.len() {
             if let Some(f) = self.rust_constructor_resource[i]
@@ -1780,7 +2106,7 @@ impl App {
                         .insert(font_name.clone(), Arc::clone(font_data));
                     font_definitions
                         .families
-                        .entry(egui::FontFamily::Name(font_name.clone().into()))
+                        .entry(FontFamily::Name(font_name.clone().into()))
                         .or_default()
                         .push(font_name.clone());
                 };
@@ -1788,13 +2114,13 @@ impl App {
                 // 将字体添加到字体列表中
                 font_definitions
                     .families
-                    .entry(egui::FontFamily::Proportional)
+                    .entry(FontFamily::Proportional)
                     .or_default()
                     .insert(0, font_name.to_owned());
 
                 font_definitions
                     .families
-                    .entry(egui::FontFamily::Monospace)
+                    .entry(FontFamily::Monospace)
                     .or_default()
                     .insert(0, font_name.to_owned());
             };
@@ -1811,35 +2137,35 @@ impl App {
         let (problem, annotation) = match problem_type.clone() {
             RustConstructorError::FontGetFailed { font_path } => (
                 format!("Font get failed: {}", font_path,),
-                "Please check if the font file exists and the path is correct.",
+                "Please check if the font file exists and the path is correct.".to_string(),
             ),
             RustConstructorError::FontNotFound { font_name } => (
                 format!("Font not found: {}", font_name,),
-                "Please check whether the font has been added.",
+                "Please check whether the font has been added.".to_string(),
             ),
             RustConstructorError::ImageGetFailed { image_path } => (
                 format!("Image get failed: {}", image_path,),
-                "Please check whether the image path is correct and whether the image has been added.",
+                "Please check whether the image path is correct and whether the image has been added.".to_string(),
             ),
             RustConstructorError::ImageNotFound { image_name } => (
                 format!("Image not found: {}", image_name,),
-                "Please check whether the image has been added.",
+                "Please check whether the image has been added.".to_string(),
             ),
             RustConstructorError::ImageTextureNotFound { image_texture_name } => (
                 format!("Image texture not found: {}", image_texture_name,),
-                "Please check whether the image texture has been added.",
+                "Please check whether the image texture has been added.".to_string(),
             ),
             RustConstructorError::TextNotFound { text_name } => (
                 format!("Text not found: {}", text_name,),
-                "Please check whether the text has been added.",
+                "Please check whether the text has been added.".to_string(),
             ),
             RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
                 format!("Message box already exists: {}", message_box_name,),
-                "Please check whether the code for generating the message box has been accidentally called multiple times.",
+                "Please check whether the code for generating the message box has been accidentally called multiple times.".to_string(),
             ),
             RustConstructorError::SplitTimeNotFound { split_time_name } => (
                 format!("Split time not found: {}", split_time_name,),
-                "Please check whether the split time has been added.",
+                "Please check whether the split time has been added.".to_string(),
             ),
             RustConstructorError::SwitchAppearanceMismatch {
                 switch_name,
@@ -1849,47 +2175,51 @@ impl App {
                     "Switch appearance list's number of items is large / small {} more: {}",
                     differ, switch_name
                 ),
-                "Please check whether the number of appearance list items matches the number of enabled animations.",
+                "Please check whether the number of appearance list items matches the number of enabled animations.".to_string(),
             ),
             RustConstructorError::SwitchNotFound { switch_name } => (
                 format!("Switch not found: {}", switch_name,),
-                "Please check whether the switch has been added.",
+                "Please check whether the switch has been added.".to_string(),
+            ),
+            RustConstructorError::SwitchFillResourceMismatch { switch_name, fill_resource_name, fill_resource_type } => (
+                format!("Switch fill resource mismatch: Resource {} of switch {} is not of type {}", fill_resource_name, switch_name, fill_resource_type,),
+                "Please check whether the imported fill resource is correctly typed.".to_string(),
             ),
             RustConstructorError::PageNotFound { page_name } => (
                 format!("Page not found: {}", page_name,),
-                "Please check whether the page has been added.",
+                "Please check whether the page has been added.".to_string(),
             ),
             RustConstructorError::VariableNotFound { variable_name } => (
                 format!("Variable not found: {}", variable_name,),
-                "Please check whether the variable has been added.",
+                "Please check whether the variable has been added.".to_string(),
             ),
             RustConstructorError::VariableNotBool { variable_name } => (
                 format!("Variable is not bool: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotFloat { variable_name } => (
                 format!("Variable is not f32: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotInt { variable_name } => (
                 format!("Variable is not int: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotString { variable_name } => (
                 format!("Variable is not string: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotUInt { variable_name } => (
                 format!("Variable is not uint: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotVec { variable_name } => (
                 format!("Variable is not vec: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::RectNotFound { rect_name } => (
                 format!("Rect not found: {}", rect_name,),
-                "Please check whether the rect has been added.",
+                "Please check whether the rect has been added.".to_string(),
             ),
             RustConstructorError::ResourceNotFound {
                 resource_name,
@@ -1899,29 +2229,28 @@ impl App {
                     "Resource not found: {}(\"{}\")",
                     resource_type, resource_name,
                 ),
-                "Please check whether the resource has been added.",
+                "Please check whether the resource has been added.".to_string(),
             ),
+            RustConstructorError::CustomError { error_name, error_message, error_annotation } => (
+                format!("Custom error({}): {}", error_name, error_message),
+                error_annotation
+            )
         };
         // 如果处于严格模式下，则直接崩溃！
-        if self.config.strict_mode {
+        if self.strict_mode {
             panic!("{}", problem);
-        } else {
-            let sound = self.config.problem_report_sound.clone();
-            std::thread::spawn(move || {
-                play_wav(&sound).unwrap_or(0_f64);
-            });
-            self.problem_list.push(Problem {
-                severity_level,
-                problem,
-                annotation: annotation.to_string(),
-                report_state: ReportState {
-                    current_page: self.current_page.clone(),
-                    current_total_runtime: self.timer.total_time,
-                    current_page_runtime: self.timer.now_time,
-                },
-                problem_type: problem_type.clone(),
-            });
         };
+        self.problem_list.push(Problem {
+            severity_level,
+            problem,
+            annotation,
+            report_state: ReportState {
+                current_page: self.current_page.clone(),
+                current_total_runtime: self.timer.total_time,
+                current_page_runtime: self.timer.now_time,
+            },
+            problem_type: problem_type.clone(),
+        });
     }
 
     /// 发生问题时向指定列表推送报告。
@@ -1934,35 +2263,35 @@ impl App {
         let (problem, annotation) = match problem_type.clone() {
             RustConstructorError::FontGetFailed { font_path } => (
                 format!("Font get failed: {}", font_path,),
-                "Please check if the font file exists and the path is correct.",
+                "Please check if the font file exists and the path is correct.".to_string(),
             ),
             RustConstructorError::FontNotFound { font_name } => (
                 format!("Font not found: {}", font_name,),
-                "Please check whether the font has been added.",
+                "Please check whether the font has been added.".to_string(),
             ),
             RustConstructorError::ImageGetFailed { image_path } => (
                 format!("Image get failed: {}", image_path,),
-                "Please check whether the image path is correct and whether the image has been added.",
+                "Please check whether the image path is correct and whether the image has been added.".to_string(),
             ),
             RustConstructorError::ImageNotFound { image_name } => (
                 format!("Image not found: {}", image_name,),
-                "Please check whether the image has been added.",
+                "Please check whether the image has been added.".to_string(),
             ),
             RustConstructorError::ImageTextureNotFound { image_texture_name } => (
                 format!("Image texture not found: {}", image_texture_name,),
-                "Please check whether the image texture has been added.",
+                "Please check whether the image texture has been added.".to_string(),
             ),
             RustConstructorError::TextNotFound { text_name } => (
                 format!("Text not found: {}", text_name,),
-                "Please check whether the text has been added.",
+                "Please check whether the text has been added.".to_string(),
             ),
             RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
                 format!("Message box already exists: {}", message_box_name,),
-                "Please check whether the code for generating the message box has been accidentally called multiple times.",
+                "Please check whether the code for generating the message box has been accidentally called multiple times.".to_string(),
             ),
             RustConstructorError::SplitTimeNotFound { split_time_name } => (
                 format!("Split time not found: {}", split_time_name,),
-                "Please check whether the split time has been added.",
+                "Please check whether the split time has been added.".to_string(),
             ),
             RustConstructorError::SwitchAppearanceMismatch {
                 switch_name,
@@ -1972,47 +2301,51 @@ impl App {
                     "Switch appearance list's number of items is large / small {} more: {}",
                     differ, switch_name
                 ),
-                "Please check whether the number of appearance list items matches the number of enabled animations.",
+                "Please check whether the number of appearance list items matches the number of enabled animations.".to_string(),
             ),
             RustConstructorError::SwitchNotFound { switch_name } => (
                 format!("Switch not found: {}", switch_name,),
-                "Please check whether the switch has been added.",
+                "Please check whether the switch has been added.".to_string(),
+            ),
+            RustConstructorError::SwitchFillResourceMismatch { switch_name, fill_resource_name, fill_resource_type } => (
+                format!("Switch fill resource mismatch: Resource {} of switch {} is not of type {}", fill_resource_name, switch_name, fill_resource_type,),
+                "Please check whether the imported fill resource is correctly typed.".to_string(),
             ),
             RustConstructorError::PageNotFound { page_name } => (
                 format!("Page not found: {}", page_name,),
-                "Please check whether the page has been added.",
+                "Please check whether the page has been added.".to_string(),
             ),
             RustConstructorError::VariableNotFound { variable_name } => (
                 format!("Variable not found: {}", variable_name,),
-                "Please check whether the variable has been added.",
+                "Please check whether the variable has been added.".to_string(),
             ),
             RustConstructorError::VariableNotBool { variable_name } => (
                 format!("Variable is not bool: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotFloat { variable_name } => (
                 format!("Variable is not f32: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotInt { variable_name } => (
                 format!("Variable is not int: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotString { variable_name } => (
                 format!("Variable is not string: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotUInt { variable_name } => (
                 format!("Variable is not uint: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::VariableNotVec { variable_name } => (
                 format!("Variable is not vec: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.",
+                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
             ),
             RustConstructorError::RectNotFound { rect_name } => (
                 format!("Rect not found: {}", rect_name,),
-                "Please check whether the rect has been added.",
+                "Please check whether the rect has been added.".to_string(),
             ),
             RustConstructorError::ResourceNotFound {
                 resource_name,
@@ -2022,29 +2355,28 @@ impl App {
                     "Resource not found: {}(\"{}\")",
                     resource_type, resource_name,
                 ),
-                "Please check whether the resource has been added.",
+                "Please check whether the resource has been added.".to_string(),
             ),
+            RustConstructorError::CustomError { error_name, error_message, error_annotation } => (
+                format!("Custom error({}): {}", error_name, error_message),
+                error_annotation
+            )
         };
         // 如果处于严格模式下，则直接崩溃！
-        if self.config.strict_mode {
+        if self.strict_mode {
             panic!("{}", problem);
-        } else {
-            let sound = self.config.problem_report_sound.clone();
-            std::thread::spawn(move || {
-                play_wav(&sound).unwrap_or(0_f64);
-            });
-            problem_storage.push(Problem {
-                severity_level,
-                problem,
-                annotation: annotation.to_string(),
-                report_state: ReportState {
-                    current_page: self.current_page.clone(),
-                    current_total_runtime: self.timer.total_time,
-                    current_page_runtime: self.timer.now_time,
-                },
-                problem_type: problem_type.clone(),
-            });
         };
+        problem_storage.push(Problem {
+            severity_level,
+            problem,
+            annotation,
+            report_state: ReportState {
+                current_page: self.current_page.clone(),
+                current_total_runtime: self.timer.total_time,
+                current_page_runtime: self.timer.now_time,
+            },
+            problem_type: problem_type.clone(),
+        });
     }
 
     /// 检查页面是否已完成首次加载。
@@ -2116,7 +2448,7 @@ impl App {
     }
 
     /// 更新帧数。
-    pub fn update_frame_stats(&mut self, ctx: &egui::Context) {
+    pub fn update_frame_stats(&mut self, ctx: &Context) {
         let current_time = ctx.input(|i| i.time);
         if let Some(last) = self.last_frame_time {
             let delta = (current_time - last) as f32;
@@ -2206,7 +2538,7 @@ impl App {
         &mut self,
         name: &str,
         ui: &mut Ui,
-        ctx: &egui::Context,
+        ctx: &Context,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(name, "CustomRect") {
             let render_resource_list = &mut self.render_resource_list.clone();
@@ -2230,20 +2562,20 @@ impl App {
                         + cr.origin_position[1]
                 }
             };
-            let pos_x = match cr.center_display.0 {
-                HorizontalAlign::Left => cr.position[0],
-                HorizontalAlign::Center => cr.position[0] - cr.size[0] / 2.0,
-                HorizontalAlign::Right => cr.position[0] - cr.size[0],
+            match cr.center_display.0 {
+                HorizontalAlign::Left => {}
+                HorizontalAlign::Center => cr.position[0] -= cr.size[0] / 2.0,
+                HorizontalAlign::Right => cr.position[0] -= cr.size[0],
             };
-            let pos_y = match cr.center_display.1 {
-                VerticalAlign::Top => cr.position[1],
-                VerticalAlign::Center => cr.position[1] - cr.size[1] / 2.0,
-                VerticalAlign::Bottom => cr.position[1] - cr.size[1],
+            match cr.center_display.1 {
+                VerticalAlign::Top => {}
+                VerticalAlign::Center => cr.position[1] -= cr.size[1] / 2.0,
+                VerticalAlign::Bottom => cr.position[1] -= cr.size[1],
             };
             ui.painter().rect(
                 Rect::from_min_max(
-                    Pos2::new(pos_x, pos_y),
-                    Pos2::new(pos_x + cr.size[0], pos_y + cr.size[1]),
+                    Pos2::new(cr.position[0], cr.position[1]),
+                    Pos2::new(cr.position[0] + cr.size[0], cr.position[1] + cr.size[1]),
                 ),
                 cr.rounding,
                 Color32::from_rgba_unmultiplied(cr.color[0], cr.color[1], cr.color[2], cr.color[3]),
@@ -2256,7 +2588,7 @@ impl App {
                         cr.border_color[3],
                     ),
                 },
-                egui::StrokeKind::Inside,
+                StrokeKind::Inside,
             );
             Ok(())
         } else {
@@ -2283,7 +2615,7 @@ impl App {
         &mut self,
         name: &str,
         ui: &mut Ui,
-        ctx: &egui::Context,
+        ctx: &Context,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(name, "Text") {
             let mut t = self.get_resource::<Text>(name, "Text").unwrap().clone();
@@ -2293,7 +2625,7 @@ impl App {
                 f.layout(
                     t.content.to_string(),
                     if self.check_resource_exists(&t.font.clone(), "Font") {
-                        FontId::new(t.font_size, egui::FontFamily::Name(t.font.clone().into()))
+                        FontId::new(t.font_size, FontFamily::Name(t.font.clone().into()))
                     } else {
                         if !t.font.is_empty() {
                             self.problem_report_custom(
@@ -2340,20 +2672,18 @@ impl App {
             // 使用绝对定位放置文本
             let position = Pos2::new(pos_x, pos_y);
 
-            if t.write_background {
-                let rect = Rect::from_min_size(position, text_size);
-                // 绘制背景颜色
-                ui.painter().rect_filled(
-                    rect,
-                    t.background_rounding,
-                    Color32::from_rgba_unmultiplied(
-                        t.background_color[0],
-                        t.background_color[1],
-                        t.background_color[2],
-                        t.background_color[3],
-                    ),
-                ); // 背景色
-            };
+            let rect = Rect::from_min_size(position, text_size);
+            // 绘制背景颜色
+            ui.painter().rect_filled(
+                rect,
+                t.background_rounding,
+                Color32::from_rgba_unmultiplied(
+                    t.background_color[0],
+                    t.background_color[1],
+                    t.background_color[2],
+                    t.background_color[3],
+                ),
+            ); // 背景色
             // 绘制文本
             ui.painter().galley(
                 position,
@@ -2483,14 +2813,14 @@ impl App {
                 // 创建可交互的区域
                 let response = ui.interact(
                     rect,
-                    egui::Id::new(format!("text_{}_click_and_drag", t.name)),
-                    egui::Sense::click_and_drag(),
+                    Id::new(format!("text_{}_click_and_drag", t.name)),
+                    Sense::click_and_drag(),
                 );
 
                 let response2 = ui.interact(
                     rect2,
-                    egui::Id::new(format!("text_{}_total", t.name)),
-                    egui::Sense::click(),
+                    Id::new(format!("text_{}_total", t.name)),
+                    Sense::click(),
                 );
 
                 // 处理选择逻辑
@@ -2526,7 +2856,7 @@ impl App {
                 if response.has_focus() {
                     // 处理复制操作 - 使用按键释放事件
                     let copy_triggered = ui.input(|input| {
-                        let c_released = input.key_released(egui::Key::C);
+                        let c_released = input.key_released(Key::C);
                         let cmd_pressed = input.modifiers.command || input.modifiers.mac_cmd;
                         let ctrl_pressed = input.modifiers.ctrl;
                         c_released && (cmd_pressed || ctrl_pressed)
@@ -2703,11 +3033,8 @@ impl App {
 
                             responses.push(ui.interact(
                                 link_rect,
-                                egui::Id::new(format!(
-                                    "link_{}_{}_{}_row_{}",
-                                    t.name, start, end, row
-                                )),
-                                egui::Sense::click(),
+                                Id::new(format!("link_{}_{}_{}_row_{}", t.name, start, end, row)),
+                                Sense::click(),
                             ));
                         };
                     }
@@ -2748,7 +3075,7 @@ impl App {
                 if clicked_on_link {
                     // 执行超链接跳转
                     if !url.is_empty() {
-                        ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                        ui.ctx().open_url(OpenUrl::new_tab(url));
                     };
                 };
 
@@ -3271,7 +3598,7 @@ impl App {
         mut image_texture: ImageTexture,
         path: &str,
         flip: [bool; 2],
-        ctx: &egui::Context,
+        ctx: &Context,
     ) {
         if let Ok(mut file) = File::open(path) {
             let mut buffer = Vec::new();
@@ -3288,7 +3615,7 @@ impl App {
             let raw_data: Vec<u8> = color_data.into_raw();
 
             let color_image =
-                egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
+                ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
             let loaded_image_texture = ctx.load_texture(
                 image_texture.name.clone(),
                 color_image,
@@ -3338,7 +3665,7 @@ impl App {
         name: &str,
         path: &str,
         flip: [bool; 2],
-        ctx: &egui::Context,
+        ctx: &Context,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(name, "ImageTexture") {
             let it = self
@@ -3359,7 +3686,7 @@ impl App {
                 let raw_data: Vec<u8> = color_data.into_raw();
 
                 let color_image =
-                    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
+                    ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
                 let image_texture =
                     ctx.load_texture(it.name.clone(), color_image, TextureOptions::LINEAR);
                 it.texture = Some(DebugTextureHandle::new(image_texture));
@@ -3422,7 +3749,7 @@ impl App {
         &mut self,
         name: &str,
         ui: &mut Ui,
-        ctx: &egui::Context,
+        ctx: &Context,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(name, "Image") {
             let mut im = self
@@ -3477,22 +3804,30 @@ impl App {
                     Pos2::new(im.position[0], im.position[1]),
                     Vec2::new(im.size[0], im.size[1]),
                 );
-                let color = if im.use_overlay_color {
-                    // 创建颜色覆盖
-                    Color32::from_rgba_unmultiplied(
+
+                // 直接绘制图片
+                egui::Image::new(ImageSource::Texture((&texture.0).into()))
+                    .tint(Color32::from_rgba_unmultiplied(
                         im.overlay_color[0],
                         im.overlay_color[1],
                         im.overlay_color[2],
                         // 将图片透明度与覆盖颜色透明度相乘
                         (im.alpha as f32 * im.overlay_color[3] as f32 / 255.0) as u8,
+                    ))
+                    .bg_fill(Color32::from_rgba_unmultiplied(
+                        im.background_color[0],
+                        im.background_color[1],
+                        im.background_color[2],
+                        im.background_color[3],
+                    ))
+                    .rotate(
+                        im.rotate_angle,
+                        [
+                            im.rotate_center[0] / im.size[0],
+                            im.rotate_center[1] / im.size[1],
+                        ]
+                        .into(),
                     )
-                } else {
-                    Color32::from_white_alpha(im.alpha)
-                };
-
-                // 直接绘制图片
-                egui::Image::new(egui::ImageSource::Texture((&texture.0).into()))
-                    .tint(color)
                     .paint_at(ui, rect)
             };
             im.last_frame_cite_texture = im.cite_texture.clone();
@@ -3512,14 +3847,15 @@ impl App {
         }
     }
 
-    /// 添加消息框资源(重要事项：你需要添加一个CloseMessageBox图片纹理资源才可正常使用！)。
+    /// 添加消息框资源。
     pub fn add_message_box(
         &mut self,
         mut message_box: MessageBox,
         title_name: &str,
         content_name: &str,
         image_name: &str,
-        sound_path: &str,
+        close_switch_fill_resource_name: &str,
+        close_switch_fill_resource_type: &str,
     ) -> Result<(), RustConstructorError> {
         if !self.check_resource_exists(&message_box.name, "MessageBox") {
             message_box.exist = true;
@@ -3588,9 +3924,6 @@ impl App {
                 });
             }
 
-            self.rust_constructor_resource
-                .push(Box::new(message_box.clone()));
-
             if !message_box.keep_existing {
                 self.add_split_time(
                     SplitTime::default().name(&format!("MessageBox{}", message_box.name)),
@@ -3614,55 +3947,157 @@ impl App {
                     .border_width(0_f32),
             );
 
-            self.add_image(
-                Image::default()
-                    .name(&format!("MessageBox{}Close", message_box.name))
-                    .use_overlay_color(false)
-                    .size(30_f32, 30_f32)
-                    .center_display(HorizontalAlign::Center, VerticalAlign::Center),
-                "CloseMessageBox",
-            )
-            .unwrap();
+            match close_switch_fill_resource_type {
+                "Image" | "CustomRect" => {}
+                &_ => {
+                    self.problem_report_custom(
+                        RustConstructorError::SwitchFillResourceMismatch {
+                            switch_name: format!("MessageBox{}Close", message_box.name),
+                            fill_resource_name: close_switch_fill_resource_name.to_string(),
+                            fill_resource_type: close_switch_fill_resource_type.to_string(),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    return Err(RustConstructorError::SwitchFillResourceMismatch {
+                        switch_name: format!("MessageBox{}Close", message_box.name),
+                        fill_resource_name: close_switch_fill_resource_name.to_string(),
+                        fill_resource_type: close_switch_fill_resource_type.to_string(),
+                    });
+                }
+            };
+
+            if !self.check_resource_exists(
+                close_switch_fill_resource_name,
+                close_switch_fill_resource_type,
+            ) {
+                self.problem_report_custom(
+                    RustConstructorError::ResourceNotFound {
+                        resource_name: close_switch_fill_resource_name.to_string(),
+                        resource_type: close_switch_fill_resource_type.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::ResourceNotFound {
+                    resource_name: close_switch_fill_resource_name.to_string(),
+                    resource_type: close_switch_fill_resource_type.to_string(),
+                });
+            };
+
+            let (texture, image_config, custom_rect_config, color, border_color) =
+                match close_switch_fill_resource_type {
+                    "Image" => {
+                        let im = self
+                            .get_resource_mut::<Image>(close_switch_fill_resource_name, "Image")
+                            .unwrap();
+                        im.name = format!("MessageBox{}Close", close_switch_fill_resource_name);
+                        (
+                            im.cite_texture.clone(),
+                            ImageConfig::from_image(im.clone())
+                                .size(30_f32, 30_f32)
+                                .center_display(HorizontalAlign::Center, VerticalAlign::Center),
+                            CustomRectConfig::default(),
+                            im.overlay_color,
+                            [0, 0, 0, 0],
+                        )
+                    }
+                    "CustomRect" => {
+                        let cr = self
+                            .get_resource_mut::<CustomRect>(
+                                close_switch_fill_resource_name,
+                                "CustomRect",
+                            )
+                            .unwrap();
+                        cr.name = format!("MessageBox{}Close", close_switch_fill_resource_name);
+                        (
+                            String::new(),
+                            ImageConfig::default(),
+                            CustomRectConfig::from_custom_rect(cr.clone())
+                                .size(30_f32, 30_f32)
+                                .center_display(HorizontalAlign::Center, VerticalAlign::Center),
+                            cr.color,
+                            cr.border_color,
+                        )
+                    }
+                    &_ => {
+                        unreachable!()
+                    }
+                };
 
             self.add_switch(
                 Switch::default()
                     .name(&format!("MessageBox{}Close", message_box.name))
                     .appearance(vec![
                         SwitchData {
-                            texture: "CloseMessageBox".to_string(),
-                            color: [255, 255, 255, 0],
-                            text: String::new(),
+                            image_config: image_config
+                                .clone()
+                                .overlay_color(color[0], color[1], color[2], 0),
+                            custom_rect_config: custom_rect_config
+                                .clone()
+                                .color(color[0], color[1], color[2], 0)
+                                .border_color(border_color[0], border_color[1], border_color[2], 0),
+                            text_config: TextConfig::default(),
+                            texture: texture.clone(),
                             hint_text: String::new(),
                         },
                         SwitchData {
-                            texture: "CloseMessageBox".to_string(),
-                            color: [180, 180, 180, 200],
-                            text: String::new(),
+                            image_config: image_config.clone().overlay_color(
+                                (color[0] as u32 * 180 / 255) as u8,
+                                (color[1] as u32 * 180 / 255) as u8,
+                                (color[2] as u32 * 180 / 255) as u8,
+                                255,
+                            ),
+                            custom_rect_config: custom_rect_config
+                                .clone()
+                                .color(
+                                    (color[0] as u32 * 180 / 255) as u8,
+                                    (color[1] as u32 * 180 / 255) as u8,
+                                    (color[2] as u32 * 180 / 255) as u8,
+                                    255,
+                                )
+                                .border_color(
+                                    (border_color[0] as u32 * 180 / 255) as u8,
+                                    (border_color[1] as u32 * 180 / 255) as u8,
+                                    (border_color[2] as u32 * 180 / 255) as u8,
+                                    255,
+                                ),
+                            text_config: TextConfig::default(),
+                            texture: texture.clone(),
                             hint_text: String::new(),
                         },
                         SwitchData {
-                            texture: "CloseMessageBox".to_string(),
-                            color: [255, 255, 255, 200],
-                            text: String::new(),
+                            image_config: image_config.clone().overlay_color(0, 0, 0, 0),
+                            custom_rect_config: custom_rect_config
+                                .clone()
+                                .color(0, 0, 0, 0)
+                                .border_color(0, 0, 0, 0),
+                            text_config: TextConfig::default(),
+                            texture: texture.clone(),
                             hint_text: String::new(),
                         },
                         SwitchData {
-                            texture: "CloseMessageBox".to_string(),
-                            color: [180, 180, 180, 200],
-                            text: String::new(),
+                            image_config: image_config.overlay_color(0, 0, 0, 0),
+                            custom_rect_config: custom_rect_config
+                                .color(0, 0, 0, 0)
+                                .border_color(0, 0, 0, 0),
+                            text_config: TextConfig::default(),
+                            texture,
                             hint_text: String::new(),
                         },
                     ])
-                    .enable_hover_click_image(false, true)
+                    .enable_hover_click_fill_resource(false, true)
                     .click_method(vec![SwitchClickAction {
                         click_method: PointerButton::Primary,
                         action: true,
-                    }])
-                    .sound_path(sound_path),
-                &format!("MessageBox{}Close", message_box.name),
+                    }]),
+                &format!("MessageBox{}Close", close_switch_fill_resource_name),
+                close_switch_fill_resource_type,
                 "",
             )
             .unwrap();
+            self.rust_constructor_resource
+                .push(Box::new(message_box.clone()));
             Ok(())
         } else {
             self.problem_report_custom(
@@ -3679,7 +4114,7 @@ impl App {
     }
 
     /// 处理所有已添加的消息框资源。
-    pub fn message_box_display(&mut self, ctx: &egui::Context, ui: &mut Ui) {
+    pub fn message_box_display(&mut self, ctx: &Context, ui: &mut Ui) {
         let mut offset = 0_f32;
         let mut delete_count = 0;
         let mut index_list = Vec::new();
@@ -3720,10 +4155,30 @@ impl App {
                 .get_resource::<Switch>(&format!("MessageBox{}Close", mb.name), "Switch")
                 .unwrap()
                 .clone();
-            let mut im2 = self
-                .get_resource::<Image>(&format!("MessageBox{}Close", mb.name), "Image")
-                .unwrap()
-                .clone();
+            let fr: Box<dyn FrontResource> = match s.fill_resource_type.as_str() {
+                "Image" => Box::new(
+                    self.get_resource::<Image>(&s.fill_resource_name, "Image")
+                        .unwrap()
+                        .clone(),
+                ),
+                "CustomRect" => Box::new(
+                    self.get_resource::<CustomRect>(&s.fill_resource_name, "CustomRect")
+                        .unwrap()
+                        .clone(),
+                ),
+                &_ => {
+                    self.problem_report_custom(
+                        RustConstructorError::SwitchFillResourceMismatch {
+                            switch_name: s.name,
+                            fill_resource_name: s.fill_resource_name,
+                            fill_resource_type: s.fill_resource_type,
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                }
+            };
             mb.reg_render_resource(&mut self.render_resource_list.clone());
             if mb.size[1]
                 < self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
@@ -3795,7 +4250,10 @@ impl App {
                 im1.origin_position[0] + im1.size[0] + 5_f32,
                 t1.origin_position[1] + self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1],
             ];
-            im2.origin_position = cr.position;
+            for sd in &mut s.appearance {
+                sd.image_config.origin_position = cr.position;
+                sd.custom_rect_config.origin_position = cr.position;
+            }
             if !mb.keep_existing
                 && self.timer.total_time
                     - self.split_time(&format!("MessageBox{}", mb.name)).unwrap()[1]
@@ -3810,20 +4268,24 @@ impl App {
                 };
             };
             if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                let rect = egui::Rect::from_min_size(
+                let rect = Rect::from_min_size(
                     Pos2 {
-                        x: im2.position[0],
-                        y: im2.position[1],
+                        x: fr.position()[0],
+                        y: fr.position()[1],
                     },
                     Vec2 {
-                        x: cr.size[0] + 25_f32,
-                        y: cr.size[1] + 25_f32,
+                        x: cr.size[0] + 15_f32,
+                        y: cr.size[1] + 15_f32,
                     },
                 );
                 if rect.contains(mouse_pos) {
-                    s.appearance[0].color[3] = 200;
+                    s.appearance[0].image_config.overlay_color[3] = 255;
+                    s.appearance[0].custom_rect_config.color[3] = 255;
+                    s.appearance[0].custom_rect_config.border_color[3] = 255;
                 } else {
-                    s.appearance[0].color[3] = 0;
+                    s.appearance[0].image_config.overlay_color[3] = 0;
+                    s.appearance[0].custom_rect_config.color[3] = 0;
+                    s.appearance[0].custom_rect_config.border_color[3] = 0;
                 };
             };
             self.rust_constructor_resource[index_list[i]] = Box::new(mb.clone());
@@ -3837,23 +4299,47 @@ impl App {
                 .unwrap();
             self.replace_resource(&format!("MessageBox{}Close", mb.name), "Switch", s.clone())
                 .unwrap();
-            self.replace_resource(&format!("MessageBox{}Close", mb.name), "Image", im2.clone())
-                .unwrap();
+            match s.fill_resource_type.as_str() {
+                "Image" => {
+                    self.replace_resource(
+                        &s.fill_resource_name,
+                        &s.fill_resource_type,
+                        fr.as_any().downcast_ref::<Image>().unwrap().clone(),
+                    )
+                    .unwrap();
+                }
+                "CustomRect" => {
+                    self.replace_resource(
+                        &s.fill_resource_name,
+                        &s.fill_resource_type,
+                        fr.as_any().downcast_ref::<CustomRect>().unwrap().clone(),
+                    )
+                    .unwrap();
+                }
+                &_ => {
+                    unreachable!()
+                }
+            };
             self.custom_rect(&format!("MessageBox{}", mb.name), ui, ctx)
                 .unwrap();
             self.image(&mb.image_name.clone(), ui, ctx).unwrap();
             self.text(&t1.name.clone(), ui, ctx).unwrap();
             self.text(&t2.name.clone(), ui, ctx).unwrap();
+            self.switch(
+                &format!("MessageBox{}Close", mb.name),
+                ui,
+                ctx,
+                s.state == 0 && mb.exist,
+            )
+            .unwrap();
             if self
-                .switch(
-                    &format!("MessageBox{}Close", mb.name),
-                    ui,
-                    ctx,
-                    s.state == 0 && mb.exist,
-                    true,
-                )
-                .unwrap()[0]
+                .check_switch_click_index(&format!("MessageBox{}Close", mb.name))
+                .unwrap()
                 == 0
+                && self
+                    .check_switch_state(&format!("MessageBox{}Close", mb.name))
+                    .unwrap()
+                    == 1
             {
                 mb.exist = false;
                 if cr.origin_position[0] + mb.speed >= 15_f32 {
@@ -3906,8 +4392,8 @@ impl App {
                     self.rust_constructor_resource
                         .iter()
                         .position(|x| {
-                            x.expose_type() == "Image"
-                                && x.name() == format!("MessageBox{}Close", mb.name)
+                            x.expose_type() == s.fill_resource_type
+                                && x.name() == s.fill_resource_name
                         })
                         .unwrap(),
                 );
@@ -3947,14 +4433,15 @@ impl App {
     pub fn add_switch(
         &mut self,
         mut switch: Switch,
-        image_name: &str,
+        fill_resource_name: &str,
+        fill_resource_type: &str,
         text_name: &str,
     ) -> Result<(), RustConstructorError> {
         let mut count = 1;
-        if switch.enable_hover_click_image[0] {
+        if switch.enable_hover_click_fill_resource[0] {
             count += 1;
         };
-        if switch.enable_hover_click_image[1] {
+        if switch.enable_hover_click_fill_resource[1] {
             count += 1;
         };
         if switch.appearance.len() < count {
@@ -3974,36 +4461,57 @@ impl App {
         for _ in 0..switch.appearance.len() % count {
             switch.appearance.pop();
         }
-        if self.check_resource_exists(image_name, "Image") {
-            let im = self.get_resource_mut::<Image>(image_name, "Image").unwrap();
-            im.use_overlay_color = true;
-            switch.switch_image_name = image_name.to_string();
-            if self.check_resource_exists(text_name, "Text") {
-                let t = self.get_resource_mut::<Text>(text_name, "Text").unwrap();
-                switch.text_name = text_name.to_string();
-                switch.text_origin_position = t.origin_position;
-                t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
-                t.x_grid = [0, 0];
-                t.y_grid = [0, 0];
-            } else if !text_name.is_empty() {
-                self.problem_report_custom(
-                    RustConstructorError::TextNotFound {
-                        text_name: text_name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-            };
-        } else {
+        if self.check_resource_exists(text_name, "Text") {
+            let t = self.get_resource_mut::<Text>(text_name, "Text").unwrap();
+            switch.text_name = text_name.to_string();
+            switch.text_origin_position = t.origin_position;
+            t.center_display = (HorizontalAlign::Center, VerticalAlign::Center);
+            t.x_grid = [0, 0];
+            t.y_grid = [0, 0];
+        } else if !text_name.is_empty() {
             self.problem_report_custom(
-                RustConstructorError::ImageNotFound {
-                    image_name: image_name.to_string(),
+                RustConstructorError::TextNotFound {
+                    text_name: text_name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            return Err(RustConstructorError::ImageNotFound {
-                image_name: image_name.to_string(),
+        };
+        if self.check_resource_exists(fill_resource_name, fill_resource_type) {
+            match fill_resource_type {
+                "Image" | "CustomRect" => {
+                    switch.fill_resource_name = fill_resource_name.to_string();
+                    switch.fill_resource_type = fill_resource_type.to_string();
+                }
+                &_ => {
+                    self.problem_report_custom(
+                        RustConstructorError::SwitchFillResourceMismatch {
+                            switch_name: switch.name.clone(),
+                            fill_resource_name: fill_resource_name.to_string(),
+                            fill_resource_type: fill_resource_type.to_string(),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    return Err(RustConstructorError::SwitchFillResourceMismatch {
+                        switch_name: switch.name.clone(),
+                        fill_resource_name: fill_resource_name.to_string(),
+                        fill_resource_type: fill_resource_type.to_string(),
+                    });
+                }
+            };
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
+                    resource_name: fill_resource_name.to_string(),
+                    resource_type: fill_resource_type.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::ResourceNotFound {
+                resource_name: fill_resource_name.to_string(),
+                resource_type: fill_resource_type.to_string(),
             });
         };
         switch.hint_text_name = String::new();
@@ -4024,7 +4532,7 @@ impl App {
                     .wrap_width(300_f32)
                     .background_rounding(10_f32)
                     .color(255, 255, 255, 0)
-                    .background_color(0, 0, 0, 0)
+                    .background_color([0, 0, 0, 255])
                     .center_display(HorizontalAlign::Left, VerticalAlign::Top)
                     .selectable(false),
             );
@@ -4046,195 +4554,290 @@ impl App {
         &mut self,
         name: &str,
         ui: &mut Ui,
-        ctx: &egui::Context,
+        ctx: &Context,
         enable: bool,
-        play_sound: bool,
-    ) -> Result<[usize; 2], RustConstructorError> {
-        let mut activated = [5, 0];
+    ) -> Result<(), RustConstructorError> {
         let mut appearance_count = 0;
-        if self.check_resource_exists(name, "Switch") {
-            let mut s = self.get_resource::<Switch>(name, "Switch").unwrap().clone();
-            if self.check_resource_exists(&s.switch_image_name.clone(), "Image") {
-                let mut im = self
-                    .get_resource::<Image>(&s.switch_image_name.clone(), "Image")
-                    .unwrap()
-                    .clone();
-                s.reg_render_resource(&mut self.render_resource_list);
-                let rect = Rect::from_min_size(
-                    Pos2::new(im.position[0], im.position[1]),
-                    Vec2::new(im.size[0], im.size[1]),
+        if !self.check_resource_exists(name, "Switch") {
+            self.problem_report_custom(
+                RustConstructorError::SwitchNotFound {
+                    switch_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::SwitchNotFound {
+                switch_name: name.to_string(),
+            });
+        };
+        let mut s = self.get_resource::<Switch>(name, "Switch").unwrap().clone();
+        if !self.check_resource_exists(&s.fill_resource_name.clone(), &s.fill_resource_type) {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
+                    resource_name: s.fill_resource_name.clone(),
+                    resource_type: s.fill_resource_type.clone(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::ResourceNotFound {
+                resource_name: s.fill_resource_name,
+                resource_type: s.fill_resource_type,
+            });
+        };
+        if !s.hint_text_name.is_empty() {
+            if !self.check_resource_exists(&format!("{}StartHoverTime", s.name), "SplitTime") {
+                self.problem_report_custom(
+                    RustConstructorError::SplitTimeNotFound {
+                        split_time_name: format!("{}StartHoverTime", s.name),
+                    },
+                    SeverityLevel::MildWarning,
+                    self.problem_list.clone(),
                 );
-                let mut hovered = false;
-                if enable {
-                    if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                        // 判断是否在矩形内
-                        if rect.contains(mouse_pos) {
-                            if !s.hint_text_name.is_empty() {
-                                if self.check_resource_exists(&s.hint_text_name, "Text") {
-                                    let mut t = self
-                                        .get_resource::<Text>(&s.hint_text_name, "Text")
-                                        .unwrap()
-                                        .clone();
-                                    if !s.last_time_hovered {
-                                        self.reset_split_time(&format!("{}StartHoverTime", s.name))
-                                            .unwrap();
-                                    } else if self.timer.total_time
-                                        - self
-                                            .split_time(&format!("{}StartHoverTime", s.name))
-                                            .unwrap()[1]
-                                        >= 2_f32
-                                        || t.color[3] != 0
-                                    {
-                                        t.color[3] = 255;
-                                        t.origin_position = [mouse_pos.x, mouse_pos.y];
-                                    };
-                                    t.center_display.0 = if mouse_pos.x
-                                        + self.get_text_size(&s.hint_text_name, ui).unwrap()[0]
-                                        <= ctx.available_rect().width()
-                                    {
-                                        HorizontalAlign::Left
-                                    } else {
-                                        HorizontalAlign::Right
-                                    };
-                                    t.center_display.1 = if mouse_pos.y
-                                        + self.get_text_size(&s.hint_text_name, ui).unwrap()[1]
-                                        <= ctx.available_rect().height()
-                                    {
-                                        VerticalAlign::Top
-                                    } else {
-                                        VerticalAlign::Bottom
-                                    };
-                                    self.replace_resource(&s.hint_text_name, "Text", t.clone())
-                                        .unwrap();
-                                } else {
-                                    self.problem_report_custom(
-                                        RustConstructorError::TextNotFound {
-                                            text_name: s.hint_text_name.clone(),
-                                        },
-                                        SeverityLevel::SevereWarning,
-                                        self.problem_list.clone(),
-                                    );
-                                    return Err(RustConstructorError::TextNotFound {
-                                        text_name: s.hint_text_name.clone(),
-                                    });
-                                };
+                self.add_split_time(
+                    SplitTime::default().name(&format!("{}StartHoverTime", s.name)),
+                );
+            };
+            if !self.check_resource_exists(&format!("{}HintFadeAnimation", s.name), "SplitTime") {
+                self.problem_report_custom(
+                    RustConstructorError::SplitTimeNotFound {
+                        split_time_name: format!("{}HintFadeAnimation", s.name),
+                    },
+                    SeverityLevel::MildWarning,
+                    self.problem_list.clone(),
+                );
+                self.add_split_time(
+                    SplitTime::default().name(&format!("{}HintFadeAnimation", s.name)),
+                );
+            };
+            if !self.check_resource_exists(&s.hint_text_name, "Text") {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: s.hint_text_name.clone(),
+                    },
+                    SeverityLevel::MildWarning,
+                    self.problem_list.clone(),
+                );
+                self.add_text(
+                    Text::default()
+                        .name(&s.hint_text_name)
+                        .content("")
+                        .origin_position(0_f32, 0_f32)
+                        .font_size(25_f32)
+                        .wrap_width(300_f32)
+                        .background_rounding(10_f32)
+                        .color(255, 255, 255, 0)
+                        .background_color([0, 0, 0, 255])
+                        .center_display(HorizontalAlign::Left, VerticalAlign::Top)
+                        .selectable(false),
+                );
+            };
+        };
+        let fr: Box<dyn FrontResource> = match &*s.fill_resource_type {
+            "Image" => Box::new(
+                self.get_resource::<Image>(&s.fill_resource_name.clone(), &s.fill_resource_type)
+                    .unwrap()
+                    .clone(),
+            ),
+            "CustomRect" => Box::new(
+                self.get_resource::<CustomRect>(
+                    &s.fill_resource_name.clone(),
+                    &s.fill_resource_type,
+                )
+                .unwrap()
+                .clone(),
+            ),
+            &_ => {
+                self.problem_report_custom(
+                    RustConstructorError::SwitchFillResourceMismatch {
+                        switch_name: name.to_string(),
+                        fill_resource_name: s.fill_resource_name.clone(),
+                        fill_resource_type: s.fill_resource_type.clone(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::SwitchFillResourceMismatch {
+                    switch_name: name.to_string(),
+                    fill_resource_name: s.fill_resource_name,
+                    fill_resource_type: s.fill_resource_type,
+                });
+            }
+        };
+        s.reg_render_resource(&mut self.render_resource_list);
+        let rect = Rect::from_min_size(
+            Pos2::new(fr.position()[0], fr.position()[1]),
+            Vec2::new(fr.size()[0], fr.size()[1]),
+        );
+        let mut hovered = false;
+        if enable {
+            if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                // 判断是否在矩形内
+                if rect.contains(mouse_pos) {
+                    if !s.hint_text_name.is_empty() {
+                        if self.check_resource_exists(&s.hint_text_name, "Text") {
+                            let mut t = self
+                                .get_resource::<Text>(&s.hint_text_name, "Text")
+                                .unwrap()
+                                .clone();
+                            if !s.last_time_hovered {
+                                self.reset_split_time(&format!("{}StartHoverTime", s.name))
+                                    .unwrap();
+                            } else if self.timer.total_time
+                                - self
+                                    .split_time(&format!("{}StartHoverTime", s.name))
+                                    .unwrap()[1]
+                                >= 2_f32
+                                || t.color[3] != 0
+                            {
+                                t.color[3] = 255;
+                                t.origin_position = [mouse_pos.x, mouse_pos.y];
                             };
-                            hovered = true;
-                            let mut clicked = vec![];
-                            let mut active = false;
-                            for u in 0..s.click_method.len() as u32 {
-                                clicked.push(ui.input(|i| {
-                                    i.pointer
-                                        .button_down(s.click_method[u as usize].click_method)
-                                }));
-                                if clicked[u as usize] {
-                                    active = true;
-                                    s.last_time_clicked_index = u as usize;
-                                    break;
-                                };
-                            }
-                            if active {
-                                s.last_time_clicked = true;
-                                if s.enable_hover_click_image[1] {
-                                    if s.enable_hover_click_image[0] {
-                                        appearance_count = 2;
-                                    } else {
-                                        appearance_count = 1;
-                                    };
-                                } else if !s.enable_hover_click_image[0] {
-                                    appearance_count = 0;
-                                };
+                            t.center_display.0 = if mouse_pos.x
+                                + self.get_text_size(&s.hint_text_name, ui).unwrap()[0]
+                                <= ctx.available_rect().width()
+                            {
+                                HorizontalAlign::Left
                             } else {
-                                if s.last_time_clicked {
-                                    if play_sound {
-                                        general_click_feedback(&s.sound_path);
-                                    };
-                                    let mut count = 1;
-                                    if s.enable_hover_click_image[0] {
-                                        count += 1;
-                                    };
-                                    if s.enable_hover_click_image[1] {
-                                        count += 1;
-                                    };
-                                    if s.click_method[s.last_time_clicked_index].action {
-                                        if s.state < (s.appearance.len() / count - 1) as u32 {
-                                            s.state += 1;
-                                        } else {
-                                            s.state = 0;
-                                        };
-                                    };
-                                    activated[0] = s.last_time_clicked_index;
-                                    s.last_time_clicked = false;
-                                };
-                                if s.enable_hover_click_image[0] {
-                                    appearance_count = 1;
-                                } else {
-                                    appearance_count = 0;
-                                };
+                                HorizontalAlign::Right
                             };
+                            t.center_display.1 = if mouse_pos.y
+                                + self.get_text_size(&s.hint_text_name, ui).unwrap()[1]
+                                <= ctx.available_rect().height()
+                            {
+                                VerticalAlign::Top
+                            } else {
+                                VerticalAlign::Bottom
+                            };
+                            self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                                .unwrap();
                         } else {
-                            s.last_time_clicked = false;
+                            self.problem_report_custom(
+                                RustConstructorError::TextNotFound {
+                                    text_name: s.hint_text_name.clone(),
+                                },
+                                SeverityLevel::SevereWarning,
+                                self.problem_list.clone(),
+                            );
+                            return Err(RustConstructorError::TextNotFound {
+                                text_name: s.hint_text_name.clone(),
+                            });
+                        };
+                    };
+                    hovered = true;
+                    let mut clicked = vec![];
+                    let mut active = false;
+                    for u in 0..s.click_method.len() as u32 {
+                        clicked.push(ui.input(|i| {
+                            i.pointer
+                                .button_down(s.click_method[u as usize].click_method)
+                        }));
+                        if clicked[u as usize] {
+                            active = true;
+                            s.last_time_clicked_index = u as usize;
+                            break;
+                        };
+                    }
+                    if active {
+                        s.last_time_clicked = true;
+                        if s.enable_hover_click_fill_resource[1] {
+                            if s.enable_hover_click_fill_resource[0] {
+                                appearance_count = 2;
+                            } else {
+                                appearance_count = 1;
+                            };
+                        } else if !s.enable_hover_click_fill_resource[0] {
                             appearance_count = 0;
                         };
                     } else {
-                        s.last_time_clicked = false;
-                        appearance_count = 0;
+                        if s.last_time_clicked {
+                            if s.click_method[s.last_time_clicked_index].action {
+                                if s.state
+                                    < (s.appearance.len() / s.animation_count as usize - 1) as u32
+                                {
+                                    s.state += 1;
+                                } else {
+                                    s.state = 0;
+                                };
+                            };
+                            s.last_time_clicked = false;
+                        };
+                        if s.enable_hover_click_fill_resource[0] {
+                            appearance_count = 1;
+                        } else {
+                            appearance_count = 0;
+                        };
                     };
                 } else {
                     s.last_time_clicked = false;
                     appearance_count = 0;
                 };
-                if !hovered && !s.hint_text_name.is_empty() {
-                    if s.last_time_hovered {
-                        self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
-                            .unwrap();
-                    };
-                    if self.check_resource_exists(&s.hint_text_name, "Text") {
-                        let mut t = self
-                            .get_resource::<Text>(&s.hint_text_name, "Text")
-                            .unwrap()
-                            .clone();
-                        if self.timer.total_time
-                            - self
-                                .split_time(&format!("{}HintFadeAnimation", s.name))
-                                .unwrap()[1]
-                            >= self.tick_interval
-                        {
-                            self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
-                                .unwrap();
-                            t.color[3] = t.color[3].saturating_sub(10);
-                        };
-                        self.replace_resource(&s.hint_text_name, "Text", t.clone())
-                            .unwrap();
-                    } else {
-                        self.problem_report_custom(
-                            RustConstructorError::TextNotFound {
-                                text_name: s.hint_text_name.clone(),
-                            },
-                            SeverityLevel::SevereWarning,
-                            self.problem_list.clone(),
-                        );
-                        return Err(RustConstructorError::TextNotFound {
-                            text_name: s.hint_text_name.clone(),
-                        });
-                    };
+            } else {
+                s.last_time_clicked = false;
+                appearance_count = 0;
+            };
+        } else {
+            s.last_time_clicked = false;
+            appearance_count = 0;
+        };
+        if !hovered && !s.hint_text_name.is_empty() {
+            if s.last_time_hovered {
+                self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
+                    .unwrap();
+            };
+            if self.check_resource_exists(&s.hint_text_name, "Text") {
+                let mut t = self
+                    .get_resource::<Text>(&s.hint_text_name, "Text")
+                    .unwrap()
+                    .clone();
+                if self.timer.total_time
+                    - self
+                        .split_time(&format!("{}HintFadeAnimation", s.name))
+                        .unwrap()[1]
+                    >= self.tick_interval
+                {
+                    self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
+                        .unwrap();
+                    t.color[3] = t.color[3].saturating_sub(10);
                 };
-                im.overlay_color =
-                    s.appearance[(s.state * s.animation_count + appearance_count) as usize].color;
+                self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                    .unwrap();
+            } else {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: s.hint_text_name.clone(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::TextNotFound {
+                    text_name: s.hint_text_name.clone(),
+                });
+            };
+        };
+        let fr: Box<dyn FrontResource> = match &*s.fill_resource_type {
+            "Image" => {
+                let mut im = Box::new(
+                    fr.as_any()
+                        .downcast_ref::<Image>()
+                        .unwrap()
+                        .clone()
+                        .from_config(
+                            s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                                .image_config
+                                .clone(),
+                        ),
+                );
                 if self.check_resource_exists(
                     &s.appearance[(s.state * s.animation_count + appearance_count) as usize]
                         .texture
                         .clone(),
                     "ImageTexture",
                 ) {
-                    im.texture = self
-                        .image_texture(
-                            &s.appearance
-                                [(s.state * s.animation_count + appearance_count) as usize]
-                                .texture
-                                .clone(),
-                        )
-                        .unwrap();
+                    im.cite_texture = s.appearance
+                        [(s.state * s.animation_count + appearance_count) as usize]
+                        .texture
+                        .clone();
                 } else {
                     self.problem_report_custom(
                         RustConstructorError::ImageTextureNotFound {
@@ -4253,71 +4856,132 @@ impl App {
                             .clone(),
                     });
                 };
-                if !s.hint_text_name.is_empty() {
-                    if self.check_resource_exists(&s.hint_text_name, "Text") {
-                        let mut t = self
-                            .get_resource::<Text>(&s.hint_text_name, "Text")
-                            .unwrap()
-                            .clone();
-                        t.background_color[3] = t.color[3];
-                        t.content = s.appearance
-                            [(s.state * s.animation_count + appearance_count) as usize]
-                            .hint_text
-                            .clone();
-                        self.replace_resource(&s.hint_text_name, "Text", t.clone())
-                            .unwrap();
-                    } else {
-                        self.problem_report_custom(
-                            RustConstructorError::TextNotFound {
-                                text_name: s.hint_text_name.clone(),
-                            },
-                            SeverityLevel::SevereWarning,
-                            self.problem_list.clone(),
-                        );
-                        return Err(RustConstructorError::TextNotFound {
-                            text_name: s.hint_text_name,
-                        });
-                    };
-                };
-                s.last_time_hovered = hovered;
-                activated[1] = s.state as usize;
-                self.replace_resource(name, "Switch", s.clone()).unwrap();
-                self.replace_resource(&s.switch_image_name, "Image", im.clone())
-                    .unwrap();
-                self.image(&s.switch_image_name.clone(), ui, ctx).unwrap();
-                if self.check_resource_exists(&s.text_name, "Text") {
-                    let mut t = self
-                        .get_resource::<Text>(&s.text_name, "Text")
-                        .unwrap()
-                        .clone();
-                    t.origin_position = [
-                        im.position[0] + s.text_origin_position[0],
-                        im.position[1] + s.text_origin_position[1],
-                    ];
-                    t.content = s.appearance
-                        [(s.state * s.animation_count + appearance_count) as usize]
-                        .text
-                        .clone();
-                    self.replace_resource(&s.text_name, "Text", t.clone())
-                        .unwrap();
-                    self.text(&s.text_name, ui, ctx).unwrap();
-                };
-                if self.check_resource_exists(&s.hint_text_name, "Text") {
-                    self.text(&s.hint_text_name, ui, ctx).unwrap();
-                };
-                Ok(activated)
-            } else {
+                im
+            }
+            "CustomRect" => Box::new(
+                fr.as_any()
+                    .downcast_ref::<CustomRect>()
+                    .unwrap()
+                    .clone()
+                    .name(&s.fill_resource_name)
+                    .from_config(
+                        s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                            .custom_rect_config
+                            .clone(),
+                    ),
+            ),
+            &_ => {
                 self.problem_report_custom(
-                    RustConstructorError::ImageNotFound {
-                        image_name: name.to_string(),
+                    RustConstructorError::SwitchFillResourceMismatch {
+                        switch_name: name.to_string(),
+                        fill_resource_name: s.fill_resource_name.clone(),
+                        fill_resource_type: s.fill_resource_type.clone(),
                     },
                     SeverityLevel::SevereWarning,
                     self.problem_list.clone(),
                 );
-                Err(RustConstructorError::ImageNotFound {
-                    image_name: s.switch_image_name.clone(),
-                })
+                return Err(RustConstructorError::SwitchFillResourceMismatch {
+                    switch_name: name.to_string(),
+                    fill_resource_name: s.fill_resource_name,
+                    fill_resource_type: s.fill_resource_type,
+                });
             }
+        };
+        if !s.hint_text_name.is_empty() {
+            if self.check_resource_exists(&s.hint_text_name, "Text") {
+                let mut t = self
+                    .get_resource::<Text>(&s.hint_text_name, "Text")
+                    .unwrap()
+                    .clone();
+                t.background_color[3] = t.color[3];
+                t.content = s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                    .hint_text
+                    .clone();
+                self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                    .unwrap();
+            } else {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: s.hint_text_name.clone(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::TextNotFound {
+                    text_name: s.hint_text_name,
+                });
+            };
+        };
+        s.last_time_hovered = hovered;
+        self.replace_resource(name, "Switch", s.clone()).unwrap();
+        match s.fill_resource_type.as_str() {
+            "Image" => {
+                let im = fr.as_any().downcast_ref::<Image>().unwrap().clone();
+                self.replace_resource(&s.fill_resource_name, &s.fill_resource_type, im)
+                    .unwrap();
+                self.image(&s.fill_resource_name.clone(), ui, ctx).unwrap();
+            }
+            "CustomRect" => {
+                let cr = fr.as_any().downcast_ref::<CustomRect>().unwrap().clone();
+                self.replace_resource(&s.fill_resource_name, &s.fill_resource_type, cr)
+                    .unwrap();
+                self.custom_rect(&s.fill_resource_name.clone(), ui, ctx)
+                    .unwrap();
+            }
+            &_ => {}
+        }
+        if self.check_resource_exists(&s.text_name, "Text") {
+            let mut t = self
+                .get_resource::<Text>(&s.text_name, "Text")
+                .unwrap()
+                .clone();
+            s.text_origin_position = s.appearance
+                [(s.state * s.animation_count + appearance_count) as usize]
+                .text_config
+                .origin_position;
+            t.origin_position = [
+                fr.position()[0] + s.text_origin_position[0],
+                fr.position()[1] + s.text_origin_position[1],
+            ];
+            t = t.from_config(
+                s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                    .text_config
+                    .clone(),
+            );
+            self.replace_resource(&s.text_name, "Text", t.clone())
+                .unwrap();
+            self.text(&s.text_name, ui, ctx).unwrap();
+        };
+        if self.check_resource_exists(&s.hint_text_name, "Text") {
+            self.text(&s.hint_text_name, ui, ctx).unwrap();
+        };
+        Ok(())
+    }
+
+    /// 查找指定开关的点击方法(取决于开关的click_method元素，未点击则返回5)。
+    pub fn check_switch_click_index(&self, name: &str) -> Result<usize, RustConstructorError> {
+        if self.check_resource_exists(name, "Switch") {
+            let s = self.get_resource::<Switch>(name, "Switch").unwrap();
+            Ok(s.last_time_clicked_index)
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::SwitchNotFound {
+                    switch_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            Err(RustConstructorError::SwitchNotFound {
+                switch_name: name.to_string(),
+            })
+        }
+    }
+
+    /// 查找特定开关的状态。
+    pub fn check_switch_state(&self, name: &str) -> Result<u32, RustConstructorError> {
+        if self.check_resource_exists(name, "Switch") {
+            let s = self.get_resource::<Switch>(name, "Switch").unwrap();
+            Ok(s.state)
         } else {
             self.problem_report_custom(
                 RustConstructorError::SwitchNotFound {
