@@ -6,7 +6,7 @@
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github 星星](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![版本](https://img.shields.io/badge/版本-v2.3.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.3.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -28,21 +28,8 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.3.0 兼容更新`。主要更新了以下内容：
-  - 移除了大量`App`外的无用函数。
-  - 添加`FrontResource`特征，用于管理基本的前端资源。
-  - 添加了`Config`类结构体，用于快速自定义前端资源。
-  - `Image`添加了多个字段: `background_color`用于管理显示在图片后方的背景色，`rotate_angle`用于管理图片旋转的角度(顺时针，搭配std::f32::consts::PI使用，不改变其他资源检测输入范围) `rotate_center`控制图片旋转的中心点(根据输入数值大小与图片尺寸的比例决定位置)。
-  - 移除了`Text`的`write_background`字段。
-  - 大改`SwitchData`。
-  - `Switch`的一些字段现已被重命名: `switch_image_name` -> `fill_resource_name`，`enable_hover_click_image` -> `enable_hover_click_fill_resource`。
-  - 移除了`Switch`的`sound_path`字段与相关功能。
-  - `RustConstructorError`添加了`SwitchFillResourceMismatch`和`CustomError`两种新错误类型。
-  - 移除了`Config`和`AppText`及其相关字段。
-  - `App`中添加`strict_mode`字段。
-  - 修复了`CustomRect`的`position`不会随`center_display`更新的问题。
-  - 大改`Switch`，现在可以使用多种资源填充`Switch`主体部分了(`Image`或`CustomRect`)。
-  - 现在`MessageBox`的关闭按钮也支持使用多种资源填充了。
+- 目前的最新版本为`v2.3.1`。主要更新了以下内容：
+  - 为`Switch`和`MessageBox`添加了`安全模式`可选项，开启后会检测大部分资源是否存在并及时提醒。
 
 ---
 

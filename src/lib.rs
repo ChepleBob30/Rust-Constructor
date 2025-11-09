@@ -40,7 +40,7 @@ pub trait RustConstructorResource: Debug {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-/// 标记并管理用于显示给用户的资源。
+/// 标记并管理用于显示给用户的基本前端资源。
 pub trait FrontResource: RustConstructorResource {
     fn size(&self) -> [f32; 2];
 
@@ -142,7 +142,7 @@ pub enum SeverityLevel {
 pub struct PageData {
     pub discern_type: String,
     pub name: String,
-    /// 是否强制在每帧都刷新页面(使用ctx.request_repaint())。
+    /// 是否强制在每帧都刷新页面。
     pub forced_update: bool,
     /// 是否已经加载完首次进入此页面所需内容。
     pub change_page_updated: bool,
@@ -4114,7 +4114,7 @@ impl App {
     }
 
     /// 处理所有已添加的消息框资源。
-    pub fn message_box_display(&mut self, ctx: &Context, ui: &mut Ui) {
+    pub fn message_box_display(&mut self, ctx: &Context, ui: &mut Ui, safe_mode: bool) {
         let mut offset = 0_f32;
         let mut delete_count = 0;
         let mut index_list = Vec::new();
@@ -4135,6 +4135,80 @@ impl App {
                 .downcast_ref::<MessageBox>()
                 .unwrap()
                 .clone();
+            if safe_mode {
+                if !self.check_resource_exists(&mb.image_name, "Image") {
+                    self.problem_report_custom(
+                        RustConstructorError::ImageNotFound {
+                            image_name: mb.image_name,
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+                if !self.check_resource_exists(&format!("MessageBox{}", mb.name), "CustomRect") {
+                    self.problem_report_custom(
+                        RustConstructorError::RectNotFound {
+                            rect_name: format!("MessageBox{}", mb.name),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+                if !self.check_resource_exists(&mb.title_name, "Text") {
+                    self.problem_report_custom(
+                        RustConstructorError::TextNotFound {
+                            text_name: mb.title_name,
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+                if !self.check_resource_exists(&mb.content_name, "Text") {
+                    self.problem_report_custom(
+                        RustConstructorError::TextNotFound {
+                            text_name: mb.content_name,
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+                if !self.check_resource_exists(&format!("MessageBox{}Close", mb.name), "Switch") {
+                    self.problem_report_custom(
+                        RustConstructorError::SwitchNotFound {
+                            switch_name: format!("MessageBox{}Close", mb.name),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+                if !self
+                    .check_resource_exists(&format!("MessageBox{}Animation", mb.name), "SplitTime")
+                {
+                    self.problem_report_custom(
+                        RustConstructorError::SplitTimeNotFound {
+                            split_time_name: format!("MessageBox{}Animation", mb.name),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+                if !self.check_resource_exists(&format!("MessageBox{}", mb.name), "SplitTime") {
+                    self.problem_report_custom(
+                        RustConstructorError::SplitTimeNotFound {
+                            split_time_name: format!("MessageBox{}", mb.name),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
+                };
+            };
             let mut im1 = self
                 .get_resource::<Image>(&mb.image_name, "Image")
                 .unwrap()
@@ -4155,6 +4229,19 @@ impl App {
                 .get_resource::<Switch>(&format!("MessageBox{}Close", mb.name), "Switch")
                 .unwrap()
                 .clone();
+            if safe_mode
+                && !self.check_resource_exists(&s.fill_resource_name, &s.fill_resource_type)
+            {
+                self.problem_report_custom(
+                    RustConstructorError::ResourceNotFound {
+                        resource_name: s.fill_resource_name,
+                        resource_type: s.fill_resource_type,
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                continue;
+            };
             let fr: Box<dyn FrontResource> = match s.fill_resource_type.as_str() {
                 "Image" => Box::new(
                     self.get_resource::<Image>(&s.fill_resource_name, "Image")
@@ -4330,6 +4417,7 @@ impl App {
                 ui,
                 ctx,
                 s.state == 0 && mb.exist,
+                safe_mode,
             )
             .unwrap();
             if self
@@ -4556,9 +4644,10 @@ impl App {
         ui: &mut Ui,
         ctx: &Context,
         enable: bool,
+        safe_mode: bool,
     ) -> Result<(), RustConstructorError> {
         let mut appearance_count = 0;
-        if !self.check_resource_exists(name, "Switch") {
+        if safe_mode && !self.check_resource_exists(name, "Switch") {
             self.problem_report_custom(
                 RustConstructorError::SwitchNotFound {
                     switch_name: name.to_string(),
@@ -4571,66 +4660,69 @@ impl App {
             });
         };
         let mut s = self.get_resource::<Switch>(name, "Switch").unwrap().clone();
-        if !self.check_resource_exists(&s.fill_resource_name.clone(), &s.fill_resource_type) {
-            self.problem_report_custom(
-                RustConstructorError::ResourceNotFound {
-                    resource_name: s.fill_resource_name.clone(),
-                    resource_type: s.fill_resource_type.clone(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::ResourceNotFound {
-                resource_name: s.fill_resource_name,
-                resource_type: s.fill_resource_type,
-            });
-        };
-        if !s.hint_text_name.is_empty() {
-            if !self.check_resource_exists(&format!("{}StartHoverTime", s.name), "SplitTime") {
+        if safe_mode {
+            if !self.check_resource_exists(&s.fill_resource_name.clone(), &s.fill_resource_type) {
                 self.problem_report_custom(
-                    RustConstructorError::SplitTimeNotFound {
-                        split_time_name: format!("{}StartHoverTime", s.name),
+                    RustConstructorError::ResourceNotFound {
+                        resource_name: s.fill_resource_name.clone(),
+                        resource_type: s.fill_resource_type.clone(),
                     },
-                    SeverityLevel::MildWarning,
+                    SeverityLevel::SevereWarning,
                     self.problem_list.clone(),
                 );
-                self.add_split_time(
-                    SplitTime::default().name(&format!("{}StartHoverTime", s.name)),
-                );
+                return Err(RustConstructorError::ResourceNotFound {
+                    resource_name: s.fill_resource_name,
+                    resource_type: s.fill_resource_type,
+                });
             };
-            if !self.check_resource_exists(&format!("{}HintFadeAnimation", s.name), "SplitTime") {
-                self.problem_report_custom(
-                    RustConstructorError::SplitTimeNotFound {
-                        split_time_name: format!("{}HintFadeAnimation", s.name),
-                    },
-                    SeverityLevel::MildWarning,
-                    self.problem_list.clone(),
-                );
-                self.add_split_time(
-                    SplitTime::default().name(&format!("{}HintFadeAnimation", s.name)),
-                );
-            };
-            if !self.check_resource_exists(&s.hint_text_name, "Text") {
-                self.problem_report_custom(
-                    RustConstructorError::TextNotFound {
-                        text_name: s.hint_text_name.clone(),
-                    },
-                    SeverityLevel::MildWarning,
-                    self.problem_list.clone(),
-                );
-                self.add_text(
-                    Text::default()
-                        .name(&s.hint_text_name)
-                        .content("")
-                        .origin_position(0_f32, 0_f32)
-                        .font_size(25_f32)
-                        .wrap_width(300_f32)
-                        .background_rounding(10_f32)
-                        .color(255, 255, 255, 0)
-                        .background_color([0, 0, 0, 255])
-                        .center_display(HorizontalAlign::Left, VerticalAlign::Top)
-                        .selectable(false),
-                );
+            if !s.hint_text_name.is_empty() {
+                if !self.check_resource_exists(&format!("{}StartHoverTime", s.name), "SplitTime") {
+                    self.problem_report_custom(
+                        RustConstructorError::SplitTimeNotFound {
+                            split_time_name: format!("{}StartHoverTime", s.name),
+                        },
+                        SeverityLevel::MildWarning,
+                        self.problem_list.clone(),
+                    );
+                    self.add_split_time(
+                        SplitTime::default().name(&format!("{}StartHoverTime", s.name)),
+                    );
+                };
+                if !self.check_resource_exists(&format!("{}HintFadeAnimation", s.name), "SplitTime")
+                {
+                    self.problem_report_custom(
+                        RustConstructorError::SplitTimeNotFound {
+                            split_time_name: format!("{}HintFadeAnimation", s.name),
+                        },
+                        SeverityLevel::MildWarning,
+                        self.problem_list.clone(),
+                    );
+                    self.add_split_time(
+                        SplitTime::default().name(&format!("{}HintFadeAnimation", s.name)),
+                    );
+                };
+                if !self.check_resource_exists(&s.hint_text_name, "Text") {
+                    self.problem_report_custom(
+                        RustConstructorError::TextNotFound {
+                            text_name: s.hint_text_name.clone(),
+                        },
+                        SeverityLevel::MildWarning,
+                        self.problem_list.clone(),
+                    );
+                    self.add_text(
+                        Text::default()
+                            .name(&s.hint_text_name)
+                            .content("")
+                            .origin_position(0_f32, 0_f32)
+                            .font_size(25_f32)
+                            .wrap_width(300_f32)
+                            .background_rounding(10_f32)
+                            .color(255, 255, 255, 0)
+                            .background_color([0, 0, 0, 255])
+                            .center_display(HorizontalAlign::Left, VerticalAlign::Top)
+                            .selectable(false),
+                    );
+                };
             };
         };
         let fr: Box<dyn FrontResource> = match &*s.fill_resource_type {

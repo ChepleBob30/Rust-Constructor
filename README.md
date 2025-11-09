@@ -6,7 +6,7 @@
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub Stars](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![Version](https://img.shields.io/badge/Version-v2.3.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.3.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -28,21 +28,8 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current latest version is `v2.3.0 Compatibility Update`. Major updates include:
-  - Removed a large number of useless functions outside of `App`.
-  - Added `FrontResource` trait for managing basic front-end resources.
-  - Added `Config` class structures for quickly customizing front-end resources.
-  - `Image` added multiple fields: `background_color` for managing background color displayed behind the image, `rotate_angle` for managing image rotation angle (clockwise, used with std::f32::consts::PI, does not change other resource detection input range), `rotate_center` controls the image rotation center point (position determined by the ratio of input values to image dimensions).
-  - Removed `Text`'s `write_background` field.
-  - Major refactor of `SwitchData`.
-  - Some fields in `Switch` have been renamed: `switch_image_name` -> `fill_resource_name`, `enable_hover_click_image` -> `enable_hover_click_fill_resource`.
-  - Removed `Switch`'s `sound_path` field and related functionality.
-  - `RustConstructorError` added two new error types: `SwitchFillResourceMismatch` and `CustomError`.
-  - Removed `Config` and `AppText` and their related fields.
-  - Added `strict_mode` field in `App`.
-  - Fixed the issue where `CustomRect`'s `position` would not update with `center_display`.
-  - Major refactor of `Switch`, now multiple resources can be used to fill the `Switch` main part (`Image` or `CustomRect`).
-  - The close button of `MessageBox` now also supports filling with multiple resources.
+- The current latest version is `v2.3.1`. Major updates include:
+  - The `Safe Mode` option has been added to `Switch` and `MessageBox`. Once enabled, it will detect whether most resources exist and promptly remind users.
 
 ---
 
