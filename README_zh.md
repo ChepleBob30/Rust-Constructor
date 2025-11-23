@@ -6,7 +6,7 @@
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Github 星星](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![版本](https://img.shields.io/badge/版本-v2.3.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.4.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -28,8 +28,25 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.3.1`。主要更新了以下内容：
-  - 为`Switch`和`MessageBox`添加了`安全模式`可选项，开启后会检测大部分资源是否存在并及时提醒。
+- 目前的最新版本为`v2.4.0 鼠标更新`。主要更新了以下内容：
+  - 重命名`FrontResource`为`BasicFrontResource`。
+  - 为部分资源添加了`offset`字段，用于改变资源位置(在完成位置计算后进行操作)。
+  - 添加了`PositionConfig`，用于配置资源位置。
+  - 移除了`get_text_size`方法，改为在调用时自动计算并添加到`Text`的新字段`size`中。
+  - 新增`MouseDetector`(鼠标检测器)资源，用于检查特定范围内鼠标的操作。
+  - 新增枚举`MouseDetectorLevel`，可以控制检测量，从而减少性能损耗。
+  - 新增配套结构体`MouseDetectorResult`，用于储存鼠标检测结果。
+  - 扩展了一个`RustConstructorError`错误类型: `MouseDetectorNotFound`。
+  - 为几乎所有需要调用资源的函数添加`safe_mode`可选项，留空即可使用`App`的新字段`safe_mode`进行控制，开启后可以对所有需要使用的资源进行安全检查，避免报错。
+  - 修复了在使用多个`Text`时部分`Text`无法框选的问题。
+  - 修复了`Text`的超链接遇到表情符号等文本时索引错误的问题。
+  - 现在`Text`在框选后按下全选组合键即可将整段文本选中。
+  - `Switch`新增`switched`字段，用于判定是否点击切换了开关状态。
+  - `SwitchData`已被重命名为`SwitchAppearance`。
+  - 新增`SwitchData`结构体，包含几个常用判定字段。
+  - `check_switch_click_index`和`check_switch_state`现已被`check_switch_data`取代。
+  - 完善了部分代码。
+  - 修复了一些已知问题。
 
 ---
 

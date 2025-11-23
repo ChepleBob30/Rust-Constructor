@@ -1,6 +1,29 @@
-//! Rust Constructor V2
-//! 基于egui构建的跨平台GUI框架, 用Rust开发GUI项目最简单的方式。
-use eframe::{emath::Rect, epaint::Stroke, epaint::textures::TextureOptions};
+//! # `Rust Constructor V2`
+//!
+//!
+//! 基于`egui`构建的跨平台`GUI`框架, 用`Rust`开发`GUI`项目最简单的方式
+//!
+//! A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects in `Rust`
+//!
+//!
+//! 有关`Rust Constructor`的使用方法，请参考[Rust Constructor 指南](https://github.com/ChepleBob30/Rust-Constructor-Guide)。
+//!
+//! 关于源代码及更多内容，请访问`Rust Constructor`的[GitHub 仓库](https://github.com/ChepleBob30/Rust-Constructor)以获取。
+//!
+//!
+//! About the usage method of `Rust Constructor`, please refer to the [Rust Constructor Guide](https://github.com/ChepleBob30/Rust-Constructor-Guide).
+//!
+//! About the source code and more content, please visit the `Rust Constructor` [GitHub Repository](https://github.com/ChepleBob30/Rust-Constructor) to get.
+//!
+//!
+//! 如果你对此项目感兴趣，你也可以来看看我们的组织[必达](https://github.com/Binder-organize)的其他项目。
+//!
+//! If you are interested in this project, You can also come and take a look at other projects of our organization [Binder](https://github.com/Binder-organize).
+use eframe::{
+    Result,
+    emath::Rect,
+    epaint::{Stroke, textures::TextureOptions},
+};
 use egui::{
     Color32, ColorImage, Context, FontData, FontDefinitions, FontFamily, FontId, Galley, Id,
     ImageSource, Key, OpenUrl, PointerButton, Pos2, Sense, StrokeKind, TextureHandle, Ui, Vec2,
@@ -41,16 +64,169 @@ pub trait RustConstructorResource: Debug {
 }
 
 /// 标记并管理用于显示给用户的基本前端资源。
-pub trait FrontResource: RustConstructorResource {
+pub trait BasicFrontResource: RustConstructorResource {
+    /// 获取资源尺寸。
     fn size(&self) -> [f32; 2];
 
+    /// 获取资源位置。
     fn position(&self) -> [f32; 2];
 
+    /// 修改资源尺寸。
     fn modify_size(&mut self, width: f32, height: f32);
 
+    /// 修改资源位置。
     fn modify_position(&mut self, x: f32, y: f32);
 
+    /// 通过加偏移量的方式修改资源位置。
     fn modify_add_position(&mut self, add_x: f32, add_y: f32);
+}
+
+/// 用于配置资源位置的结构体。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct PositionConfig {
+    /// 原始位置。
+    pub origin_position: [f32; 2],
+    /// 尺寸(可能某些资源不会使用)。
+    pub size: [f32; 2],
+    /// x轴的网格式定位。
+    pub x_grid: [u32; 2],
+    /// y轴的网格式定位(可能某些资源不会使用)。
+    pub y_grid: [u32; 2],
+    /// 对齐方法(可能某些方法不会使用)。
+    pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
+}
+
+impl Default for PositionConfig {
+    fn default() -> Self {
+        PositionConfig {
+            origin_position: [0_f32, 0_f32],
+            size: [100_f32, 100_f32],
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
+        }
+    }
+}
+
+impl PositionConfig {
+    pub fn from_image(image: Image) -> Self {
+        Self {
+            origin_position: image.origin_position,
+            size: image.size,
+            x_grid: image.x_grid,
+            y_grid: image.y_grid,
+            center_display: image.center_display,
+            offset: image.offset,
+        }
+    }
+
+    pub fn from_image_config(image_config: ImageConfig) -> Self {
+        Self {
+            origin_position: image_config.origin_position,
+            size: image_config.size,
+            x_grid: image_config.x_grid,
+            y_grid: image_config.y_grid,
+            center_display: image_config.center_display,
+            offset: image_config.offset,
+        }
+    }
+
+    pub fn from_custom_rect(custom_rect: CustomRect) -> Self {
+        Self {
+            origin_position: custom_rect.origin_position,
+            size: custom_rect.size,
+            x_grid: custom_rect.x_grid,
+            y_grid: custom_rect.y_grid,
+            center_display: custom_rect.center_display,
+            offset: custom_rect.offset,
+        }
+    }
+
+    pub fn from_custom_rect_config(custom_rect_config: CustomRectConfig) -> Self {
+        Self {
+            origin_position: custom_rect_config.origin_position,
+            size: custom_rect_config.size,
+            x_grid: custom_rect_config.x_grid,
+            y_grid: custom_rect_config.y_grid,
+            center_display: custom_rect_config.center_display,
+            offset: custom_rect_config.offset,
+        }
+    }
+
+    pub fn from_text(text: Text) -> Self {
+        Self {
+            origin_position: text.origin_position,
+            size: text.size,
+            x_grid: text.x_grid,
+            y_grid: text.y_grid,
+            center_display: text.center_display,
+            offset: text.offset,
+        }
+    }
+
+    pub fn from_text_config(mut self, text_config: TextConfig) -> Self {
+        self.origin_position = text_config.origin_position;
+        self.size = text_config.size;
+        self.x_grid = text_config.x_grid;
+        self.y_grid = text_config.y_grid;
+        self.center_display = text_config.center_display;
+        self.offset = text_config.offset;
+        self
+    }
+
+    pub fn from_mouse_detector(mouse_detector: MouseDetector) -> Self {
+        Self {
+            origin_position: mouse_detector.origin_position,
+            size: mouse_detector.size,
+            x_grid: mouse_detector.x_grid,
+            y_grid: mouse_detector.y_grid,
+            center_display: mouse_detector.center_display,
+            offset: mouse_detector.offset,
+        }
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
 }
 
 /// 存储特定值的枚举。
@@ -129,9 +305,9 @@ pub struct Problem {
 /// 衡量问题的严重等级。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SeverityLevel {
-    /// 弱警告：一般情况下不会产生影响。
+    /// 弱警告：会影响程序正常执行，但一般情况下不会有严重后果。
     MildWarning,
-    /// 强警告：会影响程序正常执行，但一般情况下不会有严重后果。
+    /// 强警告：会影响程序正常执行，且可能导致意外情况。
     SevereWarning,
     /// 错误：会导致程序无法运行。
     Error,
@@ -296,6 +472,8 @@ pub struct CustomRectConfig {
     pub y_grid: [u32; 2],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
     /// 颜色。
     pub color: [u8; 4],
     /// 边框宽度。
@@ -314,6 +492,7 @@ impl Default for CustomRectConfig {
             x_grid: [0, 0],
             y_grid: [0, 0],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
             color: [255, 255, 255, 255],
             border_width: 2_f32,
             border_color: [0, 0, 0, 255],
@@ -323,6 +502,16 @@ impl Default for CustomRectConfig {
 }
 
 impl CustomRectConfig {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.size = position_config.size;
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self
+    }
+
     pub fn from_custom_rect(custom_rect: CustomRect) -> Self {
         Self {
             size: custom_rect.size,
@@ -330,6 +519,7 @@ impl CustomRectConfig {
             x_grid: custom_rect.x_grid,
             y_grid: custom_rect.y_grid,
             center_display: custom_rect.center_display,
+            offset: custom_rect.offset,
             color: custom_rect.color,
             border_width: custom_rect.border_width,
             border_color: custom_rect.border_color,
@@ -368,6 +558,12 @@ impl CustomRectConfig {
         vertical_align: VerticalAlign,
     ) -> Self {
         self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
         self
     }
 
@@ -413,6 +609,8 @@ pub struct CustomRect {
     pub y_grid: [u32; 2],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
     /// 颜色。
     pub color: [u8; 4],
     /// 边框宽度。
@@ -441,7 +639,7 @@ impl RustConstructorResource for CustomRect {
     }
 }
 
-impl FrontResource for CustomRect {
+impl BasicFrontResource for CustomRect {
     fn position(&self) -> [f32; 2] {
         self.position
     }
@@ -474,6 +672,7 @@ impl Default for CustomRect {
             x_grid: [0, 0],
             y_grid: [0, 0],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
             color: [255, 255, 255, 255],
             border_width: 2_f32,
             border_color: [0, 0, 0, 255],
@@ -483,12 +682,23 @@ impl Default for CustomRect {
 }
 
 impl CustomRect {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.size = position_config.size;
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self
+    }
+
     pub fn from_config(mut self, config: CustomRectConfig) -> Self {
         self.size = config.size;
         self.rounding = config.rounding;
         self.x_grid = config.x_grid;
         self.y_grid = config.y_grid;
         self.center_display = config.center_display;
+        self.offset = config.offset;
         self.color = config.color;
         self.border_width = config.border_width;
         self.border_color = config.border_color;
@@ -537,6 +747,12 @@ impl CustomRect {
     }
 
     #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
+
+    #[inline]
     pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
         self.color = [r, g, b, a];
         self
@@ -572,6 +788,8 @@ pub struct ImageConfig {
     pub y_grid: [u32; 2],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
     /// 不透明度。
     pub alpha: u8,
     /// 叠加颜色。
@@ -595,6 +813,7 @@ impl Default for ImageConfig {
             x_grid: [0, 0],
             y_grid: [0, 0],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
             alpha: 255,
             overlay_color: [255, 255, 255, 255],
             background_color: [0, 0, 0, 0],
@@ -607,12 +826,23 @@ impl Default for ImageConfig {
 }
 
 impl ImageConfig {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.size = position_config.size;
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self
+    }
+
     pub fn from_image(image: Image) -> Self {
         Self {
             size: image.size,
             x_grid: image.x_grid,
             y_grid: image.y_grid,
             center_display: image.center_display,
+            offset: image.offset,
             alpha: image.alpha,
             overlay_color: image.overlay_color,
             background_color: image.background_color,
@@ -658,6 +888,12 @@ impl ImageConfig {
     }
 
     #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
+
+    #[inline]
     pub fn alpha(mut self, alpha: u8) -> Self {
         self.alpha = alpha;
         self
@@ -670,8 +906,8 @@ impl ImageConfig {
     }
 
     #[inline]
-    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
-        self.background_color = background_color;
+    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.background_color = [r, g, b, a];
         self
     }
 
@@ -705,6 +941,8 @@ pub struct Image {
     pub y_grid: [u32; 2],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
     /// 不透明度。
     pub alpha: u8,
     /// 叠加颜色。
@@ -741,7 +979,7 @@ impl RustConstructorResource for Image {
     }
 }
 
-impl FrontResource for Image {
+impl BasicFrontResource for Image {
     fn position(&self) -> [f32; 2] {
         self.position
     }
@@ -774,6 +1012,7 @@ impl Default for Image {
             x_grid: [0, 0],
             y_grid: [0, 0],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
             alpha: 255,
             overlay_color: [255, 255, 255, 255],
             background_color: [0, 0, 0, 0],
@@ -787,11 +1026,22 @@ impl Default for Image {
 }
 
 impl Image {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.size = position_config.size;
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self
+    }
+
     pub fn from_config(mut self, config: ImageConfig) -> Self {
         self.size = config.size;
         self.x_grid = config.x_grid;
         self.y_grid = config.y_grid;
         self.center_display = config.center_display;
+        self.offset = config.offset;
         self.alpha = config.alpha;
         self.overlay_color = config.overlay_color;
         self.background_color = config.background_color;
@@ -843,6 +1093,12 @@ impl Image {
     }
 
     #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
+
+    #[inline]
     pub fn alpha(mut self, alpha: u8) -> Self {
         self.alpha = alpha;
         self
@@ -855,8 +1111,8 @@ impl Image {
     }
 
     #[inline]
-    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
-        self.background_color = background_color;
+    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.background_color = [r, g, b, a];
         self
     }
 
@@ -893,6 +1149,8 @@ pub struct TextConfig {
     pub color: [u8; 4],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
     /// 单行宽度。
     pub wrap_width: f32,
     /// 背景颜色。
@@ -911,6 +1169,8 @@ pub struct TextConfig {
     pub selectable: bool,
     /// 超链接文本。
     pub hyperlink_text: Vec<(String, HyperlinkSelectMethod)>,
+    /// 文本大小。
+    pub size: [f32; 2],
 }
 
 impl Default for TextConfig {
@@ -920,6 +1180,7 @@ impl Default for TextConfig {
             font_size: 16_f32,
             color: [255, 255, 255, 255],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
             wrap_width: 200_f32,
             background_color: [0, 0, 0, 0],
             background_rounding: 2_f32,
@@ -929,17 +1190,30 @@ impl Default for TextConfig {
             font: String::new(),
             selectable: true,
             hyperlink_text: Vec::new(),
+            size: [0_f32, 0_f32],
         }
     }
 }
 
 impl TextConfig {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.wrap_width = position_config.size[0];
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self.size = position_config.size;
+        self
+    }
+
     pub fn from_text(text: Text) -> Self {
         Self {
             content: text.content,
             font_size: text.font_size,
             color: text.color,
             center_display: text.center_display,
+            offset: text.offset,
             wrap_width: text.wrap_width,
             background_color: text.background_color,
             background_rounding: text.background_rounding,
@@ -949,6 +1223,7 @@ impl TextConfig {
             font: text.font,
             selectable: text.selectable,
             hyperlink_text: text.hyperlink_text,
+            size: text.size,
         }
     }
 
@@ -981,14 +1256,20 @@ impl TextConfig {
     }
 
     #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
+
+    #[inline]
     pub fn wrap_width(mut self, wrap_width: f32) -> Self {
         self.wrap_width = wrap_width;
         self
     }
 
     #[inline]
-    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
-        self.background_color = background_color;
+    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.background_color = [r, g, b, a];
         self
     }
 
@@ -1055,6 +1336,8 @@ pub struct Text {
     pub position: [f32; 2],
     /// 对齐方法。
     pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
     /// 单行宽度。
     pub wrap_width: f32,
     /// 背景颜色。
@@ -1079,6 +1362,8 @@ pub struct Text {
     pub hyperlink_index: Vec<(usize, usize, String)>,
     /// 上一帧的文本内容(用于优化超链接文本选取)。
     pub last_frame_content: String,
+    /// 文本大小。
+    pub size: [f32; 2],
 }
 
 impl RustConstructorResource for Text {
@@ -1099,21 +1384,22 @@ impl RustConstructorResource for Text {
     }
 }
 
-impl FrontResource for Text {
+impl BasicFrontResource for Text {
     fn position(&self) -> [f32; 2] {
         self.position
     }
 
     fn size(&self) -> [f32; 2] {
-        [self.wrap_width, -1_f32]
+        self.size
     }
 
     fn modify_position(&mut self, x: f32, y: f32) {
         self.origin_position = [x, y];
     }
 
-    fn modify_size(&mut self, width: f32, _height: f32) {
+    fn modify_size(&mut self, width: f32, height: f32) {
         self.wrap_width = width;
+        self.size = [width, height];
     }
 
     fn modify_add_position(&mut self, add_x: f32, add_y: f32) {
@@ -1131,6 +1417,7 @@ impl Default for Text {
             color: [255, 255, 255, 255],
             position: [0_f32, 0_f32],
             center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
             wrap_width: 200_f32,
             background_color: [0, 0, 0, 0],
             background_rounding: 2_f32,
@@ -1142,17 +1429,30 @@ impl Default for Text {
             selectable: true,
             hyperlink_text: Vec::new(),
             hyperlink_index: Vec::new(),
-            last_frame_content: String::from("Hello world"),
+            last_frame_content: String::from(""),
+            size: [0_f32, 0_f32],
         }
     }
 }
 
 impl Text {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.wrap_width = position_config.size[0];
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self.size = position_config.size;
+        self
+    }
+
     pub fn from_config(mut self, config: TextConfig) -> Self {
         self.content = config.content;
         self.font_size = config.font_size;
         self.color = config.color;
         self.center_display = config.center_display;
+        self.offset = config.offset;
         self.wrap_width = config.wrap_width;
         self.background_color = config.background_color;
         self.background_rounding = config.background_rounding;
@@ -1162,6 +1462,7 @@ impl Text {
         self.font = config.font;
         self.selectable = config.selectable;
         self.hyperlink_text = config.hyperlink_text;
+        self.size = config.size;
         self
     }
 
@@ -1200,14 +1501,20 @@ impl Text {
     }
 
     #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
+
+    #[inline]
     pub fn wrap_width(mut self, wrap_width: f32) -> Self {
         self.wrap_width = wrap_width;
         self
     }
 
     #[inline]
-    pub fn background_color(mut self, background_color: [u8; 4]) -> Self {
-        self.background_color = background_color;
+    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
+        self.background_color = [r, g, b, a];
         self
     }
 
@@ -1465,13 +1772,48 @@ impl SplitTime {
     }
 }
 
+/// 开关的外观。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct SwitchAppearance {
+    /// 当填充资源为图片时的配置项。
+    pub image_config: ImageConfig,
+    /// 当填充资源为矩形时的配置项。
+    pub custom_rect_config: CustomRectConfig,
+    /// 当启用文本时，文本的配置项。
+    pub text_config: TextConfig,
+    /// 当填充资源为图片时，开关的纹理。
+    pub texture: String,
+    /// 开关上的提示文本。
+    pub hint_text: String,
+}
+
+/// 开关的点击方法。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SwitchClickAction {
+    /// 开关的点击方法。
+    pub click_method: PointerButton,
+    /// 点击后是否改变开关状态。
+    pub action: bool,
+}
+
+/// 用于开关资源判定的一些字段集合。
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SwitchData {
+    /// 是否点击切换状态。
+    pub switched: bool,
+    /// 点击的方法。
+    pub last_time_clicked_index: usize,
+    /// 开关状态。
+    pub state: u32,
+}
+
 /// RC的开关资源。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Switch {
     pub discern_type: String,
     pub name: String,
     /// 外观（包括各类资源配置项，数量为开启的内容数量*开关状态总数）。
-    pub appearance: Vec<SwitchData>,
+    pub appearance: Vec<SwitchAppearance>,
     /// 开关使用的填充资源名称。
     pub fill_resource_name: String,
     /// 开关使用的填充资源类型。
@@ -1496,6 +1838,8 @@ pub struct Switch {
     pub text_name: String,
     /// 开关文本资源的原始位置。
     pub text_origin_position: [f32; 2],
+    /// 是否切换了开关状态。
+    pub switched: bool,
 }
 
 impl RustConstructorResource for Switch {
@@ -1534,6 +1878,7 @@ impl Default for Switch {
             hint_text_name: String::from("HintText"),
             text_name: String::from("Text"),
             text_origin_position: [0_f32, 0_f32],
+            switched: false,
         }
     }
 }
@@ -1546,7 +1891,7 @@ impl Switch {
     }
 
     #[inline]
-    pub fn appearance(mut self, appearance: Vec<SwitchData>) -> Self {
+    pub fn appearance(mut self, appearance: Vec<SwitchAppearance>) -> Self {
         self.appearance = appearance;
         self
     }
@@ -1574,30 +1919,6 @@ impl Switch {
 pub struct RenderResource {
     pub discern_type: String,
     pub name: String,
-}
-
-/// 开关的外观。
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct SwitchData {
-    /// 当填充资源为图片时的配置项。
-    pub image_config: ImageConfig,
-    /// 当填充资源为矩形时的配置项。
-    pub custom_rect_config: CustomRectConfig,
-    /// 当启用文本时，文本的配置项。
-    pub text_config: TextConfig,
-    /// 当填充资源为图片时，开关的纹理。
-    pub texture: String,
-    /// 开关上的提示文本。
-    pub hint_text: String,
-}
-
-/// 开关的点击方法。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SwitchClickAction {
-    /// 开关的点击方法。
-    pub click_method: PointerButton,
-    /// 点击后是否改变开关状态。
-    pub action: bool,
 }
 
 /// RC的消息框资源。
@@ -1702,6 +2023,187 @@ impl MessageBox {
     }
 }
 
+/// 鼠标检测器单次检测等级。
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum MouseDetectorLevel {
+    /// 精简模式，只进行最基础的检测。
+    Lite,
+    /// 标准模式，检测大部分常用鼠标行为。
+    #[default]
+    Default,
+    /// 完整模式，检测所有鼠标行为。
+    Pro,
+}
+
+/// 鼠标检测器检测结果。
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
+pub struct MouseDetectResult {
+    /// 是否点击。
+    pub clicked: bool,
+    /// 鼠标是否在检测范围内。
+    pub contains_pointer: bool,
+    /// 是否点击右键。
+    pub secondary_clicked: Option<bool>,
+    /// 是否点击中键。
+    pub middle_clicked: Option<bool>,
+    /// 是否点击扩展按键。
+    pub clicked_by_extra_button: Option<[bool; 2]>,
+    /// 是否长时间触屏。
+    pub long_touched: Option<bool>,
+    /// 是否双击。
+    pub double_clicked: Option<bool>,
+    /// 是否三击。
+    pub triple_clicked: Option<bool>,
+    /// 双击的方法。
+    pub double_clicked_by: Option<[bool; 5]>,
+    /// 三击的方法。
+    pub triple_clicked_by: Option<[bool; 5]>,
+    /// 是否在检测范围外点击。
+    pub clicked_elsewhere: Option<bool>,
+    /// 是否悬挂在检测范围内。
+    pub hovered: Option<bool>,
+    /// 是否开始拖动。
+    pub drag_started: Option<bool>,
+    /// 开始拖动的方法。
+    pub drag_started_by: Option<[bool; 5]>,
+    /// 是否正在拖动。
+    pub dragged: Option<bool>,
+    /// 拖动方法。
+    pub dragged_by: Option<[bool; 5]>,
+    /// 是否结束拖动。
+    pub drag_stopped: Option<bool>,
+    /// 结束拖动方法。
+    pub deag_stopped_by: Option<[bool; 5]>,
+    /// 上一帧拖动经过了多少格像素。
+    pub drag_delta: Option<[f32; 2]>,
+    /// 一次拖动中总共经过了多少格像素。
+    pub total_drag_delta: Option<Option<[f32; 2]>>,
+    /// 鼠标上一帧拖动了多远。
+    pub drag_motion: Option<[f32; 2]>,
+    /// 鼠标交互的位置。
+    pub interact_pointer_pos: Option<Option<[f32; 2]>>,
+    /// 鼠标悬挂的位置。
+    pub hover_pos: Option<Option<[f32; 2]>>,
+    /// 鼠标是否按下按键。
+    pub is_pointer_button_down_on: Option<bool>,
+}
+
+/// RC的鼠标检测器资源。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct MouseDetector {
+    pub discern_type: String,
+    pub name: String,
+    /// 位置。
+    pub position: [f32; 2],
+    /// 原始位置。
+    pub origin_position: [f32; 2],
+    /// 尺寸。
+    pub size: [f32; 2],
+    /// x轴的网格式定位。
+    pub x_grid: [u32; 2],
+    /// y轴的网格式定位。
+    pub y_grid: [u32; 2],
+    /// 对齐方法。
+    pub center_display: (HorizontalAlign, VerticalAlign),
+    /// 偏移量。
+    pub offset: [f32; 2],
+    /// 鼠标检测结果。
+    pub detect_result: MouseDetectResult,
+}
+
+impl RustConstructorResource for MouseDetector {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn expose_type(&self) -> &str {
+        &self.discern_type
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl Default for MouseDetector {
+    fn default() -> Self {
+        Self {
+            discern_type: String::from("MouseDetector"),
+            name: String::from("MouseDetector"),
+            position: [0_f32, 0_f32],
+            origin_position: [0_f32, 0_f32],
+            size: [100_f32, 100_f32],
+            x_grid: [0, 0],
+            y_grid: [0, 0],
+            center_display: (HorizontalAlign::default(), VerticalAlign::default()),
+            offset: [0_f32, 0_f32],
+            detect_result: MouseDetectResult::default(),
+        }
+    }
+}
+
+impl MouseDetector {
+    pub fn from_position_config(mut self, position_config: PositionConfig) -> Self {
+        self.origin_position = position_config.origin_position;
+        self.size = position_config.size;
+        self.x_grid = position_config.x_grid;
+        self.y_grid = position_config.y_grid;
+        self.center_display = position_config.center_display;
+        self.offset = position_config.offset;
+        self
+    }
+
+    #[inline]
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    #[inline]
+    pub fn origin_position(mut self, x: f32, y: f32) -> Self {
+        self.origin_position = [x, y];
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn x_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.x_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn y_grid(mut self, fetch: u32, total: u32) -> Self {
+        self.y_grid = [fetch, total];
+        self
+    }
+
+    #[inline]
+    pub fn center_display(
+        mut self,
+        horizontal_align: HorizontalAlign,
+        vertical_align: VerticalAlign,
+    ) -> Self {
+        self.center_display = (horizontal_align, vertical_align);
+        self
+    }
+
+    #[inline]
+    pub fn offset(mut self, x: f32, y: f32) -> Self {
+        self.offset = [x, y];
+        self
+    }
+}
+
 /// RC资源最基本的错误处理。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RustConstructorError {
@@ -1741,6 +2243,8 @@ pub enum RustConstructorError {
     SwitchNotFound { switch_name: String },
     /// 消息框已存在。
     MessageBoxAlreadyExists { message_box_name: String },
+    /// 鼠标检测器未找到。
+    MouseDetectorNotFound { mouse_detector_name: String },
     /// 获取字体失败。
     FontGetFailed { font_path: String },
     /// 字体未找到。
@@ -1803,10 +2307,12 @@ pub enum VerticalAlign {
 }
 
 /// 程序主体。
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App {
-    /// 配置项。
+    /// 配置项，用于控制出现问题时是否panic。
     pub strict_mode: bool,
+    /// 配置项，用于全局控制是否在调用资源时检查资源是否存在。
+    pub safe_mode: bool,
     /// RC资源。
     pub rust_constructor_resource: Vec<Box<dyn RustConstructorResource>>,
     /// 渲染资源列表。
@@ -1825,10 +2331,33 @@ pub struct App {
     pub last_frame_time: Option<f64>,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        App {
+            strict_mode: false,
+            safe_mode: true,
+            rust_constructor_resource: Vec::new(),
+            render_resource_list: Vec::new(),
+            problem_list: Vec::new(),
+            tick_interval: 0.05,
+            current_page: String::new(),
+            timer: Timer::default(),
+            frame_times: Vec::new(),
+            last_frame_time: None,
+        }
+    }
+}
+
 impl App {
     #[inline]
     pub fn strict_mode(mut self, strict_mode: bool) -> Self {
         self.strict_mode = strict_mode;
+        self
+    }
+
+    #[inline]
+    pub fn safe_mode(mut self, safe_mode: bool) -> Self {
+        self.safe_mode = safe_mode;
         self
     }
 
@@ -1868,26 +2397,31 @@ impl App {
     }
 
     /// 切换页面。
-    pub fn switch_page(&mut self, page: &str) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(page, "PageData") {
-            self.current_page = page.to_string();
-            let pd = self.get_resource_mut::<PageData>(page, "PageData").unwrap();
-            pd.enter_page_updated = false;
-            self.timer.start_time = self.timer.total_time;
-            self.update_timer();
-            Ok(())
-        } else {
+    pub fn switch_page(
+        &mut self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<(), RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "PageData")
+        {
             self.problem_report_custom(
                 RustConstructorError::PageNotFound {
-                    page_name: page.to_string(),
+                    page_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::PageNotFound {
-                page_name: page.to_string(),
-            })
-        }
+            return Err(RustConstructorError::PageNotFound {
+                page_name: name.to_string(),
+            });
+        };
+        self.current_page = name.to_string();
+        let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
+        pd.enter_page_updated = false;
+        self.timer.start_time = self.timer.total_time;
+        self.update_timer();
+        Ok(())
     }
 
     /// 从指定列表中替换资源。
@@ -2029,7 +2563,7 @@ impl App {
     }
 
     /// 添加字体资源。
-    pub fn add_fonts(&mut self, mut font: Font) {
+    pub fn add_fonts(&mut self, mut font: Font) -> Result<(), RustConstructorError> {
         let mut fonts = FontDefinitions::default();
         if let Ok(font_read_data) = read(font.path.clone()) {
             let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
@@ -2055,6 +2589,7 @@ impl App {
 
             font.font_definitions = fonts;
             self.rust_constructor_resource.push(Box::new(font));
+            Ok(())
         } else {
             self.problem_report_custom(
                 RustConstructorError::FontGetFailed {
@@ -2063,28 +2598,38 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-        };
+            Err(RustConstructorError::FontGetFailed {
+                font_path: font.path.to_string(),
+            })
+        }
     }
 
     /// 输出字体资源。
-    pub fn font(&mut self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
-        if let Ok(f) = self.get_resource::<Font>(name, "Font") {
-            return Ok(f.font_definitions.clone());
-        }
-        self.problem_report_custom(
-            RustConstructorError::FontNotFound {
+    pub fn font(
+        &mut self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<FontDefinitions, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Font")
+        {
+            self.problem_report_custom(
+                RustConstructorError::FontNotFound {
+                    font_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::FontNotFound {
                 font_name: name.to_string(),
-            },
-            SeverityLevel::SevereWarning,
-            self.problem_list.clone(),
-        );
-        Err(RustConstructorError::FontNotFound {
-            font_name: name.to_string(),
-        })
+            });
+        };
+        let f = self.get_resource::<Font>(name, "Font").unwrap();
+        Ok(f.font_definitions.clone())
     }
 
     /// 将所有已添加到RC的字体资源添加到egui中。
-    pub fn register_all_fonts(&mut self, ctx: &Context) {
+    pub fn register_all_fonts(&mut self, ctx: &Context, safe_mode: Option<bool>) {
         let mut font_definitions = FontDefinitions::default();
         let mut font_resources = Vec::new();
         for i in 0..self.rust_constructor_resource.len() {
@@ -2098,7 +2643,7 @@ impl App {
         for i in &font_resources {
             let font_name = i.name.clone();
             // 获取字体数据（返回 FontDefinitions）
-            if let Ok(font_def) = self.font(&font_name) {
+            if let Ok(font_def) = self.font(&font_name, safe_mode) {
                 // 从 font_def 中提取对应字体的 Arc<FontData>
                 if let Some(font_data) = font_def.font_data.get(&font_name) {
                     font_definitions
@@ -2163,6 +2708,10 @@ impl App {
                 format!("Message box already exists: {}", message_box_name,),
                 "Please check whether the code for generating the message box has been accidentally called multiple times.".to_string(),
             ),
+            RustConstructorError::MouseDetectorNotFound { mouse_detector_name } => (
+                format!("Mouse detector not found: {}", mouse_detector_name,),
+                "Please check whether the mouse detector has been added.".to_string(),
+            ),
             RustConstructorError::SplitTimeNotFound { split_time_name } => (
                 format!("Split time not found: {}", split_time_name,),
                 "Please check whether the split time has been added.".to_string(),
@@ -2238,7 +2787,10 @@ impl App {
         };
         // 如果处于严格模式下，则直接崩溃！
         if self.strict_mode {
-            panic!("{}", problem);
+            panic!(
+                "Rust Constructor Error({:#?}): {}\n{}",
+                problem_type, problem, annotation
+            );
         };
         self.problem_list.push(Problem {
             severity_level,
@@ -2289,6 +2841,10 @@ impl App {
                 format!("Message box already exists: {}", message_box_name,),
                 "Please check whether the code for generating the message box has been accidentally called multiple times.".to_string(),
             ),
+            RustConstructorError::MouseDetectorNotFound { mouse_detector_name } => (
+                format!("Mouse detector not found: {}", mouse_detector_name,),
+                "Please check whether the mouse detector has been added.".to_string(),
+            ),
             RustConstructorError::SplitTimeNotFound { split_time_name } => (
                 format!("Split time not found: {}", split_time_name,),
                 "Please check whether the split time has been added.".to_string(),
@@ -2364,7 +2920,10 @@ impl App {
         };
         // 如果处于严格模式下，则直接崩溃！
         if self.strict_mode {
-            panic!("{}", problem);
+            panic!(
+                "Rust Constructor Error({:#?}): {}\n{}",
+                problem_type, problem, annotation
+            );
         };
         problem_storage.push(Problem {
             severity_level,
@@ -2380,17 +2939,14 @@ impl App {
     }
 
     /// 检查页面是否已完成首次加载。
-    pub fn check_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if self.check_resource_exists(name, "PageData") {
-            let pd = self
-                .get_resource::<PageData>(name, "PageData")
-                .unwrap()
-                .clone();
-            if !pd.change_page_updated {
-                self.new_page_update(name).unwrap();
-            };
-            Ok(pd.change_page_updated)
-        } else {
+    pub fn check_updated(
+        &mut self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<bool, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "PageData")
+        {
             self.problem_report_custom(
                 RustConstructorError::PageNotFound {
                     page_name: name.to_string(),
@@ -2398,20 +2954,29 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::PageNotFound {
+            return Err(RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let pd = self
+            .get_resource::<PageData>(name, "PageData")
+            .unwrap()
+            .clone();
+        if !pd.change_page_updated {
+            self.new_page_update(name, safe_mode).unwrap();
+        };
+        Ok(pd.change_page_updated)
     }
 
     /// 检查页面是否已完成加载。
-    pub fn check_enter_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        if self.check_resource_exists(name, "PageData") {
-            let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
-            let return_value = pd.enter_page_updated;
-            pd.enter_page_updated = true;
-            Ok(return_value)
-        } else {
+    pub fn check_enter_updated(
+        &mut self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<bool, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "PageData")
+        {
             self.problem_report_custom(
                 RustConstructorError::PageNotFound {
                     page_name: name.to_string(),
@@ -2419,21 +2984,25 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::PageNotFound {
+            return Err(RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
+        let return_value = pd.enter_page_updated;
+        pd.enter_page_updated = true;
+        Ok(return_value)
     }
 
     /// 进入新页面时的更新。
-    pub fn new_page_update(&mut self, name: &str) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "PageData") {
-            self.timer.start_time = self.timer.total_time;
-            self.update_timer();
-            let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
-            pd.change_page_updated = true;
-            Ok(())
-        } else {
+    pub fn new_page_update(
+        &mut self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<(), RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "PageData")
+        {
             self.problem_report_custom(
                 RustConstructorError::PageNotFound {
                     page_name: name.to_string(),
@@ -2441,10 +3010,15 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::PageNotFound {
+            return Err(RustConstructorError::PageNotFound {
                 page_name: name.to_string(),
-            })
+            });
         }
+        self.timer.start_time = self.timer.total_time;
+        self.update_timer();
+        let pd = self.get_resource_mut::<PageData>(name, "PageData").unwrap();
+        pd.change_page_updated = true;
+        Ok(())
     }
 
     /// 更新帧数。
@@ -2478,15 +3052,14 @@ impl App {
     }
 
     /// 重置分段时间。
-    pub fn reset_split_time(&mut self, name: &str) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "SplitTime") {
-            let new_time = [self.timer.now_time, self.timer.total_time];
-            let st = self
-                .get_resource_mut::<SplitTime>(name, "SplitTime")
-                .unwrap();
-            st.time = new_time;
-            Ok(())
-        } else {
+    pub fn reset_split_time(
+        &mut self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<(), RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "SplitTime")
+        {
             self.problem_report_custom(
                 RustConstructorError::SplitTimeNotFound {
                     split_time_name: name.to_string(),
@@ -2494,18 +3067,27 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::SplitTimeNotFound {
+            return Err(RustConstructorError::SplitTimeNotFound {
                 split_time_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let new_time = [self.timer.now_time, self.timer.total_time];
+        let st = self
+            .get_resource_mut::<SplitTime>(name, "SplitTime")
+            .unwrap();
+        st.time = new_time;
+        Ok(())
     }
 
     /// 输出分段时间。
-    pub fn split_time(&self, name: &str) -> Result<[f32; 2], RustConstructorError> {
-        if self.check_resource_exists(name, "SplitTime") {
-            let st = self.get_resource::<SplitTime>(name, "SplitTime").unwrap();
-            Ok(st.time)
-        } else {
+    pub fn split_time(
+        &self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<[f32; 2], RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "SplitTime")
+        {
             self.problem_report_custom(
                 RustConstructorError::SplitTimeNotFound {
                     split_time_name: name.to_string(),
@@ -2513,10 +3095,12 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::SplitTimeNotFound {
+            return Err(RustConstructorError::SplitTimeNotFound {
                 split_time_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let st = self.get_resource::<SplitTime>(name, "SplitTime").unwrap();
+        Ok(st.time)
     }
 
     /// 更新计时器。
@@ -2539,59 +3123,11 @@ impl App {
         name: &str,
         ui: &mut Ui,
         ctx: &Context,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "CustomRect") {
-            let render_resource_list = &mut self.render_resource_list.clone();
-            let cr = self
-                .get_resource_mut::<CustomRect>(name, "CustomRect")
-                .unwrap();
-            cr.reg_render_resource(render_resource_list);
-            cr.position[0] = match cr.x_grid[1] {
-                0 => cr.origin_position[0],
-                _ => {
-                    (ctx.available_rect().width() as f64 / cr.x_grid[1] as f64
-                        * cr.x_grid[0] as f64) as f32
-                        + cr.origin_position[0]
-                }
-            };
-            cr.position[1] = match cr.y_grid[1] {
-                0 => cr.origin_position[1],
-                _ => {
-                    (ctx.available_rect().height() as f64 / cr.y_grid[1] as f64
-                        * cr.y_grid[0] as f64) as f32
-                        + cr.origin_position[1]
-                }
-            };
-            match cr.center_display.0 {
-                HorizontalAlign::Left => {}
-                HorizontalAlign::Center => cr.position[0] -= cr.size[0] / 2.0,
-                HorizontalAlign::Right => cr.position[0] -= cr.size[0],
-            };
-            match cr.center_display.1 {
-                VerticalAlign::Top => {}
-                VerticalAlign::Center => cr.position[1] -= cr.size[1] / 2.0,
-                VerticalAlign::Bottom => cr.position[1] -= cr.size[1],
-            };
-            ui.painter().rect(
-                Rect::from_min_max(
-                    Pos2::new(cr.position[0], cr.position[1]),
-                    Pos2::new(cr.position[0] + cr.size[0], cr.position[1] + cr.size[1]),
-                ),
-                cr.rounding,
-                Color32::from_rgba_unmultiplied(cr.color[0], cr.color[1], cr.color[2], cr.color[3]),
-                Stroke {
-                    width: cr.border_width,
-                    color: Color32::from_rgba_unmultiplied(
-                        cr.border_color[0],
-                        cr.border_color[1],
-                        cr.border_color[2],
-                        cr.border_color[3],
-                    ),
-                },
-                StrokeKind::Inside,
-            );
-            Ok(())
-        } else {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "CustomRect")
+        {
             self.problem_report_custom(
                 RustConstructorError::RectNotFound {
                     rect_name: name.to_string(),
@@ -2599,10 +3135,62 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::RectNotFound {
+            return Err(RustConstructorError::RectNotFound {
                 rect_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let render_resource_list = &mut self.render_resource_list.clone();
+        let cr = self
+            .get_resource_mut::<CustomRect>(name, "CustomRect")
+            .unwrap();
+        cr.reg_render_resource(render_resource_list);
+        cr.position[0] = match cr.x_grid[1] {
+            0 => cr.origin_position[0],
+            _ => {
+                (ctx.available_rect().width() as f64 / cr.x_grid[1] as f64 * cr.x_grid[0] as f64)
+                    as f32
+                    + cr.origin_position[0]
+            }
+        };
+        cr.position[1] = match cr.y_grid[1] {
+            0 => cr.origin_position[1],
+            _ => {
+                (ctx.available_rect().height() as f64 / cr.y_grid[1] as f64 * cr.y_grid[0] as f64)
+                    as f32
+                    + cr.origin_position[1]
+            }
+        };
+        match cr.center_display.0 {
+            HorizontalAlign::Left => {}
+            HorizontalAlign::Center => cr.position[0] -= cr.size[0] / 2.0,
+            HorizontalAlign::Right => cr.position[0] -= cr.size[0],
+        };
+        match cr.center_display.1 {
+            VerticalAlign::Top => {}
+            VerticalAlign::Center => cr.position[1] -= cr.size[1] / 2.0,
+            VerticalAlign::Bottom => cr.position[1] -= cr.size[1],
+        };
+        cr.position[0] += cr.offset[0];
+        cr.position[1] += cr.offset[1];
+        ui.painter().rect(
+            Rect::from_min_max(
+                Pos2::new(cr.position[0], cr.position[1]),
+                Pos2::new(cr.position[0] + cr.size[0], cr.position[1] + cr.size[1]),
+            ),
+            cr.rounding,
+            Color32::from_rgba_unmultiplied(cr.color[0], cr.color[1], cr.color[2], cr.color[3]),
+            Stroke {
+                width: cr.border_width,
+                color: Color32::from_rgba_unmultiplied(
+                    cr.border_color[0],
+                    cr.border_color[1],
+                    cr.border_color[2],
+                    cr.border_color[3],
+                ),
+            },
+            StrokeKind::Inside,
+        );
+        Ok(())
     }
 
     /// 添加文本资源。
@@ -2616,480 +3204,333 @@ impl App {
         name: &str,
         ui: &mut Ui,
         ctx: &Context,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "Text") {
-            let mut t = self.get_resource::<Text>(name, "Text").unwrap().clone();
-            t.reg_render_resource(&mut self.render_resource_list);
-            // 计算文本大小
-            let galley: Arc<Galley> = ui.fonts_mut(|f| {
-                f.layout(
-                    t.content.to_string(),
-                    if self.check_resource_exists(&t.font.clone(), "Font") {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Text")
+        {
+            self.problem_report_custom(
+                RustConstructorError::TextNotFound {
+                    text_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::TextNotFound {
+                text_name: name.to_string(),
+            });
+        };
+        let mut t = self.get_resource::<Text>(name, "Text").unwrap().clone();
+        t.reg_render_resource(&mut self.render_resource_list);
+        // 计算文本大小
+        let galley: Arc<Galley> = ui.fonts_mut(|f| {
+            f.layout(
+                t.content.to_string(),
+                if !t.font.is_empty() {
+                    if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                        && !self.check_resource_exists(&t.font.clone(), "Font")
+                    {
+                        self.problem_report_custom(
+                            RustConstructorError::FontNotFound {
+                                font_name: t.font.clone(),
+                            },
+                            SeverityLevel::MildWarning,
+                            self.problem_list.clone(),
+                        );
                         FontId::new(t.font_size, FontFamily::Name(t.font.clone().into()))
                     } else {
-                        if !t.font.is_empty() {
-                            self.problem_report_custom(
-                                RustConstructorError::FontNotFound {
-                                    font_name: t.font.clone(),
-                                },
-                                SeverityLevel::MildWarning,
-                                self.problem_list.clone(),
-                            );
-                        };
                         FontId::proportional(t.font_size)
-                    },
-                    Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]),
-                    t.wrap_width,
-                )
-            });
-            let text_size = galley.size();
-            t.position[0] = match t.x_grid[1] {
-                0 => t.origin_position[0],
-                _ => {
-                    (ctx.available_rect().width() as f64 / t.x_grid[1] as f64 * t.x_grid[0] as f64)
-                        as f32
-                        + t.origin_position[0]
-                }
-            };
-            t.position[1] = match t.y_grid[1] {
-                0 => t.origin_position[1],
-                _ => {
-                    (ctx.available_rect().height() as f64 / t.y_grid[1] as f64 * t.y_grid[0] as f64)
-                        as f32
-                        + t.origin_position[1]
-                }
-            };
-            let pos_x = match t.center_display.0 {
-                HorizontalAlign::Left => t.position[0],
-                HorizontalAlign::Center => t.position[0] - text_size.x / 2.0,
-                HorizontalAlign::Right => t.position[0] - text_size.x,
-            };
-            let pos_y = match t.center_display.1 {
-                VerticalAlign::Top => t.position[1],
-                VerticalAlign::Center => t.position[1] - text_size.y / 2.0,
-                VerticalAlign::Bottom => t.position[1] - text_size.y,
-            };
-            // 使用绝对定位放置文本
-            let position = Pos2::new(pos_x, pos_y);
+                    }
+                } else {
+                    FontId::proportional(t.font_size)
+                },
+                Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]),
+                t.wrap_width,
+            )
+        });
+        t.size = [galley.size().x, galley.size().y];
+        t.position[0] = match t.x_grid[1] {
+            0 => t.origin_position[0],
+            _ => {
+                (ctx.available_rect().width() as f64 / t.x_grid[1] as f64 * t.x_grid[0] as f64)
+                    as f32
+                    + t.origin_position[0]
+            }
+        };
+        t.position[1] = match t.y_grid[1] {
+            0 => t.origin_position[1],
+            _ => {
+                (ctx.available_rect().height() as f64 / t.y_grid[1] as f64 * t.y_grid[0] as f64)
+                    as f32
+                    + t.origin_position[1]
+            }
+        };
+        let pos_x = match t.center_display.0 {
+            HorizontalAlign::Left => t.position[0],
+            HorizontalAlign::Center => t.position[0] - t.size[0] / 2.0,
+            HorizontalAlign::Right => t.position[0] - t.size[0],
+        };
+        let pos_y = match t.center_display.1 {
+            VerticalAlign::Top => t.position[1],
+            VerticalAlign::Center => t.position[1] - t.size[1] / 2.0,
+            VerticalAlign::Bottom => t.position[1] - t.size[1],
+        };
+        t.position[0] += t.offset[0];
+        t.position[1] += t.offset[1];
+        // 使用绝对定位放置文本
+        let position = Pos2::new(pos_x, pos_y);
 
-            let rect = Rect::from_min_size(position, text_size);
-            // 绘制背景颜色
-            ui.painter().rect_filled(
-                rect,
-                t.background_rounding,
-                Color32::from_rgba_unmultiplied(
-                    t.background_color[0],
-                    t.background_color[1],
-                    t.background_color[2],
-                    t.background_color[3],
-                ),
-            ); // 背景色
-            // 绘制文本
-            ui.painter().galley(
-                position,
-                galley.clone(),
-                Color32::from_rgba_unmultiplied(
-                    t.color[0], t.color[1], t.color[2], t.color[3], // 应用透明度
-                ),
-            );
+        let rect = Rect::from_min_size(position, t.size.into());
+        // 绘制背景颜色
+        ui.painter().rect_filled(
+            rect,
+            t.background_rounding,
+            Color32::from_rgba_unmultiplied(
+                t.background_color[0],
+                t.background_color[1],
+                t.background_color[2],
+                t.background_color[3],
+            ),
+        ); // 背景色
+        // 绘制文本
+        ui.painter().galley(
+            position,
+            galley.clone(),
+            Color32::from_rgba_unmultiplied(
+                t.color[0], t.color[1], t.color[2], t.color[3], // 应用透明度
+            ),
+        );
 
-            // 查找超链接索引值
-            if t.last_frame_content != t.content {
-                t.hyperlink_index.clear();
-                for (text, method) in &t.hyperlink_text {
-                    let matches: Vec<(usize, &str)> = t.content.match_indices(text).collect();
-                    if let HyperlinkSelectMethod::All(url) = method {
-                        for (index, _) in matches {
-                            t.hyperlink_index
-                                .push((index, index + text.len(), url.clone()));
-                        }
-                    } else if let HyperlinkSelectMethod::Segment(list) = method {
-                        for (index, url) in list {
-                            if *index >= matches.len() {
-                                continue;
-                            };
+        // 查找超链接索引值
+        if t.last_frame_content != t.content {
+            t.hyperlink_index.clear();
+
+            // 创建字节索引到字符索引的映射
+            let byte_to_char_map: std::collections::HashMap<usize, usize> = t
+                .content
+                .char_indices()
+                .enumerate()
+                .map(|(char_idx, (byte_idx, _))| (byte_idx, char_idx))
+                .collect();
+
+            for (text, method) in &t.hyperlink_text {
+                let matches: Vec<(usize, &str)> = t.content.match_indices(text).collect();
+                let text_char_count = text.chars().count();
+
+                if let HyperlinkSelectMethod::All(url) = method {
+                    for (byte_index, _) in matches {
+                        if let Some(&start_char_index) = byte_to_char_map.get(&byte_index) {
                             t.hyperlink_index.push((
-                                matches[*index].0,
-                                matches[*index].0 + text.len(),
+                                start_char_index,
+                                start_char_index + text_char_count,
                                 url.clone(),
                             ));
-                        }
-                    };
-                }
-            };
-
-            // 绘制超链接
-            for (start, end, _) in &t.hyperlink_index {
-                // 获取超链接文本的范围
-                let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
-                let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
-
-                let start_pos = start_cursor.left_top();
-                let end_pos = end_cursor.right_top();
-                // 绘制超链接下划线
-                // 检查超链接是否跨行
-                if start_cursor.min.y == end_cursor.min.y {
-                    // 单行超链接
-                    let underline_y = position.y
-                        + start_pos.y
-                        + galley.rows.first().map_or(14.0, |row| row.height())
-                        - 2.0;
-
-                    // 绘制下划线
-                    let color = Color32::from_rgba_unmultiplied(
-                        t.color[0], t.color[1], t.color[2], t.color[3],
-                    );
-
-                    ui.painter().line_segment(
-                        [
-                            Pos2::new(position.x + start_pos.x, underline_y),
-                            Pos2::new(position.x + end_pos.x, underline_y),
-                        ],
-                        Stroke::new(t.font_size / 10_f32, color),
-                    );
-                } else {
-                    // 多行超链接
-                    let row_height = galley.rows.first().map_or(14.0, |row| row.height()); // 默认行高14.0
-
-                    // 计算起始行和结束行的索引
-                    let start_row = (start_pos.y / row_height).round() as usize;
-                    let end_row = (end_pos.y / row_height).round() as usize;
-
-                    for row in start_row..=end_row {
-                        let row_y = position.y + row as f32 * row_height + row_height - 2.0; // 行底部稍微上移一点绘制下划线
-
-                        // 获取当前行的矩形范围
-                        if let Some(current_row) = galley.rows.get(row) {
-                            let row_rect = current_row.rect();
-
-                            let color = Color32::from_rgba_unmultiplied(
-                                t.color[0], t.color[1], t.color[2], t.color[3],
-                            );
-
-                            if row == start_row {
-                                // 第一行从文本开始位置到行尾
-                                ui.painter().line_segment(
-                                    [
-                                        Pos2::new(position.x + start_pos.x, row_y),
-                                        Pos2::new(position.x + row_rect.max.x, row_y),
-                                    ],
-                                    Stroke::new(t.font_size / 10_f32, color),
-                                );
-                            } else if row == end_row {
-                                // 最后一行从行首到文本结束位置
-                                ui.painter().line_segment(
-                                    [
-                                        Pos2::new(position.x + row_rect.min.x, row_y),
-                                        Pos2::new(position.x + end_pos.x, row_y),
-                                    ],
-                                    Stroke::new(t.font_size / 10_f32, color),
-                                );
-                            } else {
-                                // 中间整行下划线
-                                ui.painter().line_segment(
-                                    [
-                                        Pos2::new(position.x + row_rect.min.x, row_y),
-                                        Pos2::new(position.x + row_rect.max.x, row_y),
-                                    ],
-                                    Stroke::new(t.font_size / 10_f32, color),
-                                );
-                            };
+                        };
+                    }
+                } else if let HyperlinkSelectMethod::Segment(list) = method {
+                    for (index, url) in list {
+                        if *index >= matches.len() {
+                            continue;
+                        };
+                        let (byte_index, _) = matches[*index];
+                        if let Some(&start_char_index) = byte_to_char_map.get(&byte_index) {
+                            t.hyperlink_index.push((
+                                start_char_index,
+                                start_char_index + text_char_count,
+                                url.clone(),
+                            ));
                         };
                     }
                 };
             }
+        };
 
-            if t.selectable {
-                let rect = Rect::from_min_size(
-                    [position[0] - 20_f32, position[1] - 5_f32].into(),
-                    [text_size[0] + 40_f32, text_size[1] + 10_f32].into(),
+        // 绘制超链接
+        for (start, end, _) in &t.hyperlink_index {
+            // 获取超链接文本的范围
+            let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
+            let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
+
+            let start_pos = start_cursor.left_top();
+            let end_pos = end_cursor.right_top();
+            // 绘制超链接下划线
+            // 检查超链接是否跨行
+            if start_cursor.min.y == end_cursor.min.y {
+                // 单行超链接
+                let underline_y =
+                    position.y + start_pos.y + galley.rows.first().map_or(14.0, |row| row.height())
+                        - 2.0;
+
+                // 绘制下划线
+                let color =
+                    Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]);
+
+                ui.painter().line_segment(
+                    [
+                        Pos2::new(position.x + start_pos.x, underline_y),
+                        Pos2::new(position.x + end_pos.x, underline_y),
+                    ],
+                    Stroke::new(t.font_size / 10_f32, color),
                 );
+            } else {
+                // 多行超链接
+                let row_height = galley.rows.first().map_or(14.0, |row| row.height()); // 默认行高14.0
 
-                let rect2 = Rect::from_min_size(
-                    [0_f32, 0_f32].into(),
-                    [ctx.available_rect().width(), ctx.available_rect().height()].into(),
-                );
+                // 计算起始行和结束行的索引
+                let start_row = (start_pos.y / row_height).round() as usize;
+                let end_row = (end_pos.y / row_height).round() as usize;
 
-                // 创建可交互的区域
-                let response = ui.interact(
-                    rect,
-                    Id::new(format!("text_{}_click_and_drag", t.name)),
-                    Sense::click_and_drag(),
-                );
+                for row in start_row..=end_row {
+                    let row_y = position.y + row as f32 * row_height + row_height - 2.0; // 行底部稍微上移一点绘制下划线
 
-                let response2 = ui.interact(
-                    rect2,
-                    Id::new(format!("text_{}_total", t.name)),
-                    Sense::click(),
-                );
+                    // 获取当前行的矩形范围
+                    if let Some(current_row) = galley.rows.get(row) {
+                        let row_rect = current_row.rect();
 
-                // 处理选择逻辑
-                let cursor_at_pointer = |pointer_pos: Vec2| -> usize {
-                    let relative_pos = pointer_pos - position.to_vec2();
-                    let cursor = galley.cursor_from_pos(relative_pos);
-                    cursor.index
-                };
+                        let color = Color32::from_rgba_unmultiplied(
+                            t.color[0], t.color[1], t.color[2], t.color[3],
+                        );
 
-                if !response.clicked() && response2.clicked() {
-                    t.selection = None;
-                };
-
-                if response.clicked() || response.drag_started() {
-                    if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
-                        let cursor = cursor_at_pointer(pointer_pos.to_vec2());
-                        t.selection = Some((cursor, cursor));
-                    };
-                    response.request_focus();
-                };
-
-                if response.dragged()
-                    && t.selection.is_some()
-                    && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
-                {
-                    let cursor = cursor_at_pointer(pointer_pos.to_vec2());
-                    if let Some((start, _)) = t.selection {
-                        t.selection = Some((start, cursor));
-                    };
-                };
-
-                // 处理复制操作
-                if response.has_focus() {
-                    // 处理复制操作 - 使用按键释放事件
-                    let copy_triggered = ui.input(|input| {
-                        let c_released = input.key_released(Key::C);
-                        let cmd_pressed = input.modifiers.command || input.modifiers.mac_cmd;
-                        let ctrl_pressed = input.modifiers.ctrl;
-                        c_released && (cmd_pressed || ctrl_pressed)
-                    });
-                    if copy_triggered && let Some((start, end)) = t.selection {
-                        let (start, end) = (start.min(end), start.max(end));
-                        let chars: Vec<char> = t.content.chars().collect();
-                        if start <= chars.len() && end <= chars.len() && start < end {
-                            let selected_text: String = chars[start..end].iter().collect();
-                            ui.ctx().copy_text(selected_text);
-                        };
-                    };
-                };
-
-                // 绘制选择区域背景
-                if let Some((start, end)) = t.selection {
-                    let (start, end) = (start.min(end), start.max(end));
-                    if start != end {
-                        // 获取选择区域的范围
-                        let start_cursor = galley.pos_from_cursor(CCursor::new(start));
-                        let end_cursor = galley.pos_from_cursor(CCursor::new(end));
-
-                        let start_pos = start_cursor.left_top();
-                        let end_pos = end_cursor.right_top();
-                        // 选择框绘制
-                        if start_pos.y == end_pos.y {
-                            // 单行选择
-                            // 修复：使用实际行的高度而不是整个文本的高度除以行数
-                            let rows = &galley.rows;
-                            let row_height = if !rows.is_empty() {
-                                // 获取实际行的高度
-                                if let Some(row) = rows.first() {
-                                    row.height()
-                                } else {
-                                    text_size.y / t.content.lines().count() as f32
-                                }
-                            } else {
-                                text_size.y / t.content.lines().count() as f32
-                            };
-
-                            let selection_rect = Rect::from_min_max(
-                                Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
-                                Pos2::new(
-                                    position.x + end_pos.x,
-                                    position.y + start_pos.y + row_height,
-                                ),
+                        if row == start_row {
+                            // 第一行从文本开始位置到行尾
+                            ui.painter().line_segment(
+                                [
+                                    Pos2::new(position.x + start_pos.x, row_y),
+                                    Pos2::new(position.x + row_rect.max.x, row_y),
+                                ],
+                                Stroke::new(t.font_size / 10_f32, color),
                             );
-                            ui.painter().rect_filled(
-                                selection_rect,
-                                0.0,
-                                Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                        } else if row == end_row {
+                            // 最后一行从行首到文本结束位置
+                            ui.painter().line_segment(
+                                [
+                                    Pos2::new(position.x + row_rect.min.x, row_y),
+                                    Pos2::new(position.x + end_pos.x, row_y),
+                                ],
+                                Stroke::new(t.font_size / 10_f32, color),
                             );
                         } else {
-                            // 多行选择 - 为每行创建精确的矩形
-                            let rows = &galley.rows;
-                            let row_height = if !rows.is_empty() {
-                                rows[0].height()
-                            } else {
-                                text_size.y / t.content.lines().count() as f32
-                            };
-
-                            // 计算选择的上下边界
-                            let selection_top = position.y + start_pos.y.min(end_pos.y);
-                            let selection_bottom = position.y + start_pos.y.max(end_pos.y);
-
-                            // 确定起始行和结束行的索引
-                            let start_row_index = (start_pos.y / row_height).floor() as usize;
-                            let end_row_index = (end_pos.y / row_height).floor() as usize;
-                            let (first_row_index, last_row_index) =
-                                if start_row_index <= end_row_index {
-                                    (start_row_index, end_row_index)
-                                } else {
-                                    (end_row_index, start_row_index)
-                                };
-
-                            for (i, row) in rows.iter().enumerate() {
-                                let row_y = position.y + row_height * i as f32;
-                                let row_bottom = row_y + row_height;
-                                // 检查当前行是否与选择区域相交
-                                if row_bottom > selection_top && row_y <= selection_bottom {
-                                    let left = if i == first_row_index {
-                                        // 首行 - 从选择开始位置开始
-                                        position.x + start_pos.x
-                                    } else {
-                                        // 非首行 - 从行首开始
-                                        position.x + row.rect().min.x
-                                    };
-
-                                    let right = if i == last_row_index {
-                                        // 尾行 - 到选择结束位置结束
-                                        position.x + end_pos.x
-                                    } else {
-                                        // 非尾行 - 到行尾结束
-                                        position.x + row.rect().max.x
-                                    };
-
-                                    let selection_rect = Rect::from_min_max(
-                                        Pos2::new(left, row_y),
-                                        Pos2::new(right, row_bottom),
-                                    );
-
-                                    // 确保矩形有效
-                                    if selection_rect.width() > 0.0 && selection_rect.height() > 0.0
-                                    {
-                                        ui.painter().rect_filled(
-                                            selection_rect,
-                                            0.0,
-                                            Color32::from_rgba_unmultiplied(0, 120, 255, 100),
-                                        );
-                                    };
-                                };
-                            }
+                            // 中间整行下划线
+                            ui.painter().line_segment(
+                                [
+                                    Pos2::new(position.x + row_rect.min.x, row_y),
+                                    Pos2::new(position.x + row_rect.max.x, row_y),
+                                ],
+                                Stroke::new(t.font_size / 10_f32, color),
+                            );
                         };
                     };
+                }
+            };
+        }
+
+        if t.selectable {
+            if !self.check_resource_exists(&t.name, "MouseDetector") {
+                self.add_mouse_detector(
+                    MouseDetector::default()
+                        .name(&t.name)
+                        .from_position_config(PositionConfig::from_text(t.clone()))
+                        .offset(-20_f32, -5_f32)
+                        .size(t.size[0] + 40_f32, t.size[1] + 10_f32),
+                );
+            } else {
+                self.replace_resource(
+                    &t.name,
+                    "MouseDetector",
+                    MouseDetector::default()
+                        .name(&t.name)
+                        .from_position_config(PositionConfig::from_text(t.clone()))
+                        .offset(-20_f32, -5_f32)
+                        .size(t.size[0] + 40_f32, t.size[1] + 10_f32),
+                )
+                .unwrap();
+            };
+
+            // 处理选择逻辑
+            let cursor_at_pointer = |pointer_pos: Vec2| -> usize {
+                let relative_pos = pointer_pos - position.to_vec2();
+                let cursor = galley.cursor_from_pos(relative_pos);
+                cursor.index
+            };
+
+            self.mouse_detector(&t.name, ui, ctx, MouseDetectorLevel::Default, safe_mode)
+                .unwrap();
+            let fullscreen_detect_result = ui.input(|i| i.pointer.clone());
+            let detect_result = self.check_mouse_detect_result(&t.name, safe_mode).unwrap();
+            if !detect_result.clicked
+                && (fullscreen_detect_result.any_click() || fullscreen_detect_result.any_pressed())
+            {
+                t.selection = None;
+            };
+
+            if (detect_result.clicked || detect_result.drag_started.unwrap())
+                && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
+            {
+                let cursor = cursor_at_pointer(pointer_pos.to_vec2());
+                t.selection = Some((cursor, cursor));
+            };
+
+            if detect_result.dragged.unwrap()
+                && t.selection.is_some()
+                && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
+            {
+                let cursor = cursor_at_pointer(pointer_pos.to_vec2());
+                if let Some((start, _)) = t.selection {
+                    t.selection = Some((start, cursor));
                 };
             };
 
-            // 处理超链接操作
-            for (start, end, url) in &t.hyperlink_index {
-                // 获取超链接文本的范围
-                let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
-                let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
+            if t.selection.is_some()
+                && ui.input(|input| input.key_released(Key::A) && input.modifiers.command)
+            {
+                t.selection = Some((0, t.content.chars().count()));
+            };
 
-                let start_pos = start_cursor.left_top();
-                let end_pos = end_cursor.right_top();
+            // 处理复制操作
+            let copy_triggered = ui.input(|input| {
+                let c_released = input.key_released(Key::C);
+                let cmd_pressed = input.modifiers.command;
+                c_released && cmd_pressed
+            });
+            if copy_triggered && let Some((start, end)) = t.selection {
+                let (start, end) = (start.min(end), start.max(end));
+                let chars: Vec<char> = t.content.chars().collect();
+                if start <= chars.len() && end <= chars.len() && start < end {
+                    let selected_text: String = chars[start..end].iter().collect();
+                    ui.ctx().copy_text(selected_text);
+                };
+            };
 
-                let row_height = galley.rows.first().map_or(14.0, |row| row.height());
+            // 绘制选择区域背景
+            if let Some((start, end)) = t.selection {
+                let (start, end) = (start.min(end), start.max(end));
+                if start != end {
+                    // 获取选择区域的范围
+                    let start_cursor = galley.pos_from_cursor(CCursor::new(start));
+                    let end_cursor = galley.pos_from_cursor(CCursor::new(end));
 
-                // 为超链接创建交互响应对象
-                let link_responses = if start_cursor.min.y == end_cursor.min.y {
-                    // 单行超链接
-                    let link_rect = Rect::from_min_max(
-                        Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
-                        Pos2::new(
-                            position.x + end_pos.x,
-                            position.y + start_pos.y + row_height,
-                        ),
-                    );
-                    vec![ui.interact(
-                        link_rect,
-                        egui::Id::new(format!("link_{}_{}_{}", t.name, start, end)),
-                        egui::Sense::click(),
-                    )]
-                } else {
-                    // 多行超链接
-                    let start_row = (start_pos.y / row_height).round() as usize;
-                    let end_row = (end_pos.y / row_height).round() as usize;
-                    let mut responses = Vec::new();
-
-                    for row in start_row..=end_row {
-                        if let Some(current_row) = galley.rows.get(row) {
-                            let row_rect = current_row.rect();
-                            let row_y = position.y + row as f32 * row_height;
-
-                            let link_rect = if row == start_row {
-                                // 第一行从文本开始位置到行尾
-                                Rect::from_min_max(
-                                    Pos2::new(position.x + start_pos.x, row_y),
-                                    Pos2::new(position.x + row_rect.max.x, row_y + row_height),
-                                )
-                            } else if row == end_row {
-                                // 最后一行从行首到文本结束位置
-                                Rect::from_min_max(
-                                    Pos2::new(position.x + row_rect.min.x, row_y),
-                                    Pos2::new(position.x + end_pos.x, row_y + row_height),
-                                )
+                    let start_pos = start_cursor.left_top();
+                    let end_pos = end_cursor.right_top();
+                    // 选择框绘制
+                    if start_pos.y == end_pos.y {
+                        // 单行选择
+                        let rows = &galley.rows;
+                        let row_height = if !rows.is_empty() {
+                            // 获取实际行的高度
+                            if let Some(row) = rows.first() {
+                                row.height()
                             } else {
-                                // 中间整行
-                                Rect::from_min_max(
-                                    Pos2::new(position.x + row_rect.min.x, row_y),
-                                    Pos2::new(position.x + row_rect.max.x, row_y + row_height),
-                                )
-                            };
-
-                            responses.push(ui.interact(
-                                link_rect,
-                                Id::new(format!("link_{}_{}_{}_row_{}", t.name, start, end, row)),
-                                Sense::click(),
-                            ));
+                                t.size[1] / t.content.lines().count() as f32
+                            }
+                        } else {
+                            t.size[1] / t.content.lines().count() as f32
                         };
-                    }
-                    responses
-                };
 
-                // 检查是否正在点击这个超链接
-                let mut is_pressing_link = false;
-                for link_response in &link_responses {
-                    if link_response.is_pointer_button_down_on() && !link_response.drag_started() {
-                        t.selection = None;
-                        if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
-                            let relative_pos = pointer_pos - position.to_vec2();
-                            let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
-                            if cursor.index >= *start && cursor.index <= *end {
-                                is_pressing_link = true;
-                                break;
-                            };
-                        };
-                    };
-                }
-
-                // 检查是否释放了鼠标（点击完成）
-                let mut clicked_on_link = false;
-                for link_response in &link_responses {
-                    if link_response.clicked()
-                        && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
-                    {
-                        let relative_pos = pointer_pos - position.to_vec2();
-                        let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
-                        if cursor.index >= *start && cursor.index <= *end {
-                            clicked_on_link = true;
-                            break;
-                        };
-                    };
-                }
-
-                if clicked_on_link {
-                    // 执行超链接跳转
-                    if !url.is_empty() {
-                        ui.ctx().open_url(OpenUrl::new_tab(url));
-                    };
-                };
-
-                // 绘制超链接高亮（如果正在点击或悬停）
-                if is_pressing_link {
-                    if start_cursor.min.y == end_cursor.min.y {
-                        // 单行超链接高亮
                         let selection_rect = Rect::from_min_max(
                             Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
                             Pos2::new(
                                 position.x + end_pos.x,
-                                position.y
-                                    + start_pos.y
-                                    + galley.rows.first().map_or(14.0, |row| row.height()),
+                                position.y + start_pos.y + row_height,
                             ),
                         );
                         ui.painter().rect_filled(
@@ -3098,61 +3539,56 @@ impl App {
                             Color32::from_rgba_unmultiplied(0, 120, 255, 100),
                         );
                     } else {
-                        // 多行超链接高亮
-                        let row_height = galley.rows.first().map_or(14.0, |row| row.height());
-                        let start_row = (start_pos.y / row_height).round() as usize;
-                        let end_row = (end_pos.y / row_height).round() as usize;
+                        // 多行选择 - 为每行创建精确的矩形
+                        let rows = &galley.rows;
+                        let row_height = if !rows.is_empty() {
+                            rows[0].height()
+                        } else {
+                            t.size[1] / t.content.lines().count() as f32
+                        };
 
-                        for row in start_row..=end_row {
-                            if let Some(current_row) = galley.rows.get(row) {
-                                let row_rect = current_row.rect();
+                        // 计算选择的上下边界
+                        let selection_top = position.y + start_pos.y.min(end_pos.y);
+                        let selection_bottom = position.y + start_pos.y.max(end_pos.y);
 
-                                if row == start_row {
-                                    // 第一行从文本开始位置到行尾
-                                    let selection_rect = Rect::from_min_max(
-                                        Pos2::new(
-                                            position.x + start_pos.x,
-                                            position.y + row as f32 * row_height,
-                                        ),
-                                        Pos2::new(
-                                            position.x + row_rect.max.x,
-                                            position.y + row as f32 * row_height + row_height,
-                                        ),
-                                    );
-                                    ui.painter().rect_filled(
-                                        selection_rect,
-                                        0.0,
-                                        Color32::from_rgba_unmultiplied(0, 120, 255, 100),
-                                    );
-                                } else if row == end_row {
-                                    // 最后一行从行首到文本结束位置
-                                    let selection_rect = Rect::from_min_max(
-                                        Pos2::new(
-                                            position.x + row_rect.min.x,
-                                            position.y + row as f32 * row_height,
-                                        ),
-                                        Pos2::new(
-                                            position.x + end_pos.x,
-                                            position.y + row as f32 * row_height + row_height,
-                                        ),
-                                    );
-                                    ui.painter().rect_filled(
-                                        selection_rect,
-                                        0.0,
-                                        Color32::from_rgba_unmultiplied(0, 120, 255, 100),
-                                    );
+                        // 确定起始行和结束行的索引
+                        let start_row_index = (start_pos.y / row_height).floor() as usize;
+                        let end_row_index = (end_pos.y / row_height).floor() as usize;
+                        let (first_row_index, last_row_index) = if start_row_index <= end_row_index
+                        {
+                            (start_row_index, end_row_index)
+                        } else {
+                            (end_row_index, start_row_index)
+                        };
+
+                        for (i, row) in rows.iter().enumerate() {
+                            let row_y = position.y + row_height * i as f32;
+                            let row_bottom = row_y + row_height;
+                            // 检查当前行是否与选择区域相交
+                            if row_bottom > selection_top && row_y <= selection_bottom {
+                                let left = if i == first_row_index {
+                                    // 首行 - 从选择开始位置开始
+                                    position.x + start_pos.x
                                 } else {
-                                    // 中间整行高亮
-                                    let selection_rect = Rect::from_min_max(
-                                        Pos2::new(
-                                            position.x + row_rect.min.x,
-                                            position.y + row as f32 * row_height,
-                                        ),
-                                        Pos2::new(
-                                            position.x + row_rect.max.x,
-                                            position.y + row as f32 * row_height + row_height,
-                                        ),
-                                    );
+                                    // 非首行 - 从行首开始
+                                    position.x + row.rect().min.x
+                                };
+
+                                let right = if i == last_row_index {
+                                    // 尾行 - 到选择结束位置结束
+                                    position.x + end_pos.x
+                                } else {
+                                    // 非尾行 - 到行尾结束
+                                    position.x + row.rect().max.x
+                                };
+
+                                let selection_rect = Rect::from_min_max(
+                                    Pos2::new(left, row_y),
+                                    Pos2::new(right, row_bottom),
+                                );
+
+                                // 确保矩形有效
+                                if selection_rect.width() > 0.0 && selection_rect.height() > 0.0 {
                                     ui.painter().rect_filled(
                                         selection_rect,
                                         0.0,
@@ -3163,49 +3599,202 @@ impl App {
                         }
                     };
                 };
-            }
-            t.last_frame_content = t.content.clone();
-            self.replace_resource(name, "Text", t).unwrap();
-            Ok(())
-        } else {
-            self.problem_report_custom(
-                RustConstructorError::TextNotFound {
-                    text_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            Err(RustConstructorError::TextNotFound {
-                text_name: name.to_string(),
-            })
-        }
-    }
+            };
+        };
 
-    /// 获取文本大小。
-    pub fn get_text_size(&self, name: &str, ui: &mut Ui) -> Result<[f32; 2], RustConstructorError> {
-        if self.check_resource_exists(name, "Text") {
-            let t = self.get_resource::<Text>(name, "Text").unwrap();
-            let galley = ui.fonts_mut(|f| {
-                f.layout(
-                    t.content.to_string(),
-                    FontId::proportional(t.font_size),
-                    Color32::from_rgba_unmultiplied(t.color[0], t.color[1], t.color[2], t.color[3]),
-                    t.wrap_width,
-                )
-            });
-            Ok([galley.size().x, galley.size().y])
-        } else {
-            self.problem_report_custom(
-                RustConstructorError::TextNotFound {
-                    text_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            Err(RustConstructorError::TextNotFound {
-                text_name: name.to_string(),
-            })
+        // 处理超链接操作
+        for (start, end, url) in &t.hyperlink_index {
+            // 获取超链接文本的范围
+            let start_cursor = galley.pos_from_cursor(CCursor::new(*start));
+            let end_cursor = galley.pos_from_cursor(CCursor::new(*end));
+
+            let start_pos = start_cursor.left_top();
+            let end_pos = end_cursor.right_top();
+
+            let row_height = galley.rows.first().map_or(14.0, |row| row.height());
+
+            // 为超链接创建交互响应对象
+            let link_responses = if start_cursor.min.y == end_cursor.min.y {
+                // 单行超链接
+                let link_rect = Rect::from_min_max(
+                    Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                    Pos2::new(
+                        position.x + end_pos.x,
+                        position.y + start_pos.y + row_height,
+                    ),
+                );
+                vec![ui.interact(
+                    link_rect,
+                    egui::Id::new(format!("link_{}_{}_{}", t.name, start, end)),
+                    egui::Sense::click(),
+                )]
+            } else {
+                // 多行超链接
+                let start_row = (start_pos.y / row_height).round() as usize;
+                let end_row = (end_pos.y / row_height).round() as usize;
+                let mut responses = Vec::new();
+
+                for row in start_row..=end_row {
+                    if let Some(current_row) = galley.rows.get(row) {
+                        let row_rect = current_row.rect();
+                        let row_y = position.y + row as f32 * row_height;
+
+                        let link_rect = if row == start_row {
+                            // 第一行从文本开始位置到行尾
+                            Rect::from_min_max(
+                                Pos2::new(position.x + start_pos.x, row_y),
+                                Pos2::new(position.x + row_rect.max.x, row_y + row_height),
+                            )
+                        } else if row == end_row {
+                            // 最后一行从行首到文本结束位置
+                            Rect::from_min_max(
+                                Pos2::new(position.x + row_rect.min.x, row_y),
+                                Pos2::new(position.x + end_pos.x, row_y + row_height),
+                            )
+                        } else {
+                            // 中间整行
+                            Rect::from_min_max(
+                                Pos2::new(position.x + row_rect.min.x, row_y),
+                                Pos2::new(position.x + row_rect.max.x, row_y + row_height),
+                            )
+                        };
+
+                        responses.push(ui.interact(
+                            link_rect,
+                            Id::new(format!("link_{}_{}_{}_row_{}", t.name, start, end, row)),
+                            Sense::click(),
+                        ));
+                    };
+                }
+                responses
+            };
+
+            // 检查是否正在点击这个超链接
+            let mut is_pressing_link = false;
+            for link_response in &link_responses {
+                if link_response.is_pointer_button_down_on() && !link_response.drag_started() {
+                    t.selection = None;
+                    if let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos()) {
+                        let relative_pos = pointer_pos - position.to_vec2();
+                        let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                        if cursor.index >= *start && cursor.index <= *end {
+                            is_pressing_link = true;
+                            break;
+                        };
+                    };
+                };
+            }
+
+            // 检查是否释放了鼠标（点击完成）
+            let mut clicked_on_link = false;
+            for link_response in &link_responses {
+                if link_response.clicked()
+                    && let Some(pointer_pos) = ui.input(|i| i.pointer.interact_pos())
+                {
+                    let relative_pos = pointer_pos - position.to_vec2();
+                    let cursor = galley.cursor_from_pos(relative_pos.to_vec2());
+                    if cursor.index >= *start && cursor.index <= *end {
+                        clicked_on_link = true;
+                        break;
+                    };
+                };
+            }
+
+            if clicked_on_link {
+                // 执行超链接跳转
+                if !url.is_empty() {
+                    ui.ctx().open_url(OpenUrl::new_tab(url));
+                };
+            };
+
+            // 绘制超链接高亮（如果正在点击或悬停）
+            if is_pressing_link {
+                if start_cursor.min.y == end_cursor.min.y {
+                    // 单行超链接高亮
+                    let selection_rect = Rect::from_min_max(
+                        Pos2::new(position.x + start_pos.x, position.y + start_pos.y),
+                        Pos2::new(
+                            position.x + end_pos.x,
+                            position.y
+                                + start_pos.y
+                                + galley.rows.first().map_or(14.0, |row| row.height()),
+                        ),
+                    );
+                    ui.painter().rect_filled(
+                        selection_rect,
+                        0.0,
+                        Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                    );
+                } else {
+                    // 多行超链接高亮
+                    let row_height = galley.rows.first().map_or(14.0, |row| row.height());
+                    let start_row = (start_pos.y / row_height).round() as usize;
+                    let end_row = (end_pos.y / row_height).round() as usize;
+
+                    for row in start_row..=end_row {
+                        if let Some(current_row) = galley.rows.get(row) {
+                            let row_rect = current_row.rect();
+
+                            if row == start_row {
+                                // 第一行从文本开始位置到行尾
+                                let selection_rect = Rect::from_min_max(
+                                    Pos2::new(
+                                        position.x + start_pos.x,
+                                        position.y + row as f32 * row_height,
+                                    ),
+                                    Pos2::new(
+                                        position.x + row_rect.max.x,
+                                        position.y + row as f32 * row_height + row_height,
+                                    ),
+                                );
+                                ui.painter().rect_filled(
+                                    selection_rect,
+                                    0.0,
+                                    Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                );
+                            } else if row == end_row {
+                                // 最后一行从行首到文本结束位置
+                                let selection_rect = Rect::from_min_max(
+                                    Pos2::new(
+                                        position.x + row_rect.min.x,
+                                        position.y + row as f32 * row_height,
+                                    ),
+                                    Pos2::new(
+                                        position.x + end_pos.x,
+                                        position.y + row as f32 * row_height + row_height,
+                                    ),
+                                );
+                                ui.painter().rect_filled(
+                                    selection_rect,
+                                    0.0,
+                                    Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                );
+                            } else {
+                                // 中间整行高亮
+                                let selection_rect = Rect::from_min_max(
+                                    Pos2::new(
+                                        position.x + row_rect.min.x,
+                                        position.y + row as f32 * row_height,
+                                    ),
+                                    Pos2::new(
+                                        position.x + row_rect.max.x,
+                                        position.y + row as f32 * row_height + row_height,
+                                    ),
+                                );
+                                ui.painter().rect_filled(
+                                    selection_rect,
+                                    0.0,
+                                    Color32::from_rgba_unmultiplied(0, 120, 255, 100),
+                                );
+                            };
+                        };
+                    }
+                };
+            };
         }
+        t.last_frame_content = t.content.clone();
+        self.replace_resource(name, "Text", t).unwrap();
+        Ok(())
     }
 
     /// 添加变量资源。
@@ -3218,12 +3807,11 @@ impl App {
         &mut self,
         name: &str,
         value: T,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource_mut::<Variable>(name, "Variable").unwrap();
-            v.value = value.into();
-            Ok(())
-        } else {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3231,18 +3819,20 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let v = self.get_resource_mut::<Variable>(name, "Variable").unwrap();
+        v.value = value.into();
+        Ok(())
     }
 
     /// 取出Value变量。
-    pub fn var(&self, name: &str) -> Result<Value, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            Ok(v.value.clone())
-        } else {
+    pub fn var(&self, name: &str, safe_mode: Option<bool>) -> Result<Value, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3250,33 +3840,19 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        Ok(v.value.clone())
     }
 
     /// 取出i32变量。
-    pub fn var_i(&self, name: &str) -> Result<i32, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            match &v.value {
-                // 直接访问 value 字段
-                Value::Int(i) => Ok(*i),
-                _ => {
-                    self.problem_report_custom(
-                        RustConstructorError::VariableNotInt {
-                            variable_name: name.to_string(),
-                        },
-                        SeverityLevel::SevereWarning,
-                        self.problem_list.clone(),
-                    );
-                    Err(RustConstructorError::VariableNotInt {
-                        variable_name: name.to_string(),
-                    })
-                }
-            }
-        } else {
+    pub fn var_i(&self, name: &str, safe_mode: Option<bool>) -> Result<i32, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3284,33 +3860,34 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        match &v.value {
+            // 直接访问 value 字段
+            Value::Int(i) => Ok(*i),
+            _ => {
+                self.problem_report_custom(
+                    RustConstructorError::VariableNotInt {
+                        variable_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::VariableNotInt {
+                    variable_name: name.to_string(),
+                })
+            }
         }
     }
 
     /// 取出u32资源。
-    pub fn var_u(&self, name: &str) -> Result<u32, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            match &v.value {
-                // 直接访问 value 字段
-                Value::UInt(u) => Ok(*u),
-                _ => {
-                    self.problem_report_custom(
-                        RustConstructorError::VariableNotUInt {
-                            variable_name: name.to_string(),
-                        },
-                        SeverityLevel::SevereWarning,
-                        self.problem_list.clone(),
-                    );
-                    Err(RustConstructorError::VariableNotUInt {
-                        variable_name: name.to_string(),
-                    })
-                }
-            }
-        } else {
+    pub fn var_u(&self, name: &str, safe_mode: Option<bool>) -> Result<u32, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3318,33 +3895,34 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        match &v.value {
+            // 直接访问 value 字段
+            Value::UInt(u) => Ok(*u),
+            _ => {
+                self.problem_report_custom(
+                    RustConstructorError::VariableNotUInt {
+                        variable_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::VariableNotUInt {
+                    variable_name: name.to_string(),
+                })
+            }
         }
     }
 
     /// 取出f32资源。
-    pub fn var_f(&self, name: &str) -> Result<f32, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            match &v.value {
-                // 直接访问 value 字段
-                Value::Float(f) => Ok(*f),
-                _ => {
-                    self.problem_report_custom(
-                        RustConstructorError::VariableNotFloat {
-                            variable_name: name.to_string(),
-                        },
-                        SeverityLevel::SevereWarning,
-                        self.problem_list.clone(),
-                    );
-                    Err(RustConstructorError::VariableNotFloat {
-                        variable_name: name.to_string(),
-                    })
-                }
-            }
-        } else {
+    pub fn var_f(&self, name: &str, safe_mode: Option<bool>) -> Result<f32, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3352,33 +3930,34 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        match &v.value {
+            // 直接访问 value 字段
+            Value::Float(f) => Ok(*f),
+            _ => {
+                self.problem_report_custom(
+                    RustConstructorError::VariableNotFloat {
+                        variable_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::VariableNotFloat {
+                    variable_name: name.to_string(),
+                })
+            }
         }
     }
 
     /// 取出布尔值资源。
-    pub fn var_b(&self, name: &str) -> Result<bool, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            match &v.value {
-                // 直接访问 value 字段
-                Value::Bool(b) => Ok(*b),
-                _ => {
-                    self.problem_report_custom(
-                        RustConstructorError::VariableNotBool {
-                            variable_name: name.to_string(),
-                        },
-                        SeverityLevel::SevereWarning,
-                        self.problem_list.clone(),
-                    );
-                    Err(RustConstructorError::VariableNotBool {
-                        variable_name: name.to_string(),
-                    })
-                }
-            }
-        } else {
+    pub fn var_b(&self, name: &str, safe_mode: Option<bool>) -> Result<bool, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3386,33 +3965,38 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        match &v.value {
+            // 直接访问 value 字段
+            Value::Bool(b) => Ok(*b),
+            _ => {
+                self.problem_report_custom(
+                    RustConstructorError::VariableNotBool {
+                        variable_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::VariableNotBool {
+                    variable_name: name.to_string(),
+                })
+            }
         }
     }
 
     /// 取出包含Value的Vec资源。
-    pub fn var_v(&self, name: &str) -> Result<Vec<Value>, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            match &v.value {
-                // 直接访问 value 字段
-                Value::Vec(v) => Ok(v.clone()),
-                _ => {
-                    self.problem_report_custom(
-                        RustConstructorError::VariableNotVec {
-                            variable_name: name.to_string(),
-                        },
-                        SeverityLevel::SevereWarning,
-                        self.problem_list.clone(),
-                    );
-                    Err(RustConstructorError::VariableNotVec {
-                        variable_name: name.to_string(),
-                    })
-                }
-            }
-        } else {
+    pub fn var_v(
+        &self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<Vec<Value>, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3420,33 +4004,38 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        match &v.value {
+            // 直接访问 value 字段
+            Value::Vec(v) => Ok(v.clone()),
+            _ => {
+                self.problem_report_custom(
+                    RustConstructorError::VariableNotVec {
+                        variable_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::VariableNotVec {
+                    variable_name: name.to_string(),
+                })
+            }
         }
     }
 
     /// 取出字符串资源。
-    pub fn var_s(&self, name: &str) -> Result<String, RustConstructorError> {
-        if self.check_resource_exists(name, "Variable") {
-            let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-            match &v.value {
-                // 直接访问 value 字段
-                Value::String(s) => Ok(s.clone()),
-                _ => {
-                    self.problem_report_custom(
-                        RustConstructorError::VariableNotString {
-                            variable_name: name.to_string(),
-                        },
-                        SeverityLevel::SevereWarning,
-                        self.problem_list.clone(),
-                    );
-                    Err(RustConstructorError::VariableNotString {
-                        variable_name: name.to_string(),
-                    })
-                }
-            }
-        } else {
+    pub fn var_s(
+        &self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<String, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Variable")
+        {
             self.problem_report_custom(
                 RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
@@ -3454,9 +4043,26 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::VariableNotFound {
+            return Err(RustConstructorError::VariableNotFound {
                 variable_name: name.to_string(),
-            })
+            });
+        };
+        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
+        match &v.value {
+            // 直接访问 value 字段
+            Value::String(s) => Ok(s.clone()),
+            _ => {
+                self.problem_report_custom(
+                    RustConstructorError::VariableNotString {
+                        variable_name: name.to_string(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                Err(RustConstructorError::VariableNotString {
+                    variable_name: name.to_string(),
+                })
+            }
         }
     }
 
@@ -3639,13 +4245,11 @@ impl App {
     pub fn image_texture(
         &self,
         name: &str,
+        safe_mode: Option<bool>,
     ) -> Result<Option<DebugTextureHandle>, RustConstructorError> {
-        if self.check_resource_exists(name, "ImageTexture") {
-            let it = self
-                .get_resource::<ImageTexture>(name, "ImageTexture")
-                .unwrap();
-            Ok(it.texture.clone())
-        } else {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "ImageTexture")
+        {
             self.problem_report_custom(
                 RustConstructorError::ImageNotFound {
                     image_name: name.to_string(),
@@ -3653,10 +4257,14 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::ImageNotFound {
+            return Err(RustConstructorError::ImageNotFound {
                 image_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let it = self
+            .get_resource::<ImageTexture>(name, "ImageTexture")
+            .unwrap();
+        Ok(it.texture.clone())
     }
 
     /// 重置图片纹理。
@@ -3666,42 +4274,11 @@ impl App {
         path: &str,
         flip: [bool; 2],
         ctx: &Context,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "ImageTexture") {
-            let it = self
-                .get_resource_mut::<ImageTexture>(name, "ImageTexture")
-                .unwrap();
-            if let Ok(mut file) = File::open(path) {
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let img_bytes = buffer;
-                let img = image::load_from_memory(&img_bytes).unwrap();
-                let color_data = match flip {
-                    [true, true] => img.fliph().flipv().into_rgba8(),
-                    [true, false] => img.fliph().into_rgba8(),
-                    [false, true] => img.flipv().into_rgba8(),
-                    _ => img.into_rgba8(),
-                };
-                let (w, h) = (color_data.width(), color_data.height());
-                let raw_data: Vec<u8> = color_data.into_raw();
-
-                let color_image =
-                    ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
-                let image_texture =
-                    ctx.load_texture(it.name.clone(), color_image, TextureOptions::LINEAR);
-                it.texture = Some(DebugTextureHandle::new(image_texture));
-                it.cite_path = path.to_string();
-            } else {
-                self.problem_report_custom(
-                    RustConstructorError::ImageGetFailed {
-                        image_path: path.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-            };
-            Ok(())
-        } else {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "ImageTexture")
+        {
             self.problem_report_custom(
                 RustConstructorError::ImageTextureNotFound {
                     image_texture_name: name.to_string(),
@@ -3709,10 +4286,43 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::ImageTextureNotFound {
+            return Err(RustConstructorError::ImageTextureNotFound {
                 image_texture_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let it = self
+            .get_resource_mut::<ImageTexture>(name, "ImageTexture")
+            .unwrap();
+        if let Ok(mut file) = File::open(path) {
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let img_bytes = buffer;
+            let img = image::load_from_memory(&img_bytes).unwrap();
+            let color_data = match flip {
+                [true, true] => img.fliph().flipv().into_rgba8(),
+                [true, false] => img.fliph().into_rgba8(),
+                [false, true] => img.flipv().into_rgba8(),
+                _ => img.into_rgba8(),
+            };
+            let (w, h) = (color_data.width(), color_data.height());
+            let raw_data: Vec<u8> = color_data.into_raw();
+
+            let color_image =
+                ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw_data);
+            let image_texture =
+                ctx.load_texture(it.name.clone(), color_image, TextureOptions::LINEAR);
+            it.texture = Some(DebugTextureHandle::new(image_texture));
+            it.cite_path = path.to_string();
+        } else {
+            self.problem_report_custom(
+                RustConstructorError::ImageGetFailed {
+                    image_path: path.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+        };
+        Ok(())
     }
 
     /// 添加图片资源。
@@ -3720,17 +4330,11 @@ impl App {
         &mut self,
         mut image: Image,
         image_texture_name: &str,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(image_texture_name, "ImageTexture") {
-            let it = self
-                .get_resource::<ImageTexture>(image_texture_name, "ImageTexture")
-                .unwrap();
-            image.texture = it.texture.clone();
-            image.cite_texture = it.name.clone();
-            image.last_frame_cite_texture = it.name.clone();
-            self.rust_constructor_resource.push(Box::new(image));
-            Ok(())
-        } else {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(image_texture_name, "ImageTexture")
+        {
             self.problem_report_custom(
                 RustConstructorError::ImageTextureNotFound {
                     image_texture_name: image_texture_name.to_string(),
@@ -3738,10 +4342,18 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::ImageTextureNotFound {
+            return Err(RustConstructorError::ImageTextureNotFound {
                 image_texture_name: image_texture_name.to_string(),
-            })
-        }
+            });
+        };
+        let it = self
+            .get_resource::<ImageTexture>(image_texture_name, "ImageTexture")
+            .unwrap();
+        image.texture = it.texture.clone();
+        image.cite_texture = it.name.clone();
+        image.last_frame_cite_texture = it.name.clone();
+        self.rust_constructor_resource.push(Box::new(image));
+        Ok(())
     }
 
     /// 显示图片资源。
@@ -3750,90 +4362,11 @@ impl App {
         name: &str,
         ui: &mut Ui,
         ctx: &Context,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(name, "Image") {
-            let mut im = self
-                .get_resource_mut::<Image>(name, "Image")
-                .unwrap()
-                .clone();
-            if im.cite_texture != im.last_frame_cite_texture {
-                if self.check_resource_exists(&im.cite_texture, "ImageTexture") {
-                    let it = self
-                        .get_resource::<ImageTexture>(&im.cite_texture, "ImageTexture")
-                        .unwrap();
-                    im.texture = it.texture.clone();
-                } else {
-                    self.problem_report_custom(
-                        RustConstructorError::ImageTextureNotFound {
-                            image_texture_name: im.cite_texture.clone(),
-                        },
-                        SeverityLevel::MildWarning,
-                        self.problem_list.clone(),
-                    );
-                };
-            };
-            im.reg_render_resource(&mut self.render_resource_list);
-            im.position[0] = match im.x_grid[1] {
-                0 => im.origin_position[0],
-                _ => {
-                    (ctx.available_rect().width() as f64 / im.x_grid[1] as f64
-                        * im.x_grid[0] as f64) as f32
-                        + im.origin_position[0]
-                }
-            };
-            im.position[1] = match im.y_grid[1] {
-                0 => im.origin_position[1],
-                _ => {
-                    (ctx.available_rect().height() as f64 / im.y_grid[1] as f64
-                        * im.y_grid[0] as f64) as f32
-                        + im.origin_position[1]
-                }
-            };
-            match im.center_display.0 {
-                HorizontalAlign::Left => {}
-                HorizontalAlign::Center => im.position[0] -= im.size[0] / 2.0,
-                HorizontalAlign::Right => im.position[0] -= im.size[0],
-            };
-            match im.center_display.1 {
-                VerticalAlign::Top => {}
-                VerticalAlign::Center => im.position[1] -= im.size[1] / 2.0,
-                VerticalAlign::Bottom => im.position[1] -= im.size[1],
-            };
-            if let Some(texture) = &im.texture {
-                let rect = Rect::from_min_size(
-                    Pos2::new(im.position[0], im.position[1]),
-                    Vec2::new(im.size[0], im.size[1]),
-                );
-
-                // 直接绘制图片
-                egui::Image::new(ImageSource::Texture((&texture.0).into()))
-                    .tint(Color32::from_rgba_unmultiplied(
-                        im.overlay_color[0],
-                        im.overlay_color[1],
-                        im.overlay_color[2],
-                        // 将图片透明度与覆盖颜色透明度相乘
-                        (im.alpha as f32 * im.overlay_color[3] as f32 / 255.0) as u8,
-                    ))
-                    .bg_fill(Color32::from_rgba_unmultiplied(
-                        im.background_color[0],
-                        im.background_color[1],
-                        im.background_color[2],
-                        im.background_color[3],
-                    ))
-                    .rotate(
-                        im.rotate_angle,
-                        [
-                            im.rotate_center[0] / im.size[0],
-                            im.rotate_center[1] / im.size[1],
-                        ]
-                        .into(),
-                    )
-                    .paint_at(ui, rect)
-            };
-            im.last_frame_cite_texture = im.cite_texture.clone();
-            self.replace_resource(name, "Image", im).unwrap();
-            Ok(())
-        } else {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Image")
+        {
             self.problem_report_custom(
                 RustConstructorError::ImageNotFound {
                     image_name: name.to_string(),
@@ -3841,13 +4374,99 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::ImageNotFound {
+            return Err(RustConstructorError::ImageNotFound {
                 image_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let mut im = self
+            .get_resource_mut::<Image>(name, "Image")
+            .unwrap()
+            .clone();
+        if im.cite_texture != im.last_frame_cite_texture {
+            if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                && !self.check_resource_exists(&im.cite_texture, "ImageTexture")
+            {
+                self.problem_report_custom(
+                    RustConstructorError::ImageTextureNotFound {
+                        image_texture_name: im.cite_texture.clone(),
+                    },
+                    SeverityLevel::MildWarning,
+                    self.problem_list.clone(),
+                );
+            } else {
+                let it = self
+                    .get_resource::<ImageTexture>(&im.cite_texture, "ImageTexture")
+                    .unwrap();
+                im.texture = it.texture.clone();
+            };
+        };
+        im.reg_render_resource(&mut self.render_resource_list);
+        im.position[0] = match im.x_grid[1] {
+            0 => im.origin_position[0],
+            _ => {
+                (ctx.available_rect().width() as f64 / im.x_grid[1] as f64 * im.x_grid[0] as f64)
+                    as f32
+                    + im.origin_position[0]
+            }
+        };
+        im.position[1] = match im.y_grid[1] {
+            0 => im.origin_position[1],
+            _ => {
+                (ctx.available_rect().height() as f64 / im.y_grid[1] as f64 * im.y_grid[0] as f64)
+                    as f32
+                    + im.origin_position[1]
+            }
+        };
+        match im.center_display.0 {
+            HorizontalAlign::Left => {}
+            HorizontalAlign::Center => im.position[0] -= im.size[0] / 2.0,
+            HorizontalAlign::Right => im.position[0] -= im.size[0],
+        };
+        match im.center_display.1 {
+            VerticalAlign::Top => {}
+            VerticalAlign::Center => im.position[1] -= im.size[1] / 2.0,
+            VerticalAlign::Bottom => im.position[1] -= im.size[1],
+        };
+        im.position[0] += im.offset[0];
+        im.position[1] += im.offset[1];
+        if let Some(texture) = &im.texture {
+            let rect = Rect::from_min_size(
+                Pos2::new(im.position[0], im.position[1]),
+                Vec2::new(im.size[0], im.size[1]),
+            );
+
+            // 直接绘制图片
+            egui::Image::new(ImageSource::Texture((&texture.0).into()))
+                .tint(Color32::from_rgba_unmultiplied(
+                    im.overlay_color[0],
+                    im.overlay_color[1],
+                    im.overlay_color[2],
+                    // 将图片透明度与覆盖颜色透明度相乘
+                    (im.alpha as f32 * im.overlay_color[3] as f32 / 255.0) as u8,
+                ))
+                .bg_fill(Color32::from_rgba_unmultiplied(
+                    im.background_color[0],
+                    im.background_color[1],
+                    im.background_color[2],
+                    im.background_color[3],
+                ))
+                .rotate(
+                    im.rotate_angle,
+                    [
+                        im.rotate_center[0] / im.size[0],
+                        im.rotate_center[1] / im.size[1],
+                    ]
+                    .into(),
+                )
+                .paint_at(ui, rect)
+        };
+        im.last_frame_cite_texture = im.cite_texture.clone();
+        self.replace_resource(name, "Image", im).unwrap();
+        Ok(())
     }
 
     /// 添加消息框资源。
+    #[allow(clippy::too_many_arguments)]
     pub fn add_message_box(
         &mut self,
         mut message_box: MessageBox,
@@ -3856,97 +4475,115 @@ impl App {
         image_name: &str,
         close_switch_fill_resource_name: &str,
         close_switch_fill_resource_type: &str,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
-        if !self.check_resource_exists(&message_box.name, "MessageBox") {
-            message_box.exist = true;
-            message_box.memory_offset = 0_f32;
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && self.check_resource_exists(&message_box.name, "MessageBox")
+        {
+            self.problem_report_custom(
+                RustConstructorError::MessageBoxAlreadyExists {
+                    message_box_name: message_box.name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::MessageBoxAlreadyExists {
+                message_box_name: message_box.name.to_string(),
+            });
+        };
+        message_box.exist = true;
+        message_box.memory_offset = 0_f32;
 
-            if self.check_resource_exists(image_name, "Image") {
-                let im = self.get_resource_mut::<Image>(image_name, "Image").unwrap();
-                im.size = [message_box.size[1] - 15_f32, message_box.size[1] - 15_f32];
-                im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
-                im.x_grid = [1, 1];
-                im.y_grid = [0, 1];
-                im.name = format!("MessageBox{}", im.name);
-                message_box.image_name = im.name.to_string();
-            } else {
-                self.problem_report_custom(
-                    RustConstructorError::ImageNotFound {
-                        image_name: image_name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                return Err(RustConstructorError::ImageNotFound {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(image_name, "Image")
+        {
+            self.problem_report_custom(
+                RustConstructorError::ImageNotFound {
                     image_name: image_name.to_string(),
-                });
-            }
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::ImageNotFound {
+                image_name: image_name.to_string(),
+            });
+        };
+        let im = self.get_resource_mut::<Image>(image_name, "Image").unwrap();
+        im.size = [message_box.size[1] - 15_f32, message_box.size[1] - 15_f32];
+        im.center_display = (HorizontalAlign::Left, VerticalAlign::Center);
+        im.x_grid = [1, 1];
+        im.y_grid = [0, 1];
+        im.name = format!("MessageBox{}", im.name);
+        message_box.image_name = im.name.to_string();
 
-            if self.check_resource_exists(title_name, "Text") {
-                let t = self.get_resource_mut::<Text>(title_name, "Text").unwrap();
-                t.x_grid = [1, 1];
-                t.y_grid = [0, 1];
-                t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
-                t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
-                t.name = format!("MessageBox{}", t.name);
-                message_box.title_name = t.name.to_string();
-            } else {
-                self.problem_report_custom(
-                    RustConstructorError::TextNotFound {
-                        text_name: title_name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                return Err(RustConstructorError::TextNotFound {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(title_name, "Text")
+        {
+            self.problem_report_custom(
+                RustConstructorError::TextNotFound {
                     text_name: title_name.to_string(),
-                });
-            }
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::TextNotFound {
+                text_name: title_name.to_string(),
+            });
+        };
+        let t = self.get_resource_mut::<Text>(title_name, "Text").unwrap();
+        t.x_grid = [1, 1];
+        t.y_grid = [0, 1];
+        t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
+        t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
+        t.name = format!("MessageBox{}", t.name);
+        message_box.title_name = t.name.to_string();
 
-            if self.check_resource_exists(content_name, "Text") {
-                let t = self.get_resource_mut::<Text>(content_name, "Text").unwrap();
-                t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
-                t.x_grid = [1, 1];
-                t.y_grid = [0, 1];
-                t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
-                t.name = format!("MessageBox{}", t.name);
-                message_box.content_name = t.name.to_string();
-            } else {
-                self.problem_report_custom(
-                    RustConstructorError::TextNotFound {
-                        text_name: content_name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                return Err(RustConstructorError::TextNotFound {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(content_name, "Text")
+        {
+            self.problem_report_custom(
+                RustConstructorError::TextNotFound {
                     text_name: content_name.to_string(),
-                });
-            }
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::TextNotFound {
+                text_name: content_name.to_string(),
+            });
+        };
+        let t = self.get_resource_mut::<Text>(content_name, "Text").unwrap();
+        t.center_display = (HorizontalAlign::Left, VerticalAlign::Top);
+        t.x_grid = [1, 1];
+        t.y_grid = [0, 1];
+        t.wrap_width = message_box.size[0] - message_box.size[1] + 5_f32;
+        t.name = format!("MessageBox{}", t.name);
+        message_box.content_name = t.name.to_string();
 
-            if !message_box.keep_existing {
-                self.add_split_time(
-                    SplitTime::default().name(&format!("MessageBox{}", message_box.name)),
-                );
-            };
-
+        if !message_box.keep_existing {
             self.add_split_time(
-                SplitTime::default().name(&format!("MessageBox{}Animation", message_box.name)),
+                SplitTime::default().name(&format!("MessageBox{}", message_box.name)),
             );
+        };
 
-            self.add_custom_rect(
-                CustomRect::default()
-                    .name(&format!("MessageBox{}", message_box.name))
-                    .origin_position(0_f32, 0_f32)
-                    .size(message_box.size[0], message_box.size[1])
-                    .rounding(20_f32)
-                    .x_grid(1, 1)
-                    .y_grid(0, 1)
-                    .center_display(HorizontalAlign::Left, VerticalAlign::Top)
-                    .color(100, 100, 100, 125)
-                    .border_width(0_f32),
-            );
+        self.add_split_time(
+            SplitTime::default().name(&format!("MessageBox{}Animation", message_box.name)),
+        );
 
+        self.add_custom_rect(
+            CustomRect::default()
+                .name(&format!("MessageBox{}", message_box.name))
+                .origin_position(0_f32, 0_f32)
+                .size(message_box.size[0], message_box.size[1])
+                .rounding(20_f32)
+                .x_grid(1, 1)
+                .y_grid(0, 1)
+                .center_display(HorizontalAlign::Left, VerticalAlign::Top)
+                .color(100, 100, 100, 125)
+                .border_width(0_f32),
+        );
+
+        if safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode {
             match close_switch_fill_resource_type {
                 "Image" | "CustomRect" => {}
                 &_ => {
@@ -3966,155 +4603,159 @@ impl App {
                     });
                 }
             };
+        };
 
-            if !self.check_resource_exists(
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(
                 close_switch_fill_resource_name,
                 close_switch_fill_resource_type,
-            ) {
-                self.problem_report_custom(
-                    RustConstructorError::ResourceNotFound {
-                        resource_name: close_switch_fill_resource_name.to_string(),
-                        resource_type: close_switch_fill_resource_type.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                return Err(RustConstructorError::ResourceNotFound {
+            )
+        {
+            self.problem_report_custom(
+                RustConstructorError::ResourceNotFound {
                     resource_name: close_switch_fill_resource_name.to_string(),
                     resource_type: close_switch_fill_resource_type.to_string(),
-                });
-            };
-
-            let (texture, image_config, custom_rect_config, color, border_color) =
-                match close_switch_fill_resource_type {
-                    "Image" => {
-                        let im = self
-                            .get_resource_mut::<Image>(close_switch_fill_resource_name, "Image")
-                            .unwrap();
-                        im.name = format!("MessageBox{}Close", close_switch_fill_resource_name);
-                        (
-                            im.cite_texture.clone(),
-                            ImageConfig::from_image(im.clone())
-                                .size(30_f32, 30_f32)
-                                .center_display(HorizontalAlign::Center, VerticalAlign::Center),
-                            CustomRectConfig::default(),
-                            im.overlay_color,
-                            [0, 0, 0, 0],
-                        )
-                    }
-                    "CustomRect" => {
-                        let cr = self
-                            .get_resource_mut::<CustomRect>(
-                                close_switch_fill_resource_name,
-                                "CustomRect",
-                            )
-                            .unwrap();
-                        cr.name = format!("MessageBox{}Close", close_switch_fill_resource_name);
-                        (
-                            String::new(),
-                            ImageConfig::default(),
-                            CustomRectConfig::from_custom_rect(cr.clone())
-                                .size(30_f32, 30_f32)
-                                .center_display(HorizontalAlign::Center, VerticalAlign::Center),
-                            cr.color,
-                            cr.border_color,
-                        )
-                    }
-                    &_ => {
-                        unreachable!()
-                    }
-                };
-
-            self.add_switch(
-                Switch::default()
-                    .name(&format!("MessageBox{}Close", message_box.name))
-                    .appearance(vec![
-                        SwitchData {
-                            image_config: image_config
-                                .clone()
-                                .overlay_color(color[0], color[1], color[2], 0),
-                            custom_rect_config: custom_rect_config
-                                .clone()
-                                .color(color[0], color[1], color[2], 0)
-                                .border_color(border_color[0], border_color[1], border_color[2], 0),
-                            text_config: TextConfig::default(),
-                            texture: texture.clone(),
-                            hint_text: String::new(),
-                        },
-                        SwitchData {
-                            image_config: image_config.clone().overlay_color(
-                                (color[0] as u32 * 180 / 255) as u8,
-                                (color[1] as u32 * 180 / 255) as u8,
-                                (color[2] as u32 * 180 / 255) as u8,
-                                255,
-                            ),
-                            custom_rect_config: custom_rect_config
-                                .clone()
-                                .color(
-                                    (color[0] as u32 * 180 / 255) as u8,
-                                    (color[1] as u32 * 180 / 255) as u8,
-                                    (color[2] as u32 * 180 / 255) as u8,
-                                    255,
-                                )
-                                .border_color(
-                                    (border_color[0] as u32 * 180 / 255) as u8,
-                                    (border_color[1] as u32 * 180 / 255) as u8,
-                                    (border_color[2] as u32 * 180 / 255) as u8,
-                                    255,
-                                ),
-                            text_config: TextConfig::default(),
-                            texture: texture.clone(),
-                            hint_text: String::new(),
-                        },
-                        SwitchData {
-                            image_config: image_config.clone().overlay_color(0, 0, 0, 0),
-                            custom_rect_config: custom_rect_config
-                                .clone()
-                                .color(0, 0, 0, 0)
-                                .border_color(0, 0, 0, 0),
-                            text_config: TextConfig::default(),
-                            texture: texture.clone(),
-                            hint_text: String::new(),
-                        },
-                        SwitchData {
-                            image_config: image_config.overlay_color(0, 0, 0, 0),
-                            custom_rect_config: custom_rect_config
-                                .color(0, 0, 0, 0)
-                                .border_color(0, 0, 0, 0),
-                            text_config: TextConfig::default(),
-                            texture,
-                            hint_text: String::new(),
-                        },
-                    ])
-                    .enable_hover_click_fill_resource(false, true)
-                    .click_method(vec![SwitchClickAction {
-                        click_method: PointerButton::Primary,
-                        action: true,
-                    }]),
-                &format!("MessageBox{}Close", close_switch_fill_resource_name),
-                close_switch_fill_resource_type,
-                "",
-            )
-            .unwrap();
-            self.rust_constructor_resource
-                .push(Box::new(message_box.clone()));
-            Ok(())
-        } else {
-            self.problem_report_custom(
-                RustConstructorError::MessageBoxAlreadyExists {
-                    message_box_name: message_box.name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::MessageBoxAlreadyExists {
-                message_box_name: message_box.name.to_string(),
-            })
-        }
+            return Err(RustConstructorError::ResourceNotFound {
+                resource_name: close_switch_fill_resource_name.to_string(),
+                resource_type: close_switch_fill_resource_type.to_string(),
+            });
+        };
+
+        let (texture, image_config, custom_rect_config, color, border_color) =
+            match close_switch_fill_resource_type {
+                "Image" => {
+                    let im = self
+                        .get_resource_mut::<Image>(close_switch_fill_resource_name, "Image")
+                        .unwrap();
+                    im.name = format!("MessageBox{}Close", close_switch_fill_resource_name);
+                    (
+                        im.cite_texture.clone(),
+                        ImageConfig::from_image(im.clone())
+                            .size(30_f32, 30_f32)
+                            .center_display(HorizontalAlign::Center, VerticalAlign::Center),
+                        CustomRectConfig::default(),
+                        im.overlay_color,
+                        [0, 0, 0, 0],
+                    )
+                }
+                "CustomRect" => {
+                    let cr = self
+                        .get_resource_mut::<CustomRect>(
+                            close_switch_fill_resource_name,
+                            "CustomRect",
+                        )
+                        .unwrap();
+                    cr.name = format!("MessageBox{}Close", close_switch_fill_resource_name);
+                    (
+                        String::new(),
+                        ImageConfig::default(),
+                        CustomRectConfig::from_custom_rect(cr.clone())
+                            .size(30_f32, 30_f32)
+                            .center_display(HorizontalAlign::Center, VerticalAlign::Center),
+                        cr.color,
+                        cr.border_color,
+                    )
+                }
+                &_ => {
+                    self.problem_report_custom(
+                        RustConstructorError::SwitchFillResourceMismatch {
+                            switch_name: format!("MessageBox{}Close", message_box.name),
+                            fill_resource_name: close_switch_fill_resource_name.to_string(),
+                            fill_resource_type: close_switch_fill_resource_type.to_string(),
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    return Err(RustConstructorError::SwitchFillResourceMismatch {
+                        switch_name: format!("MessageBox{}Close", message_box.name),
+                        fill_resource_name: close_switch_fill_resource_name.to_string(),
+                        fill_resource_type: close_switch_fill_resource_type.to_string(),
+                    });
+                }
+            };
+
+        self.add_switch(
+            Switch::default()
+                .name(&format!("MessageBox{}Close", message_box.name))
+                .appearance(vec![
+                    SwitchAppearance {
+                        image_config: image_config
+                            .clone()
+                            .overlay_color(color[0], color[1], color[2], 0),
+                        custom_rect_config: custom_rect_config
+                            .clone()
+                            .color(color[0], color[1], color[2], 0)
+                            .border_color(border_color[0], border_color[1], border_color[2], 0),
+                        text_config: TextConfig::default(),
+                        texture: texture.clone(),
+                        hint_text: String::new(),
+                    },
+                    SwitchAppearance {
+                        image_config: image_config.clone().overlay_color(
+                            (color[0] as u32 * 180 / 255) as u8,
+                            (color[1] as u32 * 180 / 255) as u8,
+                            (color[2] as u32 * 180 / 255) as u8,
+                            255,
+                        ),
+                        custom_rect_config: custom_rect_config
+                            .clone()
+                            .color(
+                                (color[0] as u32 * 180 / 255) as u8,
+                                (color[1] as u32 * 180 / 255) as u8,
+                                (color[2] as u32 * 180 / 255) as u8,
+                                255,
+                            )
+                            .border_color(
+                                (border_color[0] as u32 * 180 / 255) as u8,
+                                (border_color[1] as u32 * 180 / 255) as u8,
+                                (border_color[2] as u32 * 180 / 255) as u8,
+                                255,
+                            ),
+                        text_config: TextConfig::default(),
+                        texture: texture.clone(),
+                        hint_text: String::new(),
+                    },
+                    SwitchAppearance {
+                        image_config: image_config.clone().overlay_color(0, 0, 0, 0),
+                        custom_rect_config: custom_rect_config
+                            .clone()
+                            .color(0, 0, 0, 0)
+                            .border_color(0, 0, 0, 0),
+                        text_config: TextConfig::default(),
+                        texture: texture.clone(),
+                        hint_text: String::new(),
+                    },
+                    SwitchAppearance {
+                        image_config: image_config.overlay_color(0, 0, 0, 0),
+                        custom_rect_config: custom_rect_config
+                            .color(0, 0, 0, 0)
+                            .border_color(0, 0, 0, 0),
+                        text_config: TextConfig::default(),
+                        texture,
+                        hint_text: String::new(),
+                    },
+                ])
+                .enable_hover_click_fill_resource(false, true)
+                .click_method(vec![SwitchClickAction {
+                    click_method: PointerButton::Primary,
+                    action: true,
+                }]),
+            &format!("MessageBox{}Close", close_switch_fill_resource_name),
+            close_switch_fill_resource_type,
+            "",
+        )
+        .unwrap();
+        self.rust_constructor_resource
+            .push(Box::new(message_box.clone()));
+        Ok(())
     }
 
     /// 处理所有已添加的消息框资源。
-    pub fn message_box_display(&mut self, ctx: &Context, ui: &mut Ui, safe_mode: bool) {
+    pub fn message_box_display(&mut self, ctx: &Context, ui: &mut Ui, safe_mode: Option<bool>) {
         let mut offset = 0_f32;
         let mut delete_count = 0;
         let mut index_list = Vec::new();
@@ -4135,7 +4776,7 @@ impl App {
                 .downcast_ref::<MessageBox>()
                 .unwrap()
                 .clone();
-            if safe_mode {
+            if safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode {
                 if !self.check_resource_exists(&mb.image_name, "Image") {
                     self.problem_report_custom(
                         RustConstructorError::ImageNotFound {
@@ -4198,7 +4839,9 @@ impl App {
                     );
                     continue;
                 };
-                if !self.check_resource_exists(&format!("MessageBox{}", mb.name), "SplitTime") {
+                if !mb.keep_existing
+                    && !self.check_resource_exists(&format!("MessageBox{}", mb.name), "SplitTime")
+                {
                     self.problem_report_custom(
                         RustConstructorError::SplitTimeNotFound {
                             split_time_name: format!("MessageBox{}", mb.name),
@@ -4229,7 +4872,7 @@ impl App {
                 .get_resource::<Switch>(&format!("MessageBox{}Close", mb.name), "Switch")
                 .unwrap()
                 .clone();
-            if safe_mode
+            if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
                 && !self.check_resource_exists(&s.fill_resource_name, &s.fill_resource_type)
             {
                 self.problem_report_custom(
@@ -4242,7 +4885,7 @@ impl App {
                 );
                 continue;
             };
-            let fr: Box<dyn FrontResource> = match s.fill_resource_type.as_str() {
+            let fr: Box<dyn BasicFrontResource> = match s.fill_resource_type.as_str() {
                 "Image" => Box::new(
                     self.get_resource::<Image>(&s.fill_resource_name, "Image")
                         .unwrap()
@@ -4267,14 +4910,8 @@ impl App {
                 }
             };
             mb.reg_render_resource(&mut self.render_resource_list.clone());
-            if mb.size[1]
-                < self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
-                    + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
-                    + 10_f32
-            {
-                mb.size[1] = self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1]
-                    + self.get_text_size(&mb.content_name.clone(), ui).unwrap()[1]
-                    + 10_f32;
+            if mb.size[1] < t1.size[1] + t2.size[1] + 10_f32 {
+                mb.size[1] = t1.size[1] + t2.size[1] + 10_f32;
                 cr.size[1] = mb.size[1];
                 im1.size = [mb.size[1] - 15_f32, mb.size[1] - 15_f32];
                 t1.wrap_width = mb.size[0] - mb.size[1] + 5_f32;
@@ -4282,11 +4919,11 @@ impl App {
             };
             if self.timer.total_time
                 - self
-                    .split_time(&format!("MessageBox{}Animation", mb.name))
+                    .split_time(&format!("MessageBox{}Animation", mb.name), safe_mode)
                     .unwrap()[1]
                 >= self.tick_interval
             {
-                self.reset_split_time(&format!("MessageBox{}Animation", mb.name))
+                self.reset_split_time(&format!("MessageBox{}Animation", mb.name), safe_mode)
                     .unwrap();
                 if offset != mb.memory_offset {
                     if mb.memory_offset < offset {
@@ -4309,7 +4946,7 @@ impl App {
                                 &format!("MessageBox{}", mb.name),
                                 "SplitTime",
                             ) {
-                                self.reset_split_time(&format!("MessageBox{}", mb.name))
+                                self.reset_split_time(&format!("MessageBox{}", mb.name), safe_mode)
                                     .unwrap();
                             };
                         } else {
@@ -4335,7 +4972,7 @@ impl App {
             ];
             t2.origin_position = [
                 im1.origin_position[0] + im1.size[0] + 5_f32,
-                t1.origin_position[1] + self.get_text_size(&mb.title_name.clone(), ui).unwrap()[1],
+                t1.origin_position[1] + t1.size[1],
             ];
             for sd in &mut s.appearance {
                 sd.image_config.origin_position = cr.position;
@@ -4343,7 +4980,9 @@ impl App {
             }
             if !mb.keep_existing
                 && self.timer.total_time
-                    - self.split_time(&format!("MessageBox{}", mb.name)).unwrap()[1]
+                    - self
+                        .split_time(&format!("MessageBox{}", mb.name), safe_mode)
+                        .unwrap()[1]
                     >= mb.existing_time
                 && cr.origin_position[0] == -mb.size[0] - 5_f32
             {
@@ -4404,14 +5043,24 @@ impl App {
                     .unwrap();
                 }
                 &_ => {
-                    unreachable!()
+                    self.problem_report_custom(
+                        RustConstructorError::SwitchFillResourceMismatch {
+                            switch_name: s.name,
+                            fill_resource_name: s.fill_resource_name,
+                            fill_resource_type: s.fill_resource_type,
+                        },
+                        SeverityLevel::SevereWarning,
+                        self.problem_list.clone(),
+                    );
+                    continue;
                 }
             };
-            self.custom_rect(&format!("MessageBox{}", mb.name), ui, ctx)
+            self.custom_rect(&format!("MessageBox{}", mb.name), ui, ctx, safe_mode)
                 .unwrap();
-            self.image(&mb.image_name.clone(), ui, ctx).unwrap();
-            self.text(&t1.name.clone(), ui, ctx).unwrap();
-            self.text(&t2.name.clone(), ui, ctx).unwrap();
+            self.image(&mb.image_name.clone(), ui, ctx, safe_mode)
+                .unwrap();
+            self.text(&t1.name.clone(), ui, ctx, safe_mode).unwrap();
+            self.text(&t2.name.clone(), ui, ctx, safe_mode).unwrap();
             self.switch(
                 &format!("MessageBox{}Close", mb.name),
                 ui,
@@ -4420,14 +5069,12 @@ impl App {
                 safe_mode,
             )
             .unwrap();
-            if self
-                .check_switch_click_index(&format!("MessageBox{}Close", mb.name))
-                .unwrap()
-                == 0
-                && self
-                    .check_switch_state(&format!("MessageBox{}Close", mb.name))
-                    .unwrap()
-                    == 1
+            let switch_data = self
+                .check_switch_data(&format!("MessageBox{}Close", mb.name), safe_mode)
+                .unwrap();
+            if switch_data.last_time_clicked_index == 0
+                && switch_data.state == 1
+                && switch_data.switched
             {
                 mb.exist = false;
                 if cr.origin_position[0] + mb.speed >= 15_f32 {
@@ -4511,6 +5158,18 @@ impl App {
                         .position(|x| x.expose_type() == "MessageBox" && x.name() == mb.name)
                         .unwrap(),
                 );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| x.expose_type() == "MouseDetector" && x.name() == t1.name)
+                        .unwrap(),
+                );
+                self.rust_constructor_resource.remove(
+                    self.rust_constructor_resource
+                        .iter()
+                        .position(|x| x.expose_type() == "MouseDetector" && x.name() == t2.name)
+                        .unwrap(),
+                );
             } else {
                 offset += mb.size[1] + 15_f32;
             };
@@ -4549,6 +5208,7 @@ impl App {
         for _ in 0..switch.appearance.len() % count {
             switch.appearance.pop();
         }
+        switch.text_name = "".to_string();
         if self.check_resource_exists(text_name, "Text") {
             let t = self.get_resource_mut::<Text>(text_name, "Text").unwrap();
             switch.text_name = text_name.to_string();
@@ -4620,7 +5280,7 @@ impl App {
                     .wrap_width(300_f32)
                     .background_rounding(10_f32)
                     .color(255, 255, 255, 0)
-                    .background_color([0, 0, 0, 255])
+                    .background_color(0, 0, 0, 255)
                     .center_display(HorizontalAlign::Left, VerticalAlign::Top)
                     .selectable(false),
             );
@@ -4637,17 +5297,19 @@ impl App {
         Ok(())
     }
 
-    /// 显示开关资源并返回点击方法和开关状态。
+    /// 显示开关资源。
     pub fn switch(
         &mut self,
         name: &str,
         ui: &mut Ui,
         ctx: &Context,
         enable: bool,
-        safe_mode: bool,
+        safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
         let mut appearance_count = 0;
-        if safe_mode && !self.check_resource_exists(name, "Switch") {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Switch")
+        {
             self.problem_report_custom(
                 RustConstructorError::SwitchNotFound {
                     switch_name: name.to_string(),
@@ -4660,7 +5322,8 @@ impl App {
             });
         };
         let mut s = self.get_resource::<Switch>(name, "Switch").unwrap().clone();
-        if safe_mode {
+        s.switched = false;
+        if safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode {
             if !self.check_resource_exists(&s.fill_resource_name.clone(), &s.fill_resource_type) {
                 self.problem_report_custom(
                     RustConstructorError::ResourceNotFound {
@@ -4718,14 +5381,14 @@ impl App {
                             .wrap_width(300_f32)
                             .background_rounding(10_f32)
                             .color(255, 255, 255, 0)
-                            .background_color([0, 0, 0, 255])
+                            .background_color(0, 0, 0, 255)
                             .center_display(HorizontalAlign::Left, VerticalAlign::Top)
                             .selectable(false),
                     );
                 };
             };
         };
-        let fr: Box<dyn FrontResource> = match &*s.fill_resource_type {
+        let fr: Box<dyn BasicFrontResource> = match &*s.fill_resource_type {
             "Image" => Box::new(
                 self.get_resource::<Image>(&s.fill_resource_name.clone(), &s.fill_resource_type)
                     .unwrap()
@@ -4767,43 +5430,9 @@ impl App {
                 // 判断是否在矩形内
                 if rect.contains(mouse_pos) {
                     if !s.hint_text_name.is_empty() {
-                        if self.check_resource_exists(&s.hint_text_name, "Text") {
-                            let mut t = self
-                                .get_resource::<Text>(&s.hint_text_name, "Text")
-                                .unwrap()
-                                .clone();
-                            if !s.last_time_hovered {
-                                self.reset_split_time(&format!("{}StartHoverTime", s.name))
-                                    .unwrap();
-                            } else if self.timer.total_time
-                                - self
-                                    .split_time(&format!("{}StartHoverTime", s.name))
-                                    .unwrap()[1]
-                                >= 2_f32
-                                || t.color[3] != 0
-                            {
-                                t.color[3] = 255;
-                                t.origin_position = [mouse_pos.x, mouse_pos.y];
-                            };
-                            t.center_display.0 = if mouse_pos.x
-                                + self.get_text_size(&s.hint_text_name, ui).unwrap()[0]
-                                <= ctx.available_rect().width()
-                            {
-                                HorizontalAlign::Left
-                            } else {
-                                HorizontalAlign::Right
-                            };
-                            t.center_display.1 = if mouse_pos.y
-                                + self.get_text_size(&s.hint_text_name, ui).unwrap()[1]
-                                <= ctx.available_rect().height()
-                            {
-                                VerticalAlign::Top
-                            } else {
-                                VerticalAlign::Bottom
-                            };
-                            self.replace_resource(&s.hint_text_name, "Text", t.clone())
-                                .unwrap();
-                        } else {
+                        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                            && !self.check_resource_exists(&s.hint_text_name, "Text")
+                        {
                             self.problem_report_custom(
                                 RustConstructorError::TextNotFound {
                                     text_name: s.hint_text_name.clone(),
@@ -4815,22 +5444,51 @@ impl App {
                                 text_name: s.hint_text_name.clone(),
                             });
                         };
+                        let mut t = self
+                            .get_resource::<Text>(&s.hint_text_name, "Text")
+                            .unwrap()
+                            .clone();
+                        if !s.last_time_hovered {
+                            self.reset_split_time(&format!("{}StartHoverTime", s.name), safe_mode)
+                                .unwrap();
+                        } else if self.timer.total_time
+                            - self
+                                .split_time(&format!("{}StartHoverTime", s.name), safe_mode)
+                                .unwrap()[1]
+                            >= 2_f32
+                            || t.color[3] != 0
+                        {
+                            t.color[3] = 255;
+                            t.origin_position = [mouse_pos.x, mouse_pos.y];
+                        };
+                        t.center_display.0 =
+                            if mouse_pos.x + t.size[0] <= ctx.available_rect().width() {
+                                HorizontalAlign::Left
+                            } else {
+                                HorizontalAlign::Right
+                            };
+                        t.center_display.1 =
+                            if mouse_pos.y + t.size[1] <= ctx.available_rect().height() {
+                                VerticalAlign::Top
+                            } else {
+                                VerticalAlign::Bottom
+                            };
+                        self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                            .unwrap();
                     };
                     hovered = true;
                     let mut clicked = vec![];
-                    let mut active = false;
                     for u in 0..s.click_method.len() as u32 {
                         clicked.push(ui.input(|i| {
                             i.pointer
                                 .button_down(s.click_method[u as usize].click_method)
                         }));
                         if clicked[u as usize] {
-                            active = true;
                             s.last_time_clicked_index = u as usize;
                             break;
                         };
                     }
-                    if active {
+                    if clicked.iter().any(|x| *x) {
                         s.last_time_clicked = true;
                         if s.enable_hover_click_fill_resource[1] {
                             if s.enable_hover_click_fill_resource[0] {
@@ -4843,6 +5501,7 @@ impl App {
                         };
                     } else {
                         if s.last_time_clicked {
+                            s.switched = true;
                             if s.click_method[s.last_time_clicked_index].action {
                                 if s.state
                                     < (s.appearance.len() / s.animation_count as usize - 1) as u32
@@ -4874,27 +5533,12 @@ impl App {
         };
         if !hovered && !s.hint_text_name.is_empty() {
             if s.last_time_hovered {
-                self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
+                self.reset_split_time(&format!("{}HintFadeAnimation", s.name), safe_mode)
                     .unwrap();
             };
-            if self.check_resource_exists(&s.hint_text_name, "Text") {
-                let mut t = self
-                    .get_resource::<Text>(&s.hint_text_name, "Text")
-                    .unwrap()
-                    .clone();
-                if self.timer.total_time
-                    - self
-                        .split_time(&format!("{}HintFadeAnimation", s.name))
-                        .unwrap()[1]
-                    >= self.tick_interval
-                {
-                    self.reset_split_time(&format!("{}HintFadeAnimation", s.name))
-                        .unwrap();
-                    t.color[3] = t.color[3].saturating_sub(10);
-                };
-                self.replace_resource(&s.hint_text_name, "Text", t.clone())
-                    .unwrap();
-            } else {
+            if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                && !self.check_resource_exists(&s.hint_text_name, "Text")
+            {
                 self.problem_report_custom(
                     RustConstructorError::TextNotFound {
                         text_name: s.hint_text_name.clone(),
@@ -4906,8 +5550,24 @@ impl App {
                     text_name: s.hint_text_name.clone(),
                 });
             };
+            let mut t = self
+                .get_resource::<Text>(&s.hint_text_name, "Text")
+                .unwrap()
+                .clone();
+            if self.timer.total_time
+                - self
+                    .split_time(&format!("{}HintFadeAnimation", s.name), safe_mode)
+                    .unwrap()[1]
+                >= self.tick_interval
+            {
+                self.reset_split_time(&format!("{}HintFadeAnimation", s.name), safe_mode)
+                    .unwrap();
+                t.color[3] = t.color[3].saturating_sub(10);
+            };
+            self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                .unwrap();
         };
-        let fr: Box<dyn FrontResource> = match &*s.fill_resource_type {
+        let fr: Box<dyn BasicFrontResource> = match &*s.fill_resource_type {
             "Image" => {
                 let mut im = Box::new(
                     fr.as_any()
@@ -4920,17 +5580,14 @@ impl App {
                                 .clone(),
                         ),
                 );
-                if self.check_resource_exists(
-                    &s.appearance[(s.state * s.animation_count + appearance_count) as usize]
-                        .texture
-                        .clone(),
-                    "ImageTexture",
-                ) {
-                    im.cite_texture = s.appearance
-                        [(s.state * s.animation_count + appearance_count) as usize]
-                        .texture
-                        .clone();
-                } else {
+                if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                    && !self.check_resource_exists(
+                        &s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                            .texture
+                            .clone(),
+                        "ImageTexture",
+                    )
+                {
                     self.problem_report_custom(
                         RustConstructorError::ImageTextureNotFound {
                             image_texture_name: s.appearance
@@ -4948,6 +5605,10 @@ impl App {
                             .clone(),
                     });
                 };
+                im.cite_texture = s.appearance
+                    [(s.state * s.animation_count + appearance_count) as usize]
+                    .texture
+                    .clone();
                 im
             }
             "CustomRect" => Box::new(
@@ -4980,18 +5641,9 @@ impl App {
             }
         };
         if !s.hint_text_name.is_empty() {
-            if self.check_resource_exists(&s.hint_text_name, "Text") {
-                let mut t = self
-                    .get_resource::<Text>(&s.hint_text_name, "Text")
-                    .unwrap()
-                    .clone();
-                t.background_color[3] = t.color[3];
-                t.content = s.appearance[(s.state * s.animation_count + appearance_count) as usize]
-                    .hint_text
-                    .clone();
-                self.replace_resource(&s.hint_text_name, "Text", t.clone())
-                    .unwrap();
-            } else {
+            if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                && !self.check_resource_exists(&s.hint_text_name, "Text")
+            {
                 self.problem_report_custom(
                     RustConstructorError::TextNotFound {
                         text_name: s.hint_text_name.clone(),
@@ -5003,6 +5655,16 @@ impl App {
                     text_name: s.hint_text_name,
                 });
             };
+            let mut t = self
+                .get_resource::<Text>(&s.hint_text_name, "Text")
+                .unwrap()
+                .clone();
+            t.background_color[3] = t.color[3];
+            t.content = s.appearance[(s.state * s.animation_count + appearance_count) as usize]
+                .hint_text
+                .clone();
+            self.replace_resource(&s.hint_text_name, "Text", t.clone())
+                .unwrap();
         };
         s.last_time_hovered = hovered;
         self.replace_resource(name, "Switch", s.clone()).unwrap();
@@ -5011,26 +5673,41 @@ impl App {
                 let im = fr.as_any().downcast_ref::<Image>().unwrap().clone();
                 self.replace_resource(&s.fill_resource_name, &s.fill_resource_type, im)
                     .unwrap();
-                self.image(&s.fill_resource_name.clone(), ui, ctx).unwrap();
+                self.image(&s.fill_resource_name.clone(), ui, ctx, safe_mode)
+                    .unwrap();
             }
             "CustomRect" => {
                 let cr = fr.as_any().downcast_ref::<CustomRect>().unwrap().clone();
                 self.replace_resource(&s.fill_resource_name, &s.fill_resource_type, cr)
                     .unwrap();
-                self.custom_rect(&s.fill_resource_name.clone(), ui, ctx)
+                self.custom_rect(&s.fill_resource_name.clone(), ui, ctx, safe_mode)
                     .unwrap();
             }
             &_ => {}
-        }
-        if self.check_resource_exists(&s.text_name, "Text") {
+        };
+        s.text_origin_position = s.appearance
+            [(s.state * s.animation_count + appearance_count) as usize]
+            .text_config
+            .origin_position;
+        if !s.text_name.is_empty() {
+            if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                && !self.check_resource_exists(&s.text_name, "Text")
+            {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: s.text_name.clone(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::TextNotFound {
+                    text_name: s.text_name,
+                });
+            };
             let mut t = self
                 .get_resource::<Text>(&s.text_name, "Text")
                 .unwrap()
                 .clone();
-            s.text_origin_position = s.appearance
-                [(s.state * s.animation_count + appearance_count) as usize]
-                .text_config
-                .origin_position;
             t.origin_position = [
                 fr.position()[0] + s.text_origin_position[0],
                 fr.position()[1] + s.text_origin_position[1],
@@ -5042,20 +5719,37 @@ impl App {
             );
             self.replace_resource(&s.text_name, "Text", t.clone())
                 .unwrap();
-            self.text(&s.text_name, ui, ctx).unwrap();
+            self.text(&s.text_name, ui, ctx, safe_mode).unwrap();
         };
-        if self.check_resource_exists(&s.hint_text_name, "Text") {
-            self.text(&s.hint_text_name, ui, ctx).unwrap();
+        if !s.hint_text_name.is_empty() {
+            if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+                && !self.check_resource_exists(&s.hint_text_name, "Text")
+            {
+                self.problem_report_custom(
+                    RustConstructorError::TextNotFound {
+                        text_name: s.hint_text_name.clone(),
+                    },
+                    SeverityLevel::SevereWarning,
+                    self.problem_list.clone(),
+                );
+                return Err(RustConstructorError::TextNotFound {
+                    text_name: s.hint_text_name,
+                });
+            };
+            self.text(&s.hint_text_name, ui, ctx, safe_mode).unwrap();
         };
         Ok(())
     }
 
-    /// 查找指定开关的点击方法(取决于开关的click_method元素，未点击则返回5)。
-    pub fn check_switch_click_index(&self, name: &str) -> Result<usize, RustConstructorError> {
-        if self.check_resource_exists(name, "Switch") {
-            let s = self.get_resource::<Switch>(name, "Switch").unwrap();
-            Ok(s.last_time_clicked_index)
-        } else {
+    /// 查找指定开关的常用判定字段集合。
+    pub fn check_switch_data(
+        &self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<SwitchData, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "Switch")
+        {
             self.problem_report_custom(
                 RustConstructorError::SwitchNotFound {
                     switch_name: name.to_string(),
@@ -5063,28 +5757,249 @@ impl App {
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::SwitchNotFound {
+            return Err(RustConstructorError::SwitchNotFound {
                 switch_name: name.to_string(),
-            })
-        }
+            });
+        };
+        let s = self.get_resource::<Switch>(name, "Switch").unwrap();
+        Ok(SwitchData {
+            switched: s.switched,
+            last_time_clicked_index: s.last_time_clicked_index,
+            state: s.state,
+        })
     }
 
-    /// 查找特定开关的状态。
-    pub fn check_switch_state(&self, name: &str) -> Result<u32, RustConstructorError> {
-        if self.check_resource_exists(name, "Switch") {
-            let s = self.get_resource::<Switch>(name, "Switch").unwrap();
-            Ok(s.state)
-        } else {
+    /// 添加鼠标检测器资源。
+    pub fn add_mouse_detector(&mut self, mouse_detector: MouseDetector) {
+        self.rust_constructor_resource
+            .push(Box::new(mouse_detector));
+    }
+
+    pub fn mouse_detector(
+        &mut self,
+        name: &str,
+        ui: &Ui,
+        ctx: &Context,
+        mouse_detector_level: MouseDetectorLevel,
+        safe_mode: Option<bool>,
+    ) -> Result<(), RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "MouseDetector")
+        {
             self.problem_report_custom(
-                RustConstructorError::SwitchNotFound {
-                    switch_name: name.to_string(),
+                RustConstructorError::MouseDetectorNotFound {
+                    mouse_detector_name: name.to_string(),
                 },
                 SeverityLevel::SevereWarning,
                 self.problem_list.clone(),
             );
-            Err(RustConstructorError::SwitchNotFound {
-                switch_name: name.to_string(),
-            })
-        }
+            return Err(RustConstructorError::MouseDetectorNotFound {
+                mouse_detector_name: name.to_string(),
+            });
+        };
+        let md = self
+            .get_resource_mut::<MouseDetector>(name, "MouseDetector")
+            .unwrap();
+        md.position[0] = match md.x_grid[1] {
+            0 => md.origin_position[0],
+            _ => {
+                (ctx.available_rect().width() as f64 / md.x_grid[1] as f64 * md.x_grid[0] as f64)
+                    as f32
+                    + md.origin_position[0]
+            }
+        };
+        md.position[1] = match md.y_grid[1] {
+            0 => md.origin_position[1],
+            _ => {
+                (ctx.available_rect().height() as f64 / md.y_grid[1] as f64 * md.y_grid[0] as f64)
+                    as f32
+                    + md.origin_position[1]
+            }
+        };
+        match md.center_display.0 {
+            HorizontalAlign::Left => {}
+            HorizontalAlign::Center => md.position[0] -= md.size[0] / 2.0,
+            HorizontalAlign::Right => md.position[0] -= md.size[0],
+        };
+        match md.center_display.1 {
+            VerticalAlign::Top => {}
+            VerticalAlign::Center => md.position[1] -= md.size[1] / 2.0,
+            VerticalAlign::Bottom => md.position[1] -= md.size[1],
+        };
+        md.position[0] += md.offset[0];
+        md.position[1] += md.offset[1];
+        let rect = Rect::from_min_max(
+            Pos2::new(md.position[0], md.position[1]),
+            Pos2::new(md.position[0] + md.size[0], md.position[1] + md.size[1]),
+        );
+        let response = ui.interact(rect, Id::new(name), Sense::click_and_drag());
+        md.detect_result = match mouse_detector_level {
+            MouseDetectorLevel::Lite => MouseDetectResult {
+                clicked: response.clicked(),
+                contains_pointer: response.contains_pointer(),
+                secondary_clicked: None,
+                middle_clicked: None,
+                clicked_by_extra_button: None,
+                long_touched: None,
+                double_clicked: None,
+                triple_clicked: None,
+                double_clicked_by: None,
+                triple_clicked_by: None,
+                clicked_elsewhere: None,
+                hovered: None,
+                drag_started: None,
+                drag_started_by: None,
+                dragged: None,
+                dragged_by: None,
+                drag_stopped: None,
+                deag_stopped_by: None,
+                drag_delta: None,
+                total_drag_delta: None,
+                drag_motion: None,
+                interact_pointer_pos: None,
+                hover_pos: None,
+                is_pointer_button_down_on: None,
+            },
+            MouseDetectorLevel::Default => {
+                let interact_hover_pos = response.interact_pointer_pos();
+                let hover_pos = response.hover_pos();
+                MouseDetectResult {
+                    clicked: response.clicked(),
+                    contains_pointer: response.contains_pointer(),
+                    secondary_clicked: Some(response.secondary_clicked()),
+                    middle_clicked: Some(response.middle_clicked()),
+                    clicked_by_extra_button: None,
+                    long_touched: None,
+                    double_clicked: Some(response.double_clicked()),
+                    triple_clicked: Some(response.triple_clicked()),
+                    double_clicked_by: None,
+                    triple_clicked_by: None,
+                    clicked_elsewhere: Some(response.clicked_elsewhere()),
+                    hovered: Some(response.hovered()),
+                    drag_started: Some(response.drag_started()),
+                    drag_started_by: None,
+                    dragged: Some(response.dragged()),
+                    dragged_by: None,
+                    drag_stopped: Some(response.drag_stopped()),
+                    deag_stopped_by: None,
+                    drag_delta: None,
+                    total_drag_delta: None,
+                    drag_motion: None,
+                    interact_pointer_pos: if let Some(interact_hover_pos) = interact_hover_pos {
+                        Some(Some([interact_hover_pos.x, interact_hover_pos.y]))
+                    } else {
+                        Some(None)
+                    },
+                    hover_pos: if let Some(hover_pos) = hover_pos {
+                        Some(Some([hover_pos.x, hover_pos.y]))
+                    } else {
+                        Some(None)
+                    },
+                    is_pointer_button_down_on: Some(response.is_pointer_button_down_on()),
+                }
+            }
+            MouseDetectorLevel::Pro => {
+                let interact_hover_pos = response.interact_pointer_pos();
+                let hover_pos = response.hover_pos();
+                let total_drag_delta = response.total_drag_delta();
+                MouseDetectResult {
+                    clicked: response.clicked(),
+                    contains_pointer: response.contains_pointer(),
+                    secondary_clicked: Some(response.secondary_clicked()),
+                    middle_clicked: Some(response.middle_clicked()),
+                    clicked_by_extra_button: Some([
+                        response.clicked_by(PointerButton::Extra1),
+                        response.clicked_by(PointerButton::Extra2),
+                    ]),
+                    long_touched: Some(response.long_touched()),
+                    double_clicked: Some(response.double_clicked()),
+                    triple_clicked: Some(response.triple_clicked()),
+                    double_clicked_by: Some([
+                        response.double_clicked_by(PointerButton::Primary),
+                        response.double_clicked_by(PointerButton::Secondary),
+                        response.double_clicked_by(PointerButton::Middle),
+                        response.double_clicked_by(PointerButton::Extra1),
+                        response.double_clicked_by(PointerButton::Extra2),
+                    ]),
+                    triple_clicked_by: Some([
+                        response.triple_clicked_by(PointerButton::Primary),
+                        response.triple_clicked_by(PointerButton::Secondary),
+                        response.triple_clicked_by(PointerButton::Middle),
+                        response.triple_clicked_by(PointerButton::Extra1),
+                        response.triple_clicked_by(PointerButton::Extra2),
+                    ]),
+                    clicked_elsewhere: Some(response.clicked_elsewhere()),
+                    hovered: Some(response.hovered()),
+                    drag_started: Some(response.drag_started()),
+                    drag_started_by: Some([
+                        response.drag_started_by(PointerButton::Primary),
+                        response.drag_started_by(PointerButton::Secondary),
+                        response.drag_started_by(PointerButton::Middle),
+                        response.drag_started_by(PointerButton::Extra1),
+                        response.drag_started_by(PointerButton::Extra2),
+                    ]),
+                    dragged: Some(response.dragged()),
+                    dragged_by: Some([
+                        response.dragged_by(PointerButton::Primary),
+                        response.dragged_by(PointerButton::Secondary),
+                        response.dragged_by(PointerButton::Middle),
+                        response.dragged_by(PointerButton::Extra1),
+                        response.dragged_by(PointerButton::Extra2),
+                    ]),
+                    drag_stopped: Some(response.drag_stopped()),
+                    deag_stopped_by: Some([
+                        response.drag_stopped_by(PointerButton::Primary),
+                        response.drag_stopped_by(PointerButton::Secondary),
+                        response.drag_stopped_by(PointerButton::Middle),
+                        response.drag_stopped_by(PointerButton::Extra1),
+                        response.drag_stopped_by(PointerButton::Extra2),
+                    ]),
+                    drag_delta: Some([response.drag_delta().x, response.drag_delta().y]),
+                    total_drag_delta: if let Some(total_drag_delta) = total_drag_delta {
+                        Some(Some([total_drag_delta.x, total_drag_delta.y]))
+                    } else {
+                        Some(None)
+                    },
+                    drag_motion: Some([response.drag_motion().x, response.drag_motion().y]),
+                    interact_pointer_pos: if let Some(interact_hover_pos) = interact_hover_pos {
+                        Some(Some([interact_hover_pos.x, interact_hover_pos.y]))
+                    } else {
+                        Some(None)
+                    },
+                    hover_pos: if let Some(hover_pos) = hover_pos {
+                        Some(Some([hover_pos.x, hover_pos.y]))
+                    } else {
+                        Some(None)
+                    },
+                    is_pointer_button_down_on: Some(response.is_pointer_button_down_on()),
+                }
+            }
+        };
+        Ok(())
+    }
+
+    pub fn check_mouse_detect_result(
+        &self,
+        name: &str,
+        safe_mode: Option<bool>,
+    ) -> Result<MouseDetectResult, RustConstructorError> {
+        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
+            && !self.check_resource_exists(name, "MouseDetector")
+        {
+            self.problem_report_custom(
+                RustConstructorError::MouseDetectorNotFound {
+                    mouse_detector_name: name.to_string(),
+                },
+                SeverityLevel::SevereWarning,
+                self.problem_list.clone(),
+            );
+            return Err(RustConstructorError::MouseDetectorNotFound {
+                mouse_detector_name: name.to_string(),
+            });
+        };
+        let md = self
+            .get_resource::<MouseDetector>(name, "MouseDetector")
+            .unwrap();
+        Ok(md.detect_result.clone())
     }
 }
