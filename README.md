@@ -6,7 +6,7 @@
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub Stars](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![Version](https://img.shields.io/badge/Version-v2.4.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.5.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -28,25 +28,11 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current latest version is `v2.4.0 Mouse Update`. Major updates include:
-  - Renamed `FrontResource` to `BasicFrontResource`.
-  - Added an `offset` field to certain resources for adjusting their position (applied after position calculation).
-  - Added `PositionConfig` for configuring resource positions.
-  - Removed the `get_text_size` method; text size is now automatically calculated upon use and stored in the new `size` field of `Text`.
-  - Added `MouseDetector` resource for detecting mouse actions within specific areas.
-  - Added `MouseDetectorLevel` enum to control detection intensity and reduce performance overhead.
-  - Added accompanying struct `MouseDetectorResult` for storing mouse detection results.
-  - Extended `RustConstructorError` with a new error type: `MouseDetectorNotFound`.
-  - Added a `safe_mode` optional parameter to nearly all functions that require resource access. When left empty, it uses the new `safe_mode` field in `App` for control. When enabled, it performs safety checks on required resources to prevent errors.
-  - Fixed an issue where some `Text` elements couldn't be selected when multiple `Text`s were used.
-  - Fixed index errors in `Text` hyperlinks when encountering emojis or other special characters.
-  - Now, when `Text` is selected, pressing the select-all shortcut key will select the entire text block.
-  - Added `switched` field to `Switch` to indicate whether the switch state was toggled by a click.
-  - `SwitchData` has been renamed to `SwitchAppearance`.
-  - Introduced a new `SwitchData` struct containing several commonly used judgment fields.
-  - Replaced `check_switch_click_index` and `check_switch_state` with `check_switch_data`.
+- The current latest version is `v2.5.0 Variable Update`. Major updates include:
+  - The definition of `Variable` has been modified. Now, any kind of value can be stored in `Variable`.
+  - Removed `Value`.
+  - A series of parsing methods such as `var_b` and `var_decode_b` have been removed.
   - Improved parts of the codebase.
-  - Fixed several known issues.
 
 ---
 

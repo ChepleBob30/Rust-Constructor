@@ -229,53 +229,6 @@ impl PositionConfig {
     }
 }
 
-/// 存储特定值的枚举。
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Value {
-    Bool(bool),
-    Int(i32),
-    UInt(u32),
-    Float(f32),
-    Vec(Vec<Value>),
-    String(String),
-}
-
-impl From<bool> for Value {
-    fn from(b: bool) -> Self {
-        Value::Bool(b)
-    }
-}
-
-impl From<i32> for Value {
-    fn from(i: i32) -> Self {
-        Value::Int(i)
-    }
-}
-
-impl From<u32> for Value {
-    fn from(u: u32) -> Self {
-        Value::UInt(u)
-    }
-}
-
-impl From<f32> for Value {
-    fn from(f: f32) -> Self {
-        Value::Float(f)
-    }
-}
-
-impl<T: Into<Value>> From<Vec<T>> for Value {
-    fn from(v: Vec<T>) -> Self {
-        Value::Vec(v.into_iter().map(|x| x.into()).collect())
-    }
-}
-
-impl From<String> for Value {
-    fn from(s: String) -> Self {
-        Value::String(s)
-    }
-}
-
 /// 报告发生问题时的状态。
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ReportState {
@@ -1568,14 +1521,14 @@ impl Text {
 
 /// RC的变量资源。
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Variable {
+pub struct Variable<T> {
     pub discern_type: String,
     pub name: String,
     /// 变量的值。
-    pub value: Value,
+    pub value: Option<T>,
 }
 
-impl RustConstructorResource for Variable {
+impl<T: Debug + 'static> RustConstructorResource for Variable<T> {
     fn name(&self) -> &str {
         &self.name
     }
@@ -1593,17 +1546,17 @@ impl RustConstructorResource for Variable {
     }
 }
 
-impl Default for Variable {
+impl<T> Default for Variable<T> {
     fn default() -> Self {
         Variable {
             discern_type: String::from("Variable"),
             name: String::from("Variable"),
-            value: Value::String(String::from("Hello world")),
+            value: None,
         }
     }
 }
 
-impl Variable {
+impl<T> Variable<T> {
     #[inline]
     pub fn name(mut self, name: &str) -> Self {
         self.name = name.to_string();
@@ -1611,65 +1564,9 @@ impl Variable {
     }
 
     #[inline]
-    pub fn value<T: Into<Value>>(mut self, value: T) -> Self {
-        self.value = value.into();
+    pub fn value(mut self, value: Option<T>) -> Self {
+        self.value = value;
         self
-    }
-
-    pub fn new<T: Into<Value>>(name: &str, value: T) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: value.into(),
-        }
-    }
-
-    pub fn from_bool(name: &str, value: bool) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: Value::Bool(value),
-        }
-    }
-
-    pub fn from_int(name: &str, value: i32) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: Value::Int(value),
-        }
-    }
-
-    pub fn from_uint(name: &str, value: u32) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: Value::UInt(value),
-        }
-    }
-
-    pub fn from_float(name: &str, value: f32) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: Value::Float(value),
-        }
-    }
-
-    pub fn from_vec(name: &str, value: Vec<Value>) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: Value::Vec(value),
-        }
-    }
-
-    pub fn from_string<T: Into<String>>(name: &str, value: T) -> Self {
-        Self {
-            discern_type: String::from("Variable"),
-            name: String::from(name),
-            value: Value::String(value.into()),
-        }
     }
 }
 
@@ -2217,18 +2114,8 @@ pub enum RustConstructorError {
     TextNotFound { text_name: String },
     /// 变量未找到。
     VariableNotFound { variable_name: String },
-    /// 变量获取失败。
-    VariableNotInt { variable_name: String },
-    /// 变量获取失败。
-    VariableNotUInt { variable_name: String },
-    /// 变量获取失败。
-    VariableNotFloat { variable_name: String },
-    /// 变量获取失败。
-    VariableNotVec { variable_name: String },
-    /// 变量获取失败。
-    VariableNotBool { variable_name: String },
-    /// 变量获取失败。
-    VariableNotString { variable_name: String },
+    /// 由于输入类型错误，变量值无法匹配。
+    VariableTypeMismatch { variable_name: String },
     /// 分段时间未找到。
     SplitTimeNotFound { split_time_name: String },
     /// 开关外观数量不匹配。
@@ -2381,7 +2268,7 @@ impl App {
         self.render_resource_list = Vec::new();
         // 更新计时器
         self.update_timer();
-        if let Ok(pd) = self.get_resource::<PageData>(&self.current_page.clone(), "PageData")
+        if let Ok(Some(pd)) = self.get_resource::<PageData>(&self.current_page.clone(), "PageData")
             && pd.forced_update
         {
             // 请求重新绘制界面
@@ -2496,7 +2383,7 @@ impl App {
         &self,
         name: &str,
         discern_type: &str,
-    ) -> Result<&T, RustConstructorError>
+    ) -> Result<Option<&T>, RustConstructorError>
     where
         T: RustConstructorResource + 'static,
     {
@@ -2505,8 +2392,7 @@ impl App {
                 .rust_constructor_resource
                 .iter()
                 .find(|resource| resource.name() == name && resource.expose_type() == discern_type)
-                .and_then(|resource| resource.as_any().downcast_ref::<T>())
-                .unwrap())
+                .and_then(|resource| resource.as_any().downcast_ref::<T>()))
         } else {
             self.problem_report_custom(
                 RustConstructorError::ResourceNotFound {
@@ -2624,7 +2510,7 @@ impl App {
                 font_name: name.to_string(),
             });
         };
-        let f = self.get_resource::<Font>(name, "Font").unwrap();
+        let f = self.get_resource::<Font>(name, "Font").unwrap().unwrap();
         Ok(f.font_definitions.clone())
     }
 
@@ -2673,47 +2559,47 @@ impl App {
         ctx.set_fonts(font_definitions);
     }
 
-    /// 发生问题时推送报告。
-    pub fn problem_report(
-        &mut self,
+    /// 处理错误。
+    fn problem_processor(
+        &self,
         problem_type: RustConstructorError,
         severity_level: SeverityLevel,
-    ) {
+    ) -> (String, String) {
         let (problem, annotation) = match problem_type.clone() {
             RustConstructorError::FontGetFailed { font_path } => (
-                format!("Font get failed: {}", font_path,),
+                format!("Font get failed({:?}): {}", severity_level, font_path,),
                 "Please check if the font file exists and the path is correct.".to_string(),
             ),
             RustConstructorError::FontNotFound { font_name } => (
-                format!("Font not found: {}", font_name,),
+                format!("Font not found({:?}): {}", severity_level, font_name,),
                 "Please check whether the font has been added.".to_string(),
             ),
             RustConstructorError::ImageGetFailed { image_path } => (
-                format!("Image get failed: {}", image_path,),
+                format!("Image get failed({:?}): {}", severity_level, image_path,),
                 "Please check whether the image path is correct and whether the image has been added.".to_string(),
             ),
             RustConstructorError::ImageNotFound { image_name } => (
-                format!("Image not found: {}", image_name,),
+                format!("Image not found({:?}): {}", severity_level, image_name,),
                 "Please check whether the image has been added.".to_string(),
             ),
             RustConstructorError::ImageTextureNotFound { image_texture_name } => (
-                format!("Image texture not found: {}", image_texture_name,),
+                format!("Image texture not found({:?}): {}", severity_level, image_texture_name,),
                 "Please check whether the image texture has been added.".to_string(),
             ),
             RustConstructorError::TextNotFound { text_name } => (
-                format!("Text not found: {}", text_name,),
+                format!("Text not found({:?}): {}", severity_level, text_name,),
                 "Please check whether the text has been added.".to_string(),
             ),
             RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
-                format!("Message box already exists: {}", message_box_name,),
+                format!("Message box already exists({:?}): {}", severity_level, message_box_name,),
                 "Please check whether the code for generating the message box has been accidentally called multiple times.".to_string(),
             ),
             RustConstructorError::MouseDetectorNotFound { mouse_detector_name } => (
-                format!("Mouse detector not found: {}", mouse_detector_name,),
+                format!("Mouse detector not found({:?}): {}", severity_level, mouse_detector_name,),
                 "Please check whether the mouse detector has been added.".to_string(),
             ),
             RustConstructorError::SplitTimeNotFound { split_time_name } => (
-                format!("Split time not found: {}", split_time_name,),
+                format!("Split time not found({:?}): {}", severity_level, split_time_name,),
                 "Please check whether the split time has been added.".to_string(),
             ),
             RustConstructorError::SwitchAppearanceMismatch {
@@ -2721,53 +2607,33 @@ impl App {
                 differ,
             } => (
                 format!(
-                    "Switch appearance list's number of items is large / small {} more: {}",
-                    differ, switch_name
+                    "Switch appearance list's number of items is large / small {} more({:?}): {}",
+                    differ, severity_level, switch_name
                 ),
                 "Please check whether the number of appearance list items matches the number of enabled animations.".to_string(),
             ),
             RustConstructorError::SwitchNotFound { switch_name } => (
-                format!("Switch not found: {}", switch_name,),
+                format!("Switch not found({:?}): {}", severity_level, switch_name,),
                 "Please check whether the switch has been added.".to_string(),
             ),
             RustConstructorError::SwitchFillResourceMismatch { switch_name, fill_resource_name, fill_resource_type } => (
-                format!("Switch fill resource mismatch: Resource {} of switch {} is not of type {}", fill_resource_name, switch_name, fill_resource_type,),
+                format!("Switch fill resource mismatch({:?}): Resource {} of switch {} is not of type {}", severity_level, fill_resource_name, switch_name, fill_resource_type,),
                 "Please check whether the imported fill resource is correctly typed.".to_string(),
             ),
             RustConstructorError::PageNotFound { page_name } => (
-                format!("Page not found: {}", page_name,),
+                format!("Page not found({:?}): {}", severity_level, page_name,),
                 "Please check whether the page has been added.".to_string(),
             ),
             RustConstructorError::VariableNotFound { variable_name } => (
-                format!("Variable not found: {}", variable_name,),
+                format!("Variable not found({:?}): {}", severity_level, variable_name,),
                 "Please check whether the variable has been added.".to_string(),
             ),
-            RustConstructorError::VariableNotBool { variable_name } => (
-                format!("Variable is not bool: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotFloat { variable_name } => (
-                format!("Variable is not f32: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotInt { variable_name } => (
-                format!("Variable is not int: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotString { variable_name } => (
-                format!("Variable is not string: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotUInt { variable_name } => (
-                format!("Variable is not uint: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotVec { variable_name } => (
-                format!("Variable is not vec: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
+            RustConstructorError::VariableTypeMismatch { variable_name } => (
+                format!("Variable type mismatch({:?}): {}", severity_level, variable_name,),
+                "Please check whether the generics used for matching are filled correctly.".to_string(),
             ),
             RustConstructorError::RectNotFound { rect_name } => (
-                format!("Rect not found: {}", rect_name,),
+                format!("Rect not found({:?}): {}", severity_level, rect_name,),
                 "Please check whether the rect has been added.".to_string(),
             ),
             RustConstructorError::ResourceNotFound {
@@ -2775,23 +2641,34 @@ impl App {
                 resource_type,
             } => (
                 format!(
-                    "Resource not found: {}(\"{}\")",
-                    resource_type, resource_name,
+                    "Resource not found({:?}): {}(\"{}\")",
+                    severity_level, resource_type, resource_name,
                 ),
                 "Please check whether the resource has been added.".to_string(),
             ),
             RustConstructorError::CustomError { error_name, error_message, error_annotation } => (
-                format!("Custom error({}): {}", error_name, error_message),
+                format!("Custom error({}, {:?}): {}", error_name, severity_level, error_message),
                 error_annotation
             )
         };
         // 如果处于严格模式下，则直接崩溃！
         if self.strict_mode {
             panic!(
-                "Rust Constructor Error({:#?}): {}\n{}",
+                "Rust Constructor Error({:?}): {}\nnote: {}",
                 problem_type, problem, annotation
             );
         };
+        (problem, annotation)
+    }
+
+    /// 发生问题时推送报告。
+    pub fn problem_report(
+        &mut self,
+        problem_type: RustConstructorError,
+        severity_level: SeverityLevel,
+    ) {
+        let (problem, annotation) =
+            self.problem_processor(problem_type.clone(), severity_level);
         self.problem_list.push(Problem {
             severity_level,
             problem,
@@ -2812,119 +2689,8 @@ impl App {
         severity_level: SeverityLevel,
         mut problem_storage: Vec<Problem>,
     ) {
-        let (problem, annotation) = match problem_type.clone() {
-            RustConstructorError::FontGetFailed { font_path } => (
-                format!("Font get failed: {}", font_path,),
-                "Please check if the font file exists and the path is correct.".to_string(),
-            ),
-            RustConstructorError::FontNotFound { font_name } => (
-                format!("Font not found: {}", font_name,),
-                "Please check whether the font has been added.".to_string(),
-            ),
-            RustConstructorError::ImageGetFailed { image_path } => (
-                format!("Image get failed: {}", image_path,),
-                "Please check whether the image path is correct and whether the image has been added.".to_string(),
-            ),
-            RustConstructorError::ImageNotFound { image_name } => (
-                format!("Image not found: {}", image_name,),
-                "Please check whether the image has been added.".to_string(),
-            ),
-            RustConstructorError::ImageTextureNotFound { image_texture_name } => (
-                format!("Image texture not found: {}", image_texture_name,),
-                "Please check whether the image texture has been added.".to_string(),
-            ),
-            RustConstructorError::TextNotFound { text_name } => (
-                format!("Text not found: {}", text_name,),
-                "Please check whether the text has been added.".to_string(),
-            ),
-            RustConstructorError::MessageBoxAlreadyExists { message_box_name } => (
-                format!("Message box already exists: {}", message_box_name,),
-                "Please check whether the code for generating the message box has been accidentally called multiple times.".to_string(),
-            ),
-            RustConstructorError::MouseDetectorNotFound { mouse_detector_name } => (
-                format!("Mouse detector not found: {}", mouse_detector_name,),
-                "Please check whether the mouse detector has been added.".to_string(),
-            ),
-            RustConstructorError::SplitTimeNotFound { split_time_name } => (
-                format!("Split time not found: {}", split_time_name,),
-                "Please check whether the split time has been added.".to_string(),
-            ),
-            RustConstructorError::SwitchAppearanceMismatch {
-                switch_name,
-                differ,
-            } => (
-                format!(
-                    "Switch appearance list's number of items is large / small {} more: {}",
-                    differ, switch_name
-                ),
-                "Please check whether the number of appearance list items matches the number of enabled animations.".to_string(),
-            ),
-            RustConstructorError::SwitchNotFound { switch_name } => (
-                format!("Switch not found: {}", switch_name,),
-                "Please check whether the switch has been added.".to_string(),
-            ),
-            RustConstructorError::SwitchFillResourceMismatch { switch_name, fill_resource_name, fill_resource_type } => (
-                format!("Switch fill resource mismatch: Resource {} of switch {} is not of type {}", fill_resource_name, switch_name, fill_resource_type,),
-                "Please check whether the imported fill resource is correctly typed.".to_string(),
-            ),
-            RustConstructorError::PageNotFound { page_name } => (
-                format!("Page not found: {}", page_name,),
-                "Please check whether the page has been added.".to_string(),
-            ),
-            RustConstructorError::VariableNotFound { variable_name } => (
-                format!("Variable not found: {}", variable_name,),
-                "Please check whether the variable has been added.".to_string(),
-            ),
-            RustConstructorError::VariableNotBool { variable_name } => (
-                format!("Variable is not bool: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotFloat { variable_name } => (
-                format!("Variable is not f32: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotInt { variable_name } => (
-                format!("Variable is not int: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotString { variable_name } => (
-                format!("Variable is not string: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotUInt { variable_name } => (
-                format!("Variable is not uint: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::VariableNotVec { variable_name } => (
-                format!("Variable is not vec: {}", variable_name,),
-                "Please check whether the variable names and types are correct and whether there are duplicate items.".to_string(),
-            ),
-            RustConstructorError::RectNotFound { rect_name } => (
-                format!("Rect not found: {}", rect_name,),
-                "Please check whether the rect has been added.".to_string(),
-            ),
-            RustConstructorError::ResourceNotFound {
-                resource_name,
-                resource_type,
-            } => (
-                format!(
-                    "Resource not found: {}(\"{}\")",
-                    resource_type, resource_name,
-                ),
-                "Please check whether the resource has been added.".to_string(),
-            ),
-            RustConstructorError::CustomError { error_name, error_message, error_annotation } => (
-                format!("Custom error({}): {}", error_name, error_message),
-                error_annotation
-            )
-        };
-        // 如果处于严格模式下，则直接崩溃！
-        if self.strict_mode {
-            panic!(
-                "Rust Constructor Error({:#?}): {}\n{}",
-                problem_type, problem, annotation
-            );
-        };
+        let (problem, annotation) =
+            self.problem_processor(problem_type.clone(), severity_level);
         problem_storage.push(Problem {
             severity_level,
             problem,
@@ -2960,6 +2726,7 @@ impl App {
         };
         let pd = self
             .get_resource::<PageData>(name, "PageData")
+            .unwrap()
             .unwrap()
             .clone();
         if !pd.change_page_updated {
@@ -3099,7 +2866,10 @@ impl App {
                 split_time_name: name.to_string(),
             });
         };
-        let st = self.get_resource::<SplitTime>(name, "SplitTime").unwrap();
+        let st = self
+            .get_resource::<SplitTime>(name, "SplitTime")
+            .unwrap()
+            .unwrap();
         Ok(st.time)
     }
 
@@ -3220,7 +2990,11 @@ impl App {
                 text_name: name.to_string(),
             });
         };
-        let mut t = self.get_resource::<Text>(name, "Text").unwrap().clone();
+        let mut t = self
+            .get_resource::<Text>(name, "Text")
+            .unwrap()
+            .unwrap()
+            .clone();
         t.reg_render_resource(&mut self.render_resource_list);
         // 计算文本大小
         let galley: Arc<Galley> = ui.fonts_mut(|f| {
@@ -3798,15 +3572,15 @@ impl App {
     }
 
     /// 添加变量资源。
-    pub fn add_var(&mut self, variable: Variable) {
+    pub fn add_var<T: Debug + 'static>(&mut self, variable: Variable<T>) {
         self.rust_constructor_resource.push(Box::new(variable));
     }
 
     /// 修改变量资源。
-    pub fn modify_var<T: Into<Value>>(
+    pub fn modify_var<T: Debug + 'static>(
         &mut self,
         name: &str,
-        value: T,
+        value: Option<T>,
         safe_mode: Option<bool>,
     ) -> Result<(), RustConstructorError> {
         if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
@@ -3823,379 +3597,54 @@ impl App {
                 variable_name: name.to_string(),
             });
         };
-        let v = self.get_resource_mut::<Variable>(name, "Variable").unwrap();
-        v.value = value.into();
+        let v = self
+            .get_resource_mut::<Variable<T>>(name, "Variable")
+            .unwrap();
+        v.value = value;
         Ok(())
     }
 
-    /// 取出Value变量。
-    pub fn var(&self, name: &str, safe_mode: Option<bool>) -> Result<Value, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        Ok(v.value.clone())
-    }
-
-    /// 取出i32变量。
-    pub fn var_i(&self, name: &str, safe_mode: Option<bool>) -> Result<i32, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        match &v.value {
-            // 直接访问 value 字段
-            Value::Int(i) => Ok(*i),
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotInt {
-                        variable_name: name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotInt {
-                    variable_name: name.to_string(),
-                })
-            }
-        }
-    }
-
-    /// 取出u32资源。
-    pub fn var_u(&self, name: &str, safe_mode: Option<bool>) -> Result<u32, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        match &v.value {
-            // 直接访问 value 字段
-            Value::UInt(u) => Ok(*u),
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotUInt {
-                        variable_name: name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotUInt {
-                    variable_name: name.to_string(),
-                })
-            }
-        }
-    }
-
-    /// 取出f32资源。
-    pub fn var_f(&self, name: &str, safe_mode: Option<bool>) -> Result<f32, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        match &v.value {
-            // 直接访问 value 字段
-            Value::Float(f) => Ok(*f),
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotFloat {
-                        variable_name: name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotFloat {
-                    variable_name: name.to_string(),
-                })
-            }
-        }
-    }
-
-    /// 取出布尔值资源。
-    pub fn var_b(&self, name: &str, safe_mode: Option<bool>) -> Result<bool, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        match &v.value {
-            // 直接访问 value 字段
-            Value::Bool(b) => Ok(*b),
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotBool {
-                        variable_name: name.to_string(),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotBool {
-                    variable_name: name.to_string(),
-                })
-            }
-        }
-    }
-
-    /// 取出包含Value的Vec资源。
-    pub fn var_v(
+    /// 取出变量。
+    pub fn var<T: Debug + 'static>(
         &self,
         name: &str,
         safe_mode: Option<bool>,
-    ) -> Result<Vec<Value>, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        match &v.value {
-            // 直接访问 value 字段
-            Value::Vec(v) => Ok(v.clone()),
-            _ => {
+    ) -> Result<Option<&T>, RustConstructorError> {
+        if safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode {
+            if !self.check_resource_exists(name, "Variable") {
                 self.problem_report_custom(
-                    RustConstructorError::VariableNotVec {
+                    RustConstructorError::VariableNotFound {
                         variable_name: name.to_string(),
                     },
                     SeverityLevel::SevereWarning,
                     self.problem_list.clone(),
                 );
-                Err(RustConstructorError::VariableNotVec {
+                return Err(RustConstructorError::VariableNotFound {
                     variable_name: name.to_string(),
-                })
-            }
-        }
-    }
-
-    /// 取出字符串资源。
-    pub fn var_s(
-        &self,
-        name: &str,
-        safe_mode: Option<bool>,
-    ) -> Result<String, RustConstructorError> {
-        if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
-            && !self.check_resource_exists(name, "Variable")
-        {
-            self.problem_report_custom(
-                RustConstructorError::VariableNotFound {
-                    variable_name: name.to_string(),
-                },
-                SeverityLevel::SevereWarning,
-                self.problem_list.clone(),
-            );
-            return Err(RustConstructorError::VariableNotFound {
-                variable_name: name.to_string(),
-            });
-        };
-        let v = self.get_resource::<Variable>(name, "Variable").unwrap();
-        match &v.value {
-            // 直接访问 value 字段
-            Value::String(s) => Ok(s.clone()),
-            _ => {
+                });
+            };
+            if self
+                .get_resource::<Variable<T>>(name, "Variable")
+                .unwrap()
+                .is_none()
+            {
                 self.problem_report_custom(
-                    RustConstructorError::VariableNotString {
+                    RustConstructorError::VariableTypeMismatch {
                         variable_name: name.to_string(),
                     },
                     SeverityLevel::SevereWarning,
                     self.problem_list.clone(),
                 );
-                Err(RustConstructorError::VariableNotString {
+                return Err(RustConstructorError::VariableTypeMismatch {
                     variable_name: name.to_string(),
-                })
-            }
-        }
-    }
-
-    /// 尝试将Value转换成布尔值。
-    pub fn var_decode_b(&self, target: Value) -> Result<bool, RustConstructorError> {
-        match target {
-            Value::Bool(b) => {
-                // 处理布尔值
-                Ok(b)
-            }
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotBool {
-                        variable_name: format!("{:?}", target),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotBool {
-                    variable_name: format!("{:?}", target),
-                })
-            }
-        }
-    }
-
-    /// 尝试将Value转换成i32。
-    pub fn var_decode_i(&self, target: Value) -> Result<i32, RustConstructorError> {
-        match target {
-            Value::Int(i) => {
-                // 处理i32整型
-                Ok(i)
-            }
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotInt {
-                        variable_name: format!("{:?}", target),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotInt {
-                    variable_name: format!("{:?}", target),
-                })
-            }
-        }
-    }
-
-    /// 尝试将Value转换成u32。
-    pub fn var_decode_u(&self, target: Value) -> Result<u32, RustConstructorError> {
-        match target {
-            Value::UInt(u) => {
-                // 处理u32无符号整型
-                Ok(u)
-            }
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotUInt {
-                        variable_name: format!("{:?}", target),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotUInt {
-                    variable_name: format!("{:?}", target),
-                })
-            }
-        }
-    }
-
-    /// 尝试将Value转换成f32。
-    pub fn var_decode_f(&self, target: Value) -> Result<f32, RustConstructorError> {
-        match target {
-            Value::Float(f) => {
-                // 处理浮点数
-                Ok(f)
-            }
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotFloat {
-                        variable_name: format!("{:?}", target),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotFloat {
-                    variable_name: format!("{:?}", target),
-                })
-            }
-        }
-    }
-
-    /// 尝试将Value转换成字符串。
-    pub fn var_decode_s(&self, target: Value) -> Result<String, RustConstructorError> {
-        match target {
-            Value::String(s) => {
-                // 处理字符串
-                Ok(s)
-            }
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotString {
-                        variable_name: format!("{:?}", target),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotString {
-                    variable_name: format!("{:?}", target),
-                })
-            }
-        }
-    }
-
-    /// 尝试将Value转换成Vec。
-    pub fn var_decode_v(&self, target: Value) -> Result<Vec<Value>, RustConstructorError> {
-        match target {
-            Value::Vec(v) => {
-                // 处理字符串
-                Ok(v)
-            }
-            _ => {
-                self.problem_report_custom(
-                    RustConstructorError::VariableNotVec {
-                        variable_name: format!("{:?}", target),
-                    },
-                    SeverityLevel::SevereWarning,
-                    self.problem_list.clone(),
-                );
-                Err(RustConstructorError::VariableNotVec {
-                    variable_name: format!("{:?}", target),
-                })
-            }
-        }
+                });
+            };
+        };
+        let v = self
+            .get_resource::<Variable<T>>(name, "Variable")
+            .unwrap()
+            .unwrap();
+        Ok(v.value.as_ref())
     }
 
     /// 添加图片纹理资源。
@@ -4263,6 +3712,7 @@ impl App {
         };
         let it = self
             .get_resource::<ImageTexture>(name, "ImageTexture")
+            .unwrap()
             .unwrap();
         Ok(it.texture.clone())
     }
@@ -4348,6 +3798,7 @@ impl App {
         };
         let it = self
             .get_resource::<ImageTexture>(image_texture_name, "ImageTexture")
+            .unwrap()
             .unwrap();
         image.texture = it.texture.clone();
         image.cite_texture = it.name.clone();
@@ -4396,6 +3847,7 @@ impl App {
             } else {
                 let it = self
                     .get_resource::<ImageTexture>(&im.cite_texture, "ImageTexture")
+                    .unwrap()
                     .unwrap();
                 im.texture = it.texture.clone();
             };
@@ -4855,21 +4307,26 @@ impl App {
             let mut im1 = self
                 .get_resource::<Image>(&mb.image_name, "Image")
                 .unwrap()
+                .unwrap()
                 .clone();
             let mut cr = self
                 .get_resource::<CustomRect>(&format!("MessageBox{}", mb.name), "CustomRect")
+                .unwrap()
                 .unwrap()
                 .clone();
             let mut t1 = self
                 .get_resource::<Text>(&mb.title_name, "Text")
                 .unwrap()
+                .unwrap()
                 .clone();
             let mut t2 = self
                 .get_resource::<Text>(&mb.content_name, "Text")
                 .unwrap()
+                .unwrap()
                 .clone();
             let mut s = self
                 .get_resource::<Switch>(&format!("MessageBox{}Close", mb.name), "Switch")
+                .unwrap()
                 .unwrap()
                 .clone();
             if (safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode)
@@ -4889,10 +4346,12 @@ impl App {
                 "Image" => Box::new(
                     self.get_resource::<Image>(&s.fill_resource_name, "Image")
                         .unwrap()
+                        .unwrap()
                         .clone(),
                 ),
                 "CustomRect" => Box::new(
                     self.get_resource::<CustomRect>(&s.fill_resource_name, "CustomRect")
+                        .unwrap()
                         .unwrap()
                         .clone(),
                 ),
@@ -5321,7 +4780,11 @@ impl App {
                 switch_name: name.to_string(),
             });
         };
-        let mut s = self.get_resource::<Switch>(name, "Switch").unwrap().clone();
+        let mut s = self
+            .get_resource::<Switch>(name, "Switch")
+            .unwrap()
+            .unwrap()
+            .clone();
         s.switched = false;
         if safe_mode.is_some() && safe_mode.unwrap() || self.safe_mode {
             if !self.check_resource_exists(&s.fill_resource_name.clone(), &s.fill_resource_type) {
@@ -5392,6 +4855,7 @@ impl App {
             "Image" => Box::new(
                 self.get_resource::<Image>(&s.fill_resource_name.clone(), &s.fill_resource_type)
                     .unwrap()
+                    .unwrap()
                     .clone(),
             ),
             "CustomRect" => Box::new(
@@ -5399,6 +4863,7 @@ impl App {
                     &s.fill_resource_name.clone(),
                     &s.fill_resource_type,
                 )
+                .unwrap()
                 .unwrap()
                 .clone(),
             ),
@@ -5446,6 +4911,7 @@ impl App {
                         };
                         let mut t = self
                             .get_resource::<Text>(&s.hint_text_name, "Text")
+                            .unwrap()
                             .unwrap()
                             .clone();
                         if !s.last_time_hovered {
@@ -5553,6 +5019,7 @@ impl App {
             let mut t = self
                 .get_resource::<Text>(&s.hint_text_name, "Text")
                 .unwrap()
+                .unwrap()
                 .clone();
             if self.timer.total_time
                 - self
@@ -5658,6 +5125,7 @@ impl App {
             let mut t = self
                 .get_resource::<Text>(&s.hint_text_name, "Text")
                 .unwrap()
+                .unwrap()
                 .clone();
             t.background_color[3] = t.color[3];
             t.content = s.appearance[(s.state * s.animation_count + appearance_count) as usize]
@@ -5706,6 +5174,7 @@ impl App {
             };
             let mut t = self
                 .get_resource::<Text>(&s.text_name, "Text")
+                .unwrap()
                 .unwrap()
                 .clone();
             t.origin_position = [
@@ -5761,7 +5230,10 @@ impl App {
                 switch_name: name.to_string(),
             });
         };
-        let s = self.get_resource::<Switch>(name, "Switch").unwrap();
+        let s = self
+            .get_resource::<Switch>(name, "Switch")
+            .unwrap()
+            .unwrap();
         Ok(SwitchData {
             switched: s.switched,
             last_time_clicked_index: s.last_time_clicked_index,
@@ -5999,6 +5471,7 @@ impl App {
         };
         let md = self
             .get_resource::<MouseDetector>(name, "MouseDetector")
+            .unwrap()
             .unwrap();
         Ok(md.detect_result.clone())
     }

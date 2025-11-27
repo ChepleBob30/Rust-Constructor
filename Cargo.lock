@@ -2894,7 +2894,7 @@ checksum = "0c6a884d2998352bb4daf0183589aec883f16a6da1f4dde84d8e2e9a5409a1ce"
 
 [[package]]
 name = "rust-constructor"
-version = "2.4.0"
+version = "2.5.0"
 dependencies = [
  "chrono",
  "eframe",
