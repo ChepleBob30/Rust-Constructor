@@ -5,8 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Github 星星](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![版本](https://img.shields.io/badge/版本-v2.5.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.6.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -28,10 +27,25 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.5.0 变量更新`。主要更新了以下内容：
-  - 修改了`Variable`的定义，现在任何种类的值都可以放入`Variable`中存储。
-  - 移除了`Value`。
-  - 移除了`var_b`，`var_decode_b`等一系列解析方法。
+- 目前的最新版本为`v2.6.0 排版大革命`。主要更新了以下内容：
+  - 添加`ResourcePanel`资源，可以对资源进行自动排版、锁定显示范围、拆分窗口等功能。
+  - 移除了`RustConstructorResource`的`reg_render_resource`方法，取而代之的是`active`和`modify_active`方法。
+  - 优化了活跃资源管理逻辑，现在可以通过`App`中`print_resource_active_info`方法直接打印活跃资源的信息。
+  - 为`BasicFrontResource`扩展了大量方法。
+  - 所有基本前端资源中的`x_grid`和`y_grid`重命名为`x_location_grid`和`y_location_grid`。
+  - 所有基本前端资源扩展了`x_size_grid`和`y_size_grid`字段，用于快速设置资源大小。
+  - 扩展了一系列枚举用于辅助资源调用。
+  - 所有资源扩展了`active`字段，用于标记是否调用资源。
+  - 将部分资源原本在`add`方法中需要传递的字段迁移到了结构体内部。
+  - 所有基本前端资源添加了`panel_name`，`panel_layout`和`allow_scrolling`，用于自定义资源在资源板中的样式。
+  - 所有基本前端资源扩展了`clip_rect`字段，用于控制资源显示范围，超出的部分不会显示出来。
+  - `Text`添加了文本框功能，现在超出指定尺寸的文本会被截断并用...替代。
+  - `Text`扩展了`actual_size`和`origin_size`字段，用于获取文本渲染部分实际尺寸和文本框原始尺寸。
+  - `MouseDetector`现在可以检测鼠标滚动量了。
+  - 为部分资源扩展了字段以适应`PositionConfig`。
+  - 将所有`add`方法集合成`add_resource`方法，可以自动根据资源类型执行操作并添加到资源列表中。
+  - 更新了`get_resource_mut`的返回值。
+  - 扩展了`RustConstructorError`以适应新资源。
   - 完善了部分代码。
 
 ---

@@ -1,6 +1,6 @@
 [package]
 name = "rust-constructor"
-version = "2.5.0"
+version = "2.6.0"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
 description = "A cross-platform GUI framework built on egui, the simplest way to develop GUI projects in Rust."
@@ -16,7 +16,7 @@ name = "rust_constructor"
 path = "src/lib.rs"
 
 [dependencies]
-egui = "0.33.2"
-eframe = "0.33.2"
+egui = "0.33.3"
+eframe = "0.33.3"
 image = "0.25.9"
 chrono = "0.4.42"

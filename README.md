@@ -5,8 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![GitHub Stars](https://img.shields.io/github/stars/ChepleBob30/Rust-Constructor?style=flat&color=red)
-[![Version](https://img.shields.io/badge/Version-v2.5.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.6.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -28,11 +27,26 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current latest version is `v2.5.0 Variable Update`. Major updates include:
-  - The definition of `Variable` has been modified. Now, any kind of value can be stored in `Variable`.
-  - Removed `Value`.
-  - A series of parsing methods such as `var_b` and `var_decode_b` have been removed.
-  - Improved parts of the codebase.
+- The current latest version is `v2.6.0 Layout Revolution`. The main updates include the following:
+  - Added `ResourcePanel` resource, which can automatically layout resources, lock display ranges, split windows, and other features.
+  - Removed the `reg_render_resource` method from `RustConstructorResource`, replacing it with `active` and `modify_active` methods.
+  - Optimized active resource management logic, now you can directly print active resource information through the `print_resource_active_info` method in `App`.
+  - Extended a large number of methods for `BasicFrontResource`.
+  - Renamed `x_grid` and `y_grid` to `x_location_grid` and `y_location_grid` in all basic front-end resources.
+  - Extended all basic front-end resources with `x_size_grid` and `y_size_grid` fields for quickly setting resource sizes.
+  - Extended a series of enumerations to assist with resource calls.
+  - Added an `active` field to all resources to mark whether the resource should be invoked.
+  - Migrated some fields that were originally passed in `add` methods of certain resources to inside the structures.
+  - Added `panel_name`, `panel_layout`, and `allow_scrolling` to all basic front-end resources for customizing resource styles in the resource panel.
+  - Extended all basic front-end resources with a `clip_rect` field to control resource display range, with parts exceeding the range not displayed.
+  - Added text box functionality to `Text`, where text exceeding specified dimensions will now be truncated and replaced with ... .
+  - Extended `Text` with `actual_size` and `origin_size` fields to get the actual size of the rendered text portion and the original size of the text box.
+  - `MouseDetector` can now detect mouse scroll amounts.
+  - Extended some resources with fields to adapt to `PositionConfig`.
+  - Consolidated all `add` methods into an `add_resource` method that can automatically perform operations based on resource type and add to the resource list.
+  - Updated the return value of `get_resource_mut`.
+  - Extended `RustConstructorError` to accommodate new resources.
+  - Improved some code.
 
 ---
 
