@@ -1,17 +1,17 @@
 # `Rust Constructor V2`
 
-## A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects in `Rust`
+## A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects with `Rust`
 
-[![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
-[![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.6.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Author: ChepleBob](https://img.shields.io/badge/author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
+[![Language: Rust](https://img.shields.io/badge/language-Rust-5F4C49)](https://www.rust-lang.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-v2.7.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
 ---
 
-`Rust Constructor` is an open-source project, but is not directly affiliated with the `egui` development team!
+`Rust Constructor` is an open-source project, but it has no direct relationship with the `egui` development team!
 
 ## Table of Contents
 
@@ -19,83 +19,94 @@ English | [简体中文](./README_zh.md)
 - [Introduction](#introduction)
 - [Quick Start](#quick-start)
 - [Purpose of Creating Rust Constructor](#purpose-of-creating-rust-constructor)
-- [Frequently Asked Questions](#frequently-asked-questions)
+- [FAQ](#faq)
 - [License](#license)
-- [Conclusion](#conclusion)
+- [Epilogue](#epilogue)
 
 ---
 
 ## Version Update Information
 
-- The current latest version is `v2.6.0 Layout Revolution`. The main updates include the following:
-  - Added `ResourcePanel` resource, which can automatically layout resources, lock display ranges, split windows, and other features.
-  - Removed the `reg_render_resource` method from `RustConstructorResource`, replacing it with `active` and `modify_active` methods.
-  - Optimized active resource management logic, now you can directly print active resource information through the `print_resource_active_info` method in `App`.
-  - Extended a large number of methods for `BasicFrontResource`.
-  - Renamed `x_grid` and `y_grid` to `x_location_grid` and `y_location_grid` in all basic front-end resources.
-  - Extended all basic front-end resources with `x_size_grid` and `y_size_grid` fields for quickly setting resource sizes.
-  - Extended a series of enumerations to assist with resource calls.
-  - Added an `active` field to all resources to mark whether the resource should be invoked.
-  - Migrated some fields that were originally passed in `add` methods of certain resources to inside the structures.
-  - Added `panel_name`, `panel_layout`, and `allow_scrolling` to all basic front-end resources for customizing resource styles in the resource panel.
-  - Extended all basic front-end resources with a `clip_rect` field to control resource display range, with parts exceeding the range not displayed.
-  - Added text box functionality to `Text`, where text exceeding specified dimensions will now be truncated and replaced with ... .
-  - Extended `Text` with `actual_size` and `origin_size` fields to get the actual size of the rendered text portion and the original size of the text box.
-  - `MouseDetector` can now detect mouse scroll amounts.
-  - Extended some resources with fields to adapt to `PositionConfig`.
-  - Consolidated all `add` methods into an `add_resource` method that can automatically perform operations based on resource type and add to the resource list.
-  - Updated the return value of `get_resource_mut`.
-  - Extended `RustConstructorError` to accommodate new resources.
-  - Improved some code.
+- The current latest version is `v2.7.0 Set Things Right`. The main updates include:
+  - Removed the issue reporting mechanism and all related content;
+  - Removed the safe mode mechanism and all related content;
+  - Added `render_layer`, `active_list`, `render_list`, `event_list`, and `event_map` to adapt to the new rendering mechanism;
+  - Removed `MouseDetector`, `Switch`, `MessageBox`, `ResourcePanel`, and all related content;
+  - Added a rendering queue mechanism, where calling resources will first add them to the rendering queue and render them uniformly when the page refreshes;
+  - Added `request_jump_render_list` to allow resources to skip the rendering queue and render in advance;
+  - Added an event handling mechanism, which sends events to the event list when you try to load external library resources, waiting for the external library to process them;
+  - Added `quick_place`, supporting automatic addition and execution of resources;
+  - `RustConstructorResource` now adds `display_display_info`, `modify_display_info`, `display_tags`, and `modify_tags` methods for quickly obtaining or modifying resources;
+  - Modified some methods of `BasicFrontResource`;
+  - Added `RustConstructorResourceBox` for encapsulating resources into `App`;
+  - Added `RustConstructorId`, containing resource name and type;
+  - Added `BasicFrontResourceConfig` for quickly setting styles of basic front-end resources;
+  - `center_display` is now renamed to `display_method`;
+  - `PositionConfig` is renamed to `PositionSizeConfig`, and added `position` and `size` fields;
+  - `ReportState` is now renamed to `EventState`;
+  - Removed `Problem` and `SeverityLevel`;
+  - Added `NeedPlaceholder` to mark whether external library resources need placeholder reservation;
+  - Added `tags` to all resources for customization, and merged a series of fields;
+  - `ImageTexture`'s `ctx` is now renamed to `context`;
+  - Added `BorderKind` to specify the edge display method of `CustomRect`;
+  - All fields of `ImageConfig`, `TextConfig`, and `CustomRectConfig` are now wrapped with `Option`, and unset fields will not override the original settings of the resource;
+  - Basic front resources added `display_info` and `basic_front_resource_config` for managing display information, position, size, and other basic information;
+  - `CustomRect` now supports setting edge display methods;
+  - Added `DisplayInfo` to control whether resources are allowed to be displayed, hidden, or ignore rendering layers;
+  - Modified `RustConstructorError`, now only retaining one error type and a description of the error;
+  - Added `RenderConfig` to specify the appearance of resources when rendered by debugging tools;
+  - Added `Event` to explain the type and state of events;
+  - Added a series of methods and fields to adapt to the new rendering mechanism;
+  - Extensively improved the code.
 
 ---
 
 ## Introduction
 
-- `Rust Constructor` is a Rust GUI development library built on egui, including common features such as timers, resource storage, and error handling.
-- `Rust Constructor` released its first version in `2025.2`, and today's `Rust Constructor` has undergone earth-shattering changes compared to that time.
+- `Rust Constructor` is a Rust graphical development library built on egui, including commonly used functions such as timers, resource storage, and error handling.
+- `Rust Constructor` released its first version in `2025.2`, and today's `Rust Constructor` has undergone earth-shaking changes compared to that time.
 
 ---
 
 ## Quick Start
 
-- To introduce `Rust Constructor`, please add `rust_constructor = "x.y.z"` (please replace xyz as needed) to your `toml`.
-- If you want to start `App` and perform some simple operations, it is recommended to refer to the [official egui documentation](https://github.com/emilk/egui).
-- Due to the large content and complex operations of `Rust Constructor`, it is inconvenient to fully describe here. You can refer to the official tutorial of `Rust Constructor` [Rust Constructor Guide](https://github.com/ChepleBob30/Rust-Constructor-Guide).
+- To introduce `Rust Constructor`, please add `rust_constructor = "x.y.z"` (please replace xyz according to your needs) to `toml`.
+- If you want to start `App` and perform some simple operations, it is recommended to refer to the [official documentation of egui](https://github.com/emilk/egui).
+- You can refer to the official tutorial of `Rust Constructor` [Rust Constructor Guide](https://github.com/ChepleBob30/Rust-Constructor-Guide).
 
 ---
 
 ## Purpose of Creating Rust Constructor
 
-We encountered some problems that `egui` could not solve during the development of [Targeted Vector](https://github.com/ChepleBob30/Targeted-Vector), so we expanded many tools. To enable more people to develop conveniently, we created `Rust Constructor`.
+We encountered some problems that `egui` could not solve during the development of [Targeted Vector](https://github.com/ChepleBob30/Targeted-Vector), so we expanded many tools. In order to allow more people to develop conveniently, we created `Rust Constructor`.
 
 ---
 
-## Frequently Asked Questions
+## FAQ
 
 - Q1: Which platforms does `Rust Constructor` support?
 
-- A1: `macOS` and `Windows` are confirmed to be fully supported, other platforms depend on `egui` support.
+- A1: `macOS` and `Windows` have been confirmed to be fully supported, and other platforms depend on `egui` support.
 
-- Q2: What are the differences between `Rust Constructor V2` and `V1`?
+- Q2: What is the difference between `Rust Constructor V2` and `V1`?
 
-- A2: The original architecture was modified to conform to the `crate` structure, published on [crates.io](https://crates.io/), and added an official guide.
+- A2: The original architecture was modified to conform to the structure of the library `crate`, published on [crates.io](https://crates.io/), and added an official guide.
 
-- Q3: Why do I get errors when calling resources?
+- Q3: Why do I get an error when calling a resource?
 
-- A3: Please ensure you have added the resources through the `add` method and there are no spelling errors.
+- A3: Please ensure that you have added the resource through the `add` method and there are no spelling errors.
 
 - Q4: How to modify resources?
 
-- A4: You can retrieve resources via `get_resource_mut`.
+- A4: Take out the resource through `get_resource_mut`.
 
-- Q5: What should I do if I encounter unknown error messages?
+- Q5: What should I do if I encounter unknown error prompts?
 
-- A5: First check the `RustConstructorError` definition in the `Rust Constructor` source code, find the problem you triggered and fix it.
+- A5: Prioritize checking the `RustConstructorError` definition in the `Rust Constructor` source code, find the problem you triggered and correct it.
 
-- Q6: Why is only `V2` of `Rust Constructor` on `crates.io`?
+- Q6: Why is there only `V2` of `Rust Constructor` on `crates.io`?
 
-- A6: `Rust Constructor V0` and `Rust Constructor V1` were essentially bloated projects with many redundant features and meaningless code, so they were not published.
+- A6: `Rust Constructor V0` and `Rust Constructor V1` are essentially bloated projects with many redundant functions and meaningless code, so they were not released.
 
 ---
 
@@ -103,6 +114,6 @@ We encountered some problems that `egui` could not solve during the development 
 
 [MIT](./LICENSE-MIT) © 2025 ChepleBob
 
-## Conclusion
+## Epilogue
 
 If you like this project, please give me a `star` on `GitHub`. You can also join our organization [Binder](https://github.com/Binder-organize).

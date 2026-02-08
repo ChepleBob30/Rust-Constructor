@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.6.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.7.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -27,26 +27,37 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.6.0 排版大革命`。主要更新了以下内容：
-  - 添加`ResourcePanel`资源，可以对资源进行自动排版、锁定显示范围、拆分窗口等功能。
-  - 移除了`RustConstructorResource`的`reg_render_resource`方法，取而代之的是`active`和`modify_active`方法。
-  - 优化了活跃资源管理逻辑，现在可以通过`App`中`print_resource_active_info`方法直接打印活跃资源的信息。
-  - 为`BasicFrontResource`扩展了大量方法。
-  - 所有基本前端资源中的`x_grid`和`y_grid`重命名为`x_location_grid`和`y_location_grid`。
-  - 所有基本前端资源扩展了`x_size_grid`和`y_size_grid`字段，用于快速设置资源大小。
-  - 扩展了一系列枚举用于辅助资源调用。
-  - 所有资源扩展了`active`字段，用于标记是否调用资源。
-  - 将部分资源原本在`add`方法中需要传递的字段迁移到了结构体内部。
-  - 所有基本前端资源添加了`panel_name`，`panel_layout`和`allow_scrolling`，用于自定义资源在资源板中的样式。
-  - 所有基本前端资源扩展了`clip_rect`字段，用于控制资源显示范围，超出的部分不会显示出来。
-  - `Text`添加了文本框功能，现在超出指定尺寸的文本会被截断并用...替代。
-  - `Text`扩展了`actual_size`和`origin_size`字段，用于获取文本渲染部分实际尺寸和文本框原始尺寸。
-  - `MouseDetector`现在可以检测鼠标滚动量了。
-  - 为部分资源扩展了字段以适应`PositionConfig`。
-  - 将所有`add`方法集合成`add_resource`方法，可以自动根据资源类型执行操作并添加到资源列表中。
-  - 更新了`get_resource_mut`的返回值。
-  - 扩展了`RustConstructorError`以适应新资源。
-  - 完善了部分代码。
+- 目前的最新版本为`v2.7.0 拨乱反正`。主要更新了以下内容：
+  - 移除了问题报告机制及与其相关的所有内容；
+  - 移除了安全模式机制及与其相关的所有内容；
+  - 添加了`render_layer` `active_list` `render_list` `event_list` `event_map`用于适配新的渲染机制；
+  - 移除了`MouseDetector` `Switch` `MessageBox` `ResourcePanel`及与其相关的所有内容；
+  - 添加了渲染队列机制，现在调用资源会先将其加入渲染队列，等到页面刷新时统一进行渲染；
+  - 添加`request_jump_render_list`以允许资源跳过渲染队列提前渲染；
+  - 添加事件处理机制，当你尝试加载外部库的资源时，会发送事件到事件列表中，等待外部库进行处理；
+  - 添加`quick_place`，支持自动添加资源并运行资源；
+  - `RustConstructorResource`现在添加了`display_display_info` `modify_display_info` `display_tags` `modify_tags`方法用于快速获取或修改资源；
+  - 修改了`BasicFrontResource`的部分方法；
+  - 添加了`RustConstructorResourceBox`，用于封装资源进入`App`；
+  - 添加了`RustConstructorId`，包含资源名称与类型；
+  - 添加了`BasicFrontResourceConfig`，用于快速设置基本前端资源的样式；
+  - `center_display`现已重命名为`display_method`；
+  - `PositionConfig`重命名为`PositionSizeConfig`，并添加了`position`和`size`两个字段；
+  - `ReportState`现已重命名为`EventState`；
+  - 移除了`Problem`和`SeverityLevel`；
+  - 添加了`NeedPlaceholder`用于标记外部库资源是否需要预留占位符；
+  - 为所有资源添加了`tags`用于自定义，并将一系列字段合并；
+  - `ImageTexture`的`ctx`现已重命名为`context`；
+  - 添加了`BorderKind`用于指定`CustomRect`的边缘显示方法；
+  - 现在`ImageConfig` `TextConfig` `CustomRectConfig`的所有字段都带有`Option`，未设置的字段不会覆盖资源原有设置；
+  - 基本前端资源添加了`display_info`和`basic_front_resource_config`用于管理显示信息和位置尺寸等基本信息；
+  - `CustomRect`现已支持设置边缘显示方法；
+  - 添加了`DisplayInfo`，用于控制资源是否允许显示，是否隐藏，是否忽略渲染层级；
+  - 修改了`RustConstructorError`，现在仅保留一个错误类型和一个对错误的描述；
+  - 添加了`RenderConfig`，用于指定调试工具渲染资源时的外观；
+  - 添加了`Event`，用于说明事件的类型和状态；
+  - 添加了一系列方法和字段以适配新渲染机制；
+  - 大范围改进了代码。
 
 ---
 
@@ -61,7 +72,7 @@
 
 - 若想引入`Rust Constructor`，请添加`rust_constructor = "x.y.z"`(请根据需要自行替换xyz)到`toml`中。
 - 如果想要启动`App`并进行一些简单的操作，建议查阅[egui的官方文档](https://github.com/emilk/egui)。
-- 由于`Rust Constructor`的内容量较大且操作复杂，这里不方便完整进行叙述。你可以参考`Rust Constructor`的官方教程[Rust Constructor 指南](https://github.com/ChepleBob30/Rust-Constructor-Guide)。
+- 你可以参考`Rust Constructor`的官方教程[Rust Constructor 指南](https://github.com/ChepleBob30/Rust-Constructor-Guide)。
 
 ---
 
