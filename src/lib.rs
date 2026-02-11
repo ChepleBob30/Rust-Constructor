@@ -1677,6 +1677,15 @@ pub struct DisplayInfo {
     pub ignore_render_layer: bool,
 }
 
+/// 定位请求跳过渲染队列的资源的方法。
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RequestMethod {
+    /// 使用资源的唯一标识符。
+    Id(RustConstructorId),
+    /// 使用资源的引用者。
+    Citer(RustConstructorId),
+}
+
 /// 程序主体。
 #[derive(Debug)]
 pub struct App {
@@ -1695,11 +1704,11 @@ pub struct App {
     /// 标记哪些资源属于基本前端资源，此列表不应以任何形式进行修改。
     pub basic_front_resource_list: Vec<String>,
     /// 标记渲染物件的层级和位置。
-    pub render_layer: Vec<([String; 2], [[f32; 2]; 2], bool)>,
+    pub render_layer: Vec<(RustConstructorId, [[f32; 2]; 2], bool)>,
     /// 活跃资源列表。
-    pub active_list: Vec<[String; 2]>,
+    pub active_list: Vec<RustConstructorId>,
     /// 渲染队列。
-    pub render_list: Vec<[String; 2]>,
+    pub render_list: Vec<RustConstructorId>,
     /// 事件列表。
     pub event_list: Vec<Event>,
     /// 事件映射。
@@ -1808,10 +1817,10 @@ impl App {
     ) -> Result<(), RustConstructorError> {
         if index < self.render_list.len() {
             let render_resource = &self.render_list.clone()[index];
-            match &*render_resource[1] {
+            match &*render_resource.discern_type {
                 "rust_constructor::Image" => {
-                    let image =
-                        self.get_resource::<Image>(&render_resource[0], "rust_constructor::Image")?;
+                    let image = self
+                        .get_resource::<Image>(&render_resource.name, "rust_constructor::Image")?;
                     if image.display_info.enable {
                         let mut image = image.clone();
                         if image.cite_texture != image.last_frame_cite_texture {
@@ -1899,12 +1908,12 @@ impl App {
                             };
                         };
                         image.last_frame_cite_texture = image.cite_texture.clone();
-                        self.replace_resource(&render_resource[0], image)?;
+                        self.replace_resource(&render_resource.name, image)?;
                     };
                 }
                 "rust_constructor::Text" => {
                     let text =
-                        self.get_resource::<Text>(&render_resource[0], "rust_constructor::Text")?;
+                        self.get_resource::<Text>(&render_resource.name, "rust_constructor::Text")?;
                     if text.display_info.enable {
                         let mut text = text.clone();
                         [
@@ -2250,7 +2259,7 @@ impl App {
                                 );
                                 let detect_result = ui.interact(
                                     rect,
-                                    Id::new(&render_resource[0]),
+                                    Id::new(&render_resource.name),
                                     Sense::click_and_drag(),
                                 );
 
@@ -2262,7 +2271,7 @@ impl App {
                                 };
 
                                 if let Some(index) = self.get_render_layer_resource(
-                                    &render_resource[0],
+                                    &render_resource.name,
                                     "rust_constructor::Text",
                                 ) && let Some(mouse_pos) =
                                     fullscreen_detect_result.interact_pos()
@@ -2503,7 +2512,7 @@ impl App {
                                         link_rect,
                                         egui::Id::new(format!(
                                             "link_{}_{}_{}",
-                                            render_resource[0], start, end
+                                            render_resource.name, start, end
                                         )),
                                         egui::Sense::click(),
                                     )]
@@ -2582,7 +2591,7 @@ impl App {
                                                 link_rect,
                                                 Id::new(format!(
                                                     "link_{}_{}_{}_row_{}",
-                                                    render_resource[0], start, end, row
+                                                    render_resource.name, start, end, row
                                                 )),
                                                 Sense::click(),
                                             ));
@@ -2595,7 +2604,7 @@ impl App {
                                 let mut is_pressing_link = false;
                                 for link_response in &link_responses {
                                     if let Some(index) = self.get_render_layer_resource(
-                                        &render_resource[0],
+                                        &render_resource.name,
                                         "rust_constructor::Text",
                                     ) && let Some(mouse_pos) =
                                         ui.input(|i| i.pointer.interact_pos())
@@ -2810,12 +2819,12 @@ impl App {
                             text.selection = None;
                         };
                         text.last_frame_content = display_content;
-                        self.replace_resource(&render_resource[0], text)?;
+                        self.replace_resource(&render_resource.name, text)?;
                     };
                 }
                 "rust_constructor::CustomRect" => {
                     let custom_rect = self.get_resource::<CustomRect>(
-                        &render_resource[0],
+                        &render_resource.name,
                         "rust_constructor::CustomRect",
                     )?;
                     if custom_rect.display_info.enable {
@@ -2901,7 +2910,7 @@ impl App {
                                 ));
                             };
                         };
-                        self.replace_resource(&render_resource[0], custom_rect)?;
+                        self.replace_resource(&render_resource.name, custom_rect)?;
                     };
                 }
                 _ => {
@@ -2925,25 +2934,21 @@ impl App {
         let mut text = String::from("Resource Active Info:\n");
         for info in &self.active_list {
             if display_complex_info {
-                if let Some(index) = self
-                    .rust_constructor_resource
-                    .iter()
-                    .position(|x| x.id.name == info[0] && x.id.discern_type == info[1])
-                {
+                if let Some(index) = self.check_resource_exists(&info.name, &info.discern_type) {
                     text += &if format {
                         format!(
                             "\nName: {}\nType: {}\nDetail: {:#?}\n",
-                            info[0], info[1], self.rust_constructor_resource[index],
+                            info.name, info.discern_type, self.rust_constructor_resource[index],
                         )
                     } else {
                         format!(
                             "\nName: {}\nType: {}\nDetail: {:?}\n",
-                            info[0], info[1], self.rust_constructor_resource[index],
+                            info.name, info.discern_type, self.rust_constructor_resource[index],
                         )
                     };
                 };
             } else {
-                text += &format!("\nName: {}\nType: {}\n", info[0], info[1]);
+                text += &format!("\nName: {}\nType: {}\n", info.name, info.discern_type);
             };
         }
         text
@@ -2952,12 +2957,15 @@ impl App {
     /// 打印渲染层级列表。
     pub fn render_layer_info(&self) -> String {
         let mut text = String::from("Render Layer Info:\n");
-        for ([name, expose_type], [min_position, max_position], ignore_render_layer) in
-            &self.render_layer
+        for (
+            RustConstructorId { name, discern_type },
+            [min_position, max_position],
+            ignore_render_layer,
+        ) in &self.render_layer
         {
             text += &format!(
                 "\nName: {:?}\nType: {:?}\nMin Position: {:?}\nMax Position: {:?}\nIgnore Render Layer: {}\n",
-                name, expose_type, min_position, max_position, ignore_render_layer
+                name, discern_type, min_position, max_position, ignore_render_layer
             );
         }
         text
@@ -2966,8 +2974,8 @@ impl App {
     /// 打印渲染队列。
     pub fn render_list_info(&self) -> String {
         let mut text = String::from("Render List Info:\n");
-        for [name, expose_type] in &self.render_list {
-            text += &format!("\nName: {:?}\nType: {:?}\n", name, expose_type);
+        for RustConstructorId { name, discern_type } in &self.render_list {
+            text += &format!("\nName: {:?}\nType: {:?}\n", name, discern_type);
         }
         text
     }
@@ -2976,8 +2984,11 @@ impl App {
     pub fn update_render_list(&mut self) {
         if self.render_list.is_empty() {
             for info in &self.active_list {
-                if self.basic_front_resource_list.contains(&info[1]) {
-                    self.render_list.push([info[0].clone(), info[1].clone()]);
+                if self.basic_front_resource_list.contains(&info.discern_type) {
+                    self.render_list.push(RustConstructorId {
+                        name: info.name.clone(),
+                        discern_type: info.discern_type.clone(),
+                    });
                 };
             }
         } else {
@@ -2991,10 +3002,15 @@ impl App {
             }
             let mut insert_index = 0;
             for info in &self.active_list {
-                if self.basic_front_resource_list.contains(&info[1]) {
+                if self.basic_front_resource_list.contains(&info.discern_type) {
                     if !self.render_list.contains(info) {
-                        self.render_list
-                            .insert(insert_index, [info[0].clone(), info[1].clone()]);
+                        self.render_list.insert(
+                            insert_index,
+                            RustConstructorId {
+                                name: info.name.clone(),
+                                discern_type: info.discern_type.clone(),
+                            },
+                        );
                     } else {
                         insert_index += 1;
                     }
@@ -3003,28 +3019,59 @@ impl App {
         };
     }
 
+    /// 请求在渲染队列中插队，且无视申请跳过队列的资源是否存在。
+    pub fn unsafe_request_jump_render_list(&mut self, requester: RequestMethod) {
+        #[allow(warnings)]
+        self.request_jump_render_list(requester);
+    }
+
     /// 请求在渲染队列中插队。
     pub fn request_jump_render_list(
         &mut self,
-        requester: [&str; 2],
+        requester: RequestMethod,
     ) -> Result<(), RustConstructorError> {
-        if let Some(index) = self
-            .render_list
-            .iter()
-            .position(|x| x[0] == requester[0] && x[1] == requester[1])
-        {
-            self.render_list.remove(index);
-            self.render_list
-                .push([requester[0].to_string(), requester[1].to_string()]);
-            Ok(())
-        } else {
-            Err(RustConstructorError {
-                error_id: "RenderResourceNotFound".to_string(),
-                description: format!(
-                    "Render resource \"{}({})\" not found.",
-                    requester[0], requester[1]
-                ),
-            })
+        match requester {
+            RequestMethod::Id(RustConstructorId { name, discern_type }) => {
+                if let Some(index) = self
+                    .render_list
+                    .iter()
+                    .position(|x| x.name == name && x.discern_type == discern_type)
+                {
+                    self.render_list.remove(index);
+                    self.render_list
+                        .push(RustConstructorId { name, discern_type });
+                    Ok(())
+                } else {
+                    Err(RustConstructorError {
+                        error_id: "RenderResourceNotFound".to_string(),
+                        description: format!(
+                            "Render resource \"{name}({discern_type})\" not found.",
+                        ),
+                    })
+                }
+            }
+            RequestMethod::Citer(RustConstructorId { name, discern_type }) => {
+                for (i, render_resource) in self.render_list.iter().enumerate() {
+                    let tags = self
+                        .get_box_resource(&render_resource.name, &render_resource.discern_type)?
+                        .display_tags();
+                    if let [Some(tag_name), Some(tag_type)] = [
+                        tags.iter().find(|x| x[0] == "citer_name"),
+                        tags.iter().find(|x| x[0] == "citer_type"),
+                    ] && tag_name[1] == name
+                        && tag_type[1] == discern_type
+                    {
+                        self.render_list.remove(i);
+                        self.render_list
+                            .push(RustConstructorId { name, discern_type });
+                        return Ok(());
+                    };
+                }
+                Err(RustConstructorError {
+                    error_id: "RenderResourceNotFound".to_string(),
+                    description: format!("Render resource \"{name}({discern_type})\" not found.",),
+                })
+            }
         }
     }
 
@@ -3032,12 +3079,8 @@ impl App {
     pub fn update_render_layer(&mut self) {
         self.render_layer.clear();
         for info in &self.render_list {
-            if let Some(index) = self
-                .rust_constructor_resource
-                .iter()
-                .position(|x| x.id.name == info[0] && x.id.discern_type == info[1])
-            {
-                let basic_front_resource: Box<dyn BasicFrontResource> = match &*info[1] {
+            if let Some(index) = self.check_resource_exists(&info.name, &info.discern_type) {
+                let basic_front_resource: Box<dyn BasicFrontResource> = match &*info.discern_type {
                     "rust_constructor::Image" => Box::new(
                         self.rust_constructor_resource[index]
                             .content
@@ -3153,7 +3196,7 @@ impl App {
     pub fn get_render_layer_resource(&self, name: &str, discern_type: &str) -> Option<usize> {
         self.render_layer
             .iter()
-            .position(|x| x.0[0] == name && x.0[1] == discern_type)
+            .position(|x| x.0.name == name && x.0.discern_type == discern_type)
     }
 
     /// 检查资源是否获取鼠标焦点。
@@ -3180,18 +3223,23 @@ impl App {
     ) -> Result<(), RustConstructorError> {
         let is_placeholder = name == Self::PLACEHOLDER[0] && discern_type == Self::PLACEHOLDER[1];
         if self.check_resource_exists(name, discern_type).is_some() || is_placeholder {
-            if let Some(index) = self
-                .active_list
-                .iter()
-                .position(|x| x[0] == Self::PLACEHOLDER[0] && x[1] == Self::PLACEHOLDER[1])
-                && !is_placeholder
+            if let Some(index) = self.active_list.iter().position(|x| {
+                x.name == Self::PLACEHOLDER[0] && x.discern_type == Self::PLACEHOLDER[1]
+            }) && !is_placeholder
             {
                 self.active_list.remove(index);
-                self.active_list
-                    .insert(index, [name.to_string(), discern_type.to_string()]);
+                self.active_list.insert(
+                    index,
+                    RustConstructorId {
+                        name: name.to_string(),
+                        discern_type: discern_type.to_string(),
+                    },
+                );
             } else {
-                self.active_list
-                    .push([name.to_string(), discern_type.to_string()]);
+                self.active_list.push(RustConstructorId {
+                    name: name.to_string(),
+                    discern_type: discern_type.to_string(),
+                });
             };
             Ok(())
         } else {
@@ -3322,7 +3370,7 @@ impl App {
             _ => {
                 let mut tag = HashMap::new();
                 tag.insert("name", name);
-                tag.insert("discern_type", discern_type);
+                tag.insert("type", discern_type);
                 self.add_event("rust_constructor::001", tag, false);
             }
         };
@@ -3346,20 +3394,20 @@ impl App {
             if let Some(index) = self
                 .active_list
                 .iter()
-                .position(|x| x[0] == name && x[1] == discern_type)
+                .position(|x| x.name == name && x.discern_type == discern_type)
             {
                 self.active_list.remove(index);
             };
             if let Some(index) = self
                 .render_layer
                 .iter()
-                .position(|x| x.0[0] == name && x.0[1] == discern_type)
+                .position(|x| x.0.name == name && x.0.discern_type == discern_type)
             {
                 self.render_layer.remove(index);
             };
             let mut tag = HashMap::new();
             tag.insert("name", name);
-            tag.insert("discern_type", discern_type);
+            tag.insert("type", discern_type);
             self.add_event("rust_constructor::002", tag, false);
             Ok(())
         } else {
@@ -3396,6 +3444,38 @@ impl App {
         }
     }
 
+    /// 从列表中获取封装的不可变资源。
+    pub fn get_box_resource(
+        &self,
+        name: &str,
+        discern_type: &str,
+    ) -> Result<&dyn RustConstructorResource, RustConstructorError> {
+        if let Some(index) = self.check_resource_exists(name, discern_type) {
+            Ok(&*self.rust_constructor_resource[index].content)
+        } else {
+            Err(RustConstructorError {
+                error_id: "ResourceNotFound".to_string(),
+                description: format!("Resource \"{name}({discern_type})\" not found."),
+            })
+        }
+    }
+
+    /// 从列表中获取封装的可变资源。
+    pub fn get_box_resource_mut(
+        &mut self,
+        name: &str,
+        discern_type: &str,
+    ) -> Result<&mut dyn RustConstructorResource, RustConstructorError> {
+        if let Some(index) = self.check_resource_exists(name, discern_type) {
+            Ok(&mut *self.rust_constructor_resource[index].content)
+        } else {
+            Err(RustConstructorError {
+                error_id: "ResourceNotFound".to_string(),
+                description: format!("Resource \"{name}({discern_type})\" not found."),
+            })
+        }
+    }
+
     /// 从列表中获取不可变资源。
     pub fn get_resource<T>(
         &self,
@@ -3405,25 +3485,18 @@ impl App {
     where
         T: RustConstructorResource + 'static,
     {
-        if let Some(index) = self.check_resource_exists(name, discern_type) {
-            if let Some(resource) = self.rust_constructor_resource[index]
-                .content
-                .as_any()
-                .downcast_ref::<T>()
-            {
-                Ok(resource)
-            } else {
-                Err(RustConstructorError {
-                    error_id: "ResourceGenericMismatch".to_string(),
-                    description: format!(
-                        "The generic type of the resource \"{name}({discern_type})\" is mismatched."
-                    ),
-                })
-            }
+        if let Some(resource) = self
+            .get_box_resource(name, discern_type)?
+            .as_any()
+            .downcast_ref::<T>()
+        {
+            Ok(resource)
         } else {
             Err(RustConstructorError {
-                error_id: "ResourceNotFound".to_string(),
-                description: format!("Resource \"{name}({discern_type})\" not found."),
+                error_id: "ResourceGenericMismatch".to_string(),
+                description: format!(
+                    "The generic type of the resource \"{name}({discern_type})\" is mismatched."
+                ),
             })
         }
     }
@@ -3437,25 +3510,18 @@ impl App {
     where
         T: RustConstructorResource + 'static,
     {
-        if let Some(index) = self.check_resource_exists(name, discern_type) {
-            if let Some(resource) = self.rust_constructor_resource[index]
-                .content
-                .as_any_mut()
-                .downcast_mut::<T>()
-            {
-                Ok(resource)
-            } else {
-                Err(RustConstructorError {
-                    error_id: "ResourceGenericMismatch".to_string(),
-                    description: format!(
-                        "The generic type of the resource \"{name}({discern_type})\" is mismatched."
-                    ),
-                })
-            }
+        if let Some(resource) = self
+            .get_box_resource_mut(name, discern_type)?
+            .as_any_mut()
+            .downcast_mut::<T>()
+        {
+            Ok(resource)
         } else {
             Err(RustConstructorError {
-                error_id: "ResourceNotFound".to_string(),
-                description: format!("Resource \"{name}({discern_type})\" not found."),
+                error_id: "ResourceGenericMismatch".to_string(),
+                description: format!(
+                    "The generic type of the resource \"{name}({discern_type})\" is mismatched."
+                ),
             })
         }
     }
@@ -3541,7 +3607,7 @@ impl App {
                 _ => {
                     let mut tag = HashMap::new();
                     tag.insert("name", name);
-                    tag.insert("discern_type", discern_type);
+                    tag.insert("type", discern_type);
                     self.add_event("rust_constructor::003", tag, true);
                 }
             }

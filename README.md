@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-v2.7.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/version-v2.7.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -27,37 +27,12 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current latest version is `v2.7.0 Set Things Right`. The main updates include:
-  - Removed the issue reporting mechanism and all related content;
-  - Removed the safe mode mechanism and all related content;
-  - Added `render_layer`, `active_list`, `render_list`, `event_list`, and `event_map` to adapt to the new rendering mechanism;
-  - Removed `MouseDetector`, `Switch`, `MessageBox`, `ResourcePanel`, and all related content;
-  - Added a rendering queue mechanism, where calling resources will first add them to the rendering queue and render them uniformly when the page refreshes;
-  - Added `request_jump_render_list` to allow resources to skip the rendering queue and render in advance;
-  - Added an event handling mechanism, which sends events to the event list when you try to load external library resources, waiting for the external library to process them;
-  - Added `quick_place`, supporting automatic addition and execution of resources;
-  - `RustConstructorResource` now adds `display_display_info`, `modify_display_info`, `display_tags`, and `modify_tags` methods for quickly obtaining or modifying resources;
-  - Modified some methods of `BasicFrontResource`;
-  - Added `RustConstructorResourceBox` for encapsulating resources into `App`;
-  - Added `RustConstructorId`, containing resource name and type;
-  - Added `BasicFrontResourceConfig` for quickly setting styles of basic front-end resources;
-  - `center_display` is now renamed to `display_method`;
-  - `PositionConfig` is renamed to `PositionSizeConfig`, and added `position` and `size` fields;
-  - `ReportState` is now renamed to `EventState`;
-  - Removed `Problem` and `SeverityLevel`;
-  - Added `NeedPlaceholder` to mark whether external library resources need placeholder reservation;
-  - Added `tags` to all resources for customization, and merged a series of fields;
-  - `ImageTexture`'s `ctx` is now renamed to `context`;
-  - Added `BorderKind` to specify the edge display method of `CustomRect`;
-  - All fields of `ImageConfig`, `TextConfig`, and `CustomRectConfig` are now wrapped with `Option`, and unset fields will not override the original settings of the resource;
-  - Basic front resources added `display_info` and `basic_front_resource_config` for managing display information, position, size, and other basic information;
-  - `CustomRect` now supports setting edge display methods;
-  - Added `DisplayInfo` to control whether resources are allowed to be displayed, hidden, or ignore rendering layers;
-  - Modified `RustConstructorError`, now only retaining one error type and a description of the error;
-  - Added `RenderConfig` to specify the appearance of resources when rendered by debugging tools;
-  - Added `Event` to explain the type and state of events;
-  - Added a series of methods and fields to adapt to the new rendering mechanism;
-  - Extensively improved the code.
+- The current latest version is `v2.7.1`. The main updates include:
+  - Added `RequestMethod` to manage methods for requesting to skip rendering queue;
+  - Replaced `[String; 2]` with `RustConstructorId` in certain fields;
+  - Updated `request_jump_render_list` to now locate rendering resources and bypass queue through resource reference inspection;
+  - Added `unsafe_request_jump_render_list` method to preemptively jump rendering queue regardless of referenced resource existence;
+  - Added `get_box_resource` and `get_box_resource_mut` methods to retrieve resources without specifying concrete types.
 
 ---
 
