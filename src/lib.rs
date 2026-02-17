@@ -25,14 +25,14 @@ use eframe::{
     epaint::{Stroke, textures::TextureOptions},
 };
 use egui::{
-    Color32, ColorImage, Context, CornerRadius, FontData, FontDefinitions, FontFamily, FontId,
-    Galley, Id, ImageSource, Key, OpenUrl, Pos2, Sense, StrokeKind, TextureHandle, Ui, Vec2,
-    text::CCursor,
+    Color32, ColorImage, Context, CornerRadius, CursorIcon, FontData, FontDefinitions, FontFamily,
+    FontId, Galley, Id, ImageSource, Key, OpenUrl, PointerButton, Pos2, Sense, StrokeKind,
+    TextureHandle, Ui, Vec2, text::CCursor,
 };
 use std::{
     any::{Any, type_name_of_val},
     char,
-    collections::HashMap,
+    cmp::Ordering,
     error::Error,
     fmt::{Debug, Display, Formatter},
     fs::{File, read},
@@ -60,7 +60,7 @@ pub trait RustConstructorResource: Debug {
     fn display_tags(&self) -> Vec<[String; 2]>;
 
     /// 修改已有的标签。
-    fn modify_tags(&mut self, tags: &[[String; 2]]);
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool);
 }
 
 /// 标记并管理用于显示给用户的基本前端资源。
@@ -73,6 +73,12 @@ pub trait BasicFrontResource: RustConstructorResource {
 
     /// 获取资源渲染范围。
     fn display_clip_rect(&self) -> Option<PositionSizeConfig>;
+
+    /// 获取资源显示位置。
+    fn display_position(&self) -> [f32; 2];
+
+    /// 获取资源尺寸。
+    fn display_size(&self) -> [f32; 2];
 
     /// 修改基本前端资源配置。
     fn modify_basic_front_resource_config(
@@ -143,10 +149,6 @@ impl BasicFrontResourceConfig {
 /// 用于配置资源位置和尺寸的结构体。
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct PositionSizeConfig {
-    /// 资源位置。
-    pub position: [f32; 2],
-    /// 资源尺寸。
-    pub size: [f32; 2],
     /// 原始位置。
     pub origin_position: [f32; 2],
     /// 原始尺寸。
@@ -168,8 +170,6 @@ pub struct PositionSizeConfig {
 impl Default for PositionSizeConfig {
     fn default() -> Self {
         PositionSizeConfig {
-            position: [0_f32, 0_f32],
-            size: [0_f32, 0_f32],
             origin_position: [0_f32, 0_f32],
             origin_size: [0_f32, 0_f32],
             x_location_grid: [0_f32, 0_f32],
@@ -247,16 +247,6 @@ pub struct EventState {
     pub current_page_runtime: f32,
 }
 
-/// 用于标记是否需要为外部库预留占位资源。
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum NeedPlaceholder {
-    /// 需要预留占位资源及预留的数量。
-    Yes(u32),
-    /// 不需要预留占位资源。
-    #[default]
-    No,
-}
-
 /// 用于存储页面数据的RC资源。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PageData {
@@ -289,8 +279,17 @@ impl RustConstructorResource for PageData {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -313,8 +312,17 @@ impl PageData {
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -394,8 +402,17 @@ impl RustConstructorResource for ImageTexture {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -419,8 +436,17 @@ impl ImageTexture {
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -451,11 +477,15 @@ pub struct CustomRectConfig {
     /// 圆角。
     pub rounding: Option<f32>,
     /// 颜色。
-    pub color: Option<[u8; 4]>,
+    pub color: Option<[u8; 3]>,
+    /// 不透明度。
+    pub alpha: Option<u8>,
     /// 边框宽度。
     pub border_width: Option<f32>,
     /// 边框颜色。
-    pub border_color: Option<[u8; 4]>,
+    pub border_color: Option<[u8; 3]>,
+    /// 边框透明度。
+    pub border_alpha: Option<u8>,
     /// 边框类型。
     pub border_kind: Option<BorderKind>,
     /// 标签。
@@ -473,8 +503,10 @@ impl CustomRectConfig {
             ignore_render_layer: Some(custom_rect.display_info.ignore_render_layer),
             rounding: Some(custom_rect.rounding),
             color: Some(custom_rect.color),
+            alpha: Some(custom_rect.alpha),
             border_width: Some(custom_rect.border_width),
             border_color: Some(custom_rect.border_color),
+            border_alpha: Some(custom_rect.border_alpha),
             border_kind: Some(custom_rect.border_kind),
             tags: Some(custom_rect.tags.clone()),
         }
@@ -514,8 +546,14 @@ impl CustomRectConfig {
     }
 
     #[inline]
-    pub fn color(mut self, color: Option<[u8; 4]>) -> Self {
+    pub fn color(mut self, color: Option<[u8; 3]>) -> Self {
         self.color = color;
+        self
+    }
+
+    #[inline]
+    pub fn alpha(mut self, alpha: Option<u8>) -> Self {
+        self.alpha = alpha;
         self
     }
 
@@ -526,8 +564,14 @@ impl CustomRectConfig {
     }
 
     #[inline]
-    pub fn border_color(mut self, border_color: Option<[u8; 4]>) -> Self {
+    pub fn border_color(mut self, border_color: Option<[u8; 3]>) -> Self {
         self.border_color = border_color;
+        self
+    }
+
+    #[inline]
+    pub fn border_alpha(mut self, border_alpha: Option<u8>) -> Self {
+        self.border_alpha = border_alpha;
         self
     }
 
@@ -549,16 +593,24 @@ impl CustomRectConfig {
 pub struct CustomRect {
     /// 基本配置。
     pub basic_front_resource_config: BasicFrontResourceConfig,
+    /// 资源位置。
+    pub position: [f32; 2],
+    /// 资源尺寸。
+    pub size: [f32; 2],
     /// 显示信息。
     pub display_info: DisplayInfo,
     /// 圆角。
     pub rounding: f32,
     /// 颜色。
-    pub color: [u8; 4],
+    pub color: [u8; 3],
+    /// 不透明度。
+    pub alpha: u8,
     /// 边框宽度。
     pub border_width: f32,
     /// 边框颜色。
-    pub border_color: [u8; 4],
+    pub border_color: [u8; 3],
+    /// 边框不透明度。
+    pub border_alpha: u8,
     /// 边框类型。
     pub border_kind: BorderKind,
     /// 标签。
@@ -586,8 +638,17 @@ impl RustConstructorResource for CustomRect {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -602,6 +663,14 @@ impl BasicFrontResource for CustomRect {
 
     fn display_clip_rect(&self) -> Option<PositionSizeConfig> {
         self.basic_front_resource_config.clip_rect
+    }
+
+    fn display_position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    fn display_size(&self) -> [f32; 2] {
+        self.size
     }
 
     fn modify_basic_front_resource_config(
@@ -624,11 +693,15 @@ impl Default for CustomRect {
     fn default() -> Self {
         Self {
             basic_front_resource_config: BasicFrontResourceConfig::default(),
+            position: [0_f32, 0_f32],
+            size: [0_f32, 0_f32],
             display_info: DisplayInfo::default(),
             rounding: 2_f32,
-            color: [255, 255, 255, 255],
+            color: [255, 255, 255],
+            alpha: 255,
             border_width: 2_f32,
-            border_color: [0, 0, 0, 255],
+            border_color: [0, 0, 0],
+            border_alpha: 255,
             border_kind: BorderKind::default(),
             tags: Vec::new(),
         }
@@ -655,11 +728,17 @@ impl CustomRect {
         if let Some(color) = config.color {
             self.color = color;
         };
+        if let Some(alpha) = config.alpha {
+            self.alpha = alpha;
+        };
         if let Some(border_width) = config.border_width {
             self.border_width = border_width;
         };
         if let Some(border_color) = config.border_color {
             self.border_color = border_color;
+        };
+        if let Some(border_alpha) = config.border_alpha {
+            self.border_alpha = border_alpha;
         };
         if let Some(border_kind) = config.border_kind {
             self.border_kind = border_kind;
@@ -698,8 +777,14 @@ impl CustomRect {
     }
 
     #[inline]
-    pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.color = [r, g, b, a];
+    pub fn color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.color = [r, g, b];
+        self
+    }
+
+    #[inline]
+    pub fn alpha(mut self, alpha: u8) -> Self {
+        self.alpha = alpha;
         self
     }
 
@@ -710,8 +795,14 @@ impl CustomRect {
     }
 
     #[inline]
-    pub fn border_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.border_color = [r, g, b, a];
+    pub fn border_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.border_color = [r, g, b];
+        self
+    }
+
+    #[inline]
+    pub fn border_alpha(mut self, border_alpha: u8) -> Self {
+        self.border_alpha = border_alpha;
         self
     }
 
@@ -722,8 +813,17 @@ impl CustomRect {
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -742,9 +842,13 @@ pub struct ImageConfig {
     /// 不透明度。
     pub alpha: Option<u8>,
     /// 叠加颜色。
-    pub overlay_color: Option<[u8; 4]>,
+    pub overlay_color: Option<[u8; 3]>,
+    /// 叠加透明度。
+    pub overlay_alpha: Option<u8>,
     /// 背景颜色。
-    pub background_color: Option<[u8; 4]>,
+    pub background_color: Option<[u8; 3]>,
+    /// 背景透明度。
+    pub background_alpha: Option<u8>,
     /// 旋转角度(只能顺时针，建议搭配std::f32::PI使用)。
     pub rotate_angle: Option<f32>,
     /// 旋转中心。
@@ -764,7 +868,9 @@ impl ImageConfig {
             ignore_render_layer: Some(image.display_info.ignore_render_layer),
             alpha: Some(image.alpha),
             overlay_color: Some(image.overlay_color),
+            overlay_alpha: Some(image.overlay_alpha),
             background_color: Some(image.background_color),
+            background_alpha: Some(image.background_alpha),
             rotate_angle: Some(image.rotate_angle),
             rotate_center: Some(image.rotate_center),
             cite_texture: Some(image.cite_texture.clone()),
@@ -806,14 +912,26 @@ impl ImageConfig {
     }
 
     #[inline]
-    pub fn overlay_color(mut self, overlay_color: Option<[u8; 4]>) -> Self {
+    pub fn overlay_color(mut self, overlay_color: Option<[u8; 3]>) -> Self {
         self.overlay_color = overlay_color;
         self
     }
 
     #[inline]
-    pub fn background_color(mut self, background_color: Option<[u8; 4]>) -> Self {
+    pub fn overlay_alpha(mut self, overlay_alpha: Option<u8>) -> Self {
+        self.overlay_alpha = overlay_alpha;
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, background_color: Option<[u8; 3]>) -> Self {
         self.background_color = background_color;
+        self
+    }
+
+    #[inline]
+    pub fn background_alpha(mut self, background_alpha: Option<u8>) -> Self {
+        self.background_alpha = background_alpha;
         self
     }
 
@@ -847,6 +965,10 @@ impl ImageConfig {
 pub struct Image {
     /// 基本配置。
     pub basic_front_resource_config: BasicFrontResourceConfig,
+    /// 资源位置。
+    pub position: [f32; 2],
+    /// 资源尺寸。
+    pub size: [f32; 2],
     /// 显示信息。
     pub display_info: DisplayInfo,
     /// 图片纹理。
@@ -854,9 +976,13 @@ pub struct Image {
     /// 不透明度。
     pub alpha: u8,
     /// 叠加颜色。
-    pub overlay_color: [u8; 4],
+    pub overlay_color: [u8; 3],
+    /// 叠加透明度。
+    pub overlay_alpha: u8,
     /// 背景颜色。
-    pub background_color: [u8; 4],
+    pub background_color: [u8; 3],
+    /// 背景透明度。
+    pub background_alpha: u8,
     /// 旋转角度(只能顺时针，建议搭配std::f32::consts::PI使用)。
     pub rotate_angle: f32,
     /// 旋转中心。
@@ -890,8 +1016,17 @@ impl RustConstructorResource for Image {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -906,6 +1041,14 @@ impl BasicFrontResource for Image {
 
     fn display_clip_rect(&self) -> Option<PositionSizeConfig> {
         self.basic_front_resource_config.clip_rect
+    }
+
+    fn display_position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    fn display_size(&self) -> [f32; 2] {
+        self.size
     }
 
     fn modify_basic_front_resource_config(
@@ -928,11 +1071,15 @@ impl Default for Image {
     fn default() -> Self {
         Self {
             basic_front_resource_config: BasicFrontResourceConfig::default(),
+            position: [0_f32, 0_f32],
+            size: [0_f32, 0_f32],
             display_info: DisplayInfo::default(),
             texture: None,
             alpha: 255,
-            overlay_color: [255, 255, 255, 255],
-            background_color: [0, 0, 0, 0],
+            overlay_color: [255, 255, 255],
+            overlay_alpha: 255,
+            background_color: [0, 0, 0],
+            background_alpha: 0,
             rotate_angle: 0_f32,
             rotate_center: [0_f32, 0_f32],
             cite_texture: String::from("rust_constructor::ImageTexture"),
@@ -962,8 +1109,14 @@ impl Image {
         if let Some(overlay_color) = config.overlay_color {
             self.overlay_color = overlay_color;
         };
+        if let Some(overlay_alpha) = config.overlay_alpha {
+            self.overlay_alpha = overlay_alpha;
+        };
         if let Some(background_color) = config.background_color {
             self.background_color = background_color;
+        };
+        if let Some(background_alpha) = config.background_alpha {
+            self.background_alpha = background_alpha;
         };
         if let Some(rotate_angle) = config.rotate_angle {
             self.rotate_angle = rotate_angle;
@@ -1008,14 +1161,26 @@ impl Image {
     }
 
     #[inline]
-    pub fn overlay_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.overlay_color = [r, g, b, a];
+    pub fn overlay_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.overlay_color = [r, g, b];
         self
     }
 
     #[inline]
-    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.background_color = [r, g, b, a];
+    pub fn overlay_alpha(mut self, overlay_alpha: u8) -> Self {
+        self.overlay_alpha = overlay_alpha;
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.background_color = [r, g, b];
+        self
+    }
+
+    #[inline]
+    pub fn background_alpha(mut self, background_alpha: u8) -> Self {
+        self.background_alpha = background_alpha;
         self
     }
 
@@ -1038,8 +1203,17 @@ impl Image {
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -1069,9 +1243,13 @@ pub struct TextConfig {
     /// 字号。
     pub font_size: Option<f32>,
     /// 文本颜色。
-    pub color: Option<[u8; 4]>,
+    pub color: Option<[u8; 3]>,
+    /// 文本透明度。
+    pub alpha: Option<u8>,
     /// 背景颜色。
-    pub background_color: Option<[u8; 4]>,
+    pub background_color: Option<[u8; 3]>,
+    /// 背景透明度。
+    pub background_alpha: Option<u8>,
     /// 圆角。
     pub background_rounding: Option<f32>,
     /// 字体。
@@ -1080,8 +1258,8 @@ pub struct TextConfig {
     pub selectable: Option<bool>,
     /// 超链接文本。
     pub hyperlink_text: Option<Vec<(String, HyperlinkSelectMethod)>>,
-    /// 是否使用截断文本功能。
-    pub truncate: Option<bool>,
+    /// 是否让渲染层大小自动匹配实际大小。
+    pub auto_fit: Option<[bool; 2]>,
     /// 标签。
     pub tags: Option<Vec<[String; 2]>>,
 }
@@ -1096,12 +1274,14 @@ impl TextConfig {
             content: Some(text.content.clone()),
             font_size: Some(text.font_size),
             color: Some(text.color),
+            alpha: Some(text.alpha),
             background_color: Some(text.background_color),
+            background_alpha: Some(text.background_alpha),
             background_rounding: Some(text.background_rounding),
             font: Some(text.font.clone()),
             selectable: Some(text.selectable),
             hyperlink_text: Some(text.hyperlink_text.clone()),
-            truncate: Some(text.truncate),
+            auto_fit: Some(text.auto_fit),
             tags: Some(text.tags.clone()),
         }
     }
@@ -1146,14 +1326,26 @@ impl TextConfig {
     }
 
     #[inline]
-    pub fn color(mut self, color: Option<[u8; 4]>) -> Self {
+    pub fn color(mut self, color: Option<[u8; 3]>) -> Self {
         self.color = color;
         self
     }
 
     #[inline]
-    pub fn background_color(mut self, background_color: Option<[u8; 4]>) -> Self {
+    pub fn alpha(mut self, alpha: Option<u8>) -> Self {
+        self.alpha = alpha;
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, background_color: Option<[u8; 3]>) -> Self {
         self.background_color = background_color;
+        self
+    }
+
+    #[inline]
+    pub fn background_alpha(mut self, background_alpha: Option<u8>) -> Self {
+        self.background_alpha = background_alpha;
         self
     }
 
@@ -1185,8 +1377,8 @@ impl TextConfig {
     }
 
     #[inline]
-    pub fn truncate(mut self, truncate: Option<bool>) -> Self {
-        self.truncate = truncate;
+    pub fn auto_fit(mut self, auto_fit: Option<[bool; 2]>) -> Self {
+        self.auto_fit = auto_fit;
         self
     }
 
@@ -1202,34 +1394,44 @@ impl TextConfig {
 pub struct Text {
     /// 基本配置。
     pub basic_front_resource_config: BasicFrontResourceConfig,
+    /// 资源位置。
+    pub position: [f32; 2],
+    /// 资源尺寸。
+    pub size: [f32; 2],
     /// 显示信息。
     pub display_info: DisplayInfo,
     /// 文本内容。
     pub content: String,
     /// 字号。
     pub font_size: f32,
-    /// 文本实际尺寸。
-    pub actual_size: [f32; 2],
     /// 文本颜色。
-    pub color: [u8; 4],
+    pub color: [u8; 3],
+    /// 文本透明度。
+    pub alpha: u8,
     /// 背景颜色。
-    pub background_color: [u8; 4],
+    pub background_color: [u8; 3],
+    /// 背景透明度。
+    pub background_alpha: u8,
     /// 圆角。
     pub background_rounding: f32,
     /// 字体。
     pub font: String,
-    /// 框选选中的文本。
-    pub selection: Option<(usize, usize)>,
     /// 是否可框选。
     pub selectable: bool,
     /// 超链接文本。
     pub hyperlink_text: Vec<(String, HyperlinkSelectMethod)>,
     /// 超链接选取索引值与链接。
     pub hyperlink_index: Vec<(usize, usize, String)>,
-    /// 上一帧的文本内容(用于优化超链接文本选取)。
+    /// 是否让渲染层大小自动匹配实际大小。
+    pub auto_fit: [bool; 2],
+    /// 上一帧的文本内容。
     pub last_frame_content: String,
-    /// 是否截断文本。
-    pub truncate: bool,
+    /// 框选选中的文本。
+    pub selection: Option<(usize, usize)>,
+    /// 文本截断尺寸。
+    pub truncate_size: [f32; 2],
+    /// 文本实际尺寸。
+    pub actual_size: [f32; 2],
     /// 标签。
     pub tags: Vec<[String; 2]>,
 }
@@ -1255,8 +1457,17 @@ impl RustConstructorResource for Text {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -1271,6 +1482,14 @@ impl BasicFrontResource for Text {
 
     fn display_clip_rect(&self) -> Option<PositionSizeConfig> {
         self.basic_front_resource_config.clip_rect
+    }
+
+    fn display_position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    fn display_size(&self) -> [f32; 2] {
+        self.size
     }
 
     fn modify_basic_front_resource_config(
@@ -1293,20 +1512,25 @@ impl Default for Text {
     fn default() -> Self {
         Self {
             basic_front_resource_config: BasicFrontResourceConfig::default(),
+            position: [0_f32, 0_f32],
+            size: [0_f32, 0_f32],
             display_info: DisplayInfo::default(),
             content: String::from("Hello world"),
             font_size: 16_f32,
-            actual_size: [0_f32, 0_f32],
-            color: [255, 255, 255, 255],
-            background_color: [0, 0, 0, 0],
+            color: [255, 255, 255],
+            alpha: 255,
+            background_color: [0, 0, 0],
+            background_alpha: 0,
             background_rounding: 2_f32,
             font: String::new(),
-            selection: None,
             selectable: true,
+            auto_fit: [true, true],
             hyperlink_text: Vec::new(),
             hyperlink_index: Vec::new(),
             last_frame_content: String::from(""),
-            truncate: false,
+            selection: None,
+            truncate_size: [0_f32, 0_f32],
+            actual_size: [0_f32, 0_f32],
             tags: Vec::new(),
         }
     }
@@ -1335,8 +1559,14 @@ impl Text {
         if let Some(color) = config.color {
             self.color = color;
         };
+        if let Some(alpha) = config.alpha {
+            self.alpha = alpha;
+        };
         if let Some(background_color) = config.background_color {
             self.background_color = background_color;
+        };
+        if let Some(background_alpha) = config.background_alpha {
+            self.background_alpha = background_alpha;
         };
         if let Some(background_rounding) = config.background_rounding {
             self.background_rounding = background_rounding;
@@ -1350,8 +1580,8 @@ impl Text {
         if let Some(hyperlink_text) = config.hyperlink_text.clone() {
             self.hyperlink_text = hyperlink_text;
         };
-        if let Some(truncate) = config.truncate {
-            self.truncate = truncate;
+        if let Some(auto_fit) = config.auto_fit {
+            self.auto_fit = auto_fit;
         };
         if let Some(tags) = config.tags.clone() {
             self.tags = tags;
@@ -1393,14 +1623,26 @@ impl Text {
     }
 
     #[inline]
-    pub fn color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.color = [r, g, b, a];
+    pub fn color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.color = [r, g, b];
         self
     }
 
     #[inline]
-    pub fn background_color(mut self, r: u8, g: u8, b: u8, a: u8) -> Self {
-        self.background_color = [r, g, b, a];
+    pub fn alpha(mut self, alpha: u8) -> Self {
+        self.alpha = alpha;
+        self
+    }
+
+    #[inline]
+    pub fn background_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.background_color = [r, g, b];
+        self
+    }
+
+    #[inline]
+    pub fn background_alpha(mut self, alpha: u8) -> Self {
+        self.background_alpha = alpha;
         self
     }
 
@@ -1423,7 +1665,7 @@ impl Text {
     }
 
     #[inline]
-    pub fn hyperlink_text(
+    pub fn push_hyperlink_text(
         mut self,
         target_text: &str,
         select_method: HyperlinkSelectMethod,
@@ -1434,14 +1676,29 @@ impl Text {
     }
 
     #[inline]
-    pub fn truncate(mut self, truncate: bool) -> Self {
-        self.truncate = truncate;
+    pub fn hyperlink_text(mut self, hyperlink_text: Vec<(String, HyperlinkSelectMethod)>) -> Self {
+        self.hyperlink_text = hyperlink_text;
         self
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn auto_fit(mut self, x: bool, y: bool) -> Self {
+        self.auto_fit = [x, y];
+        self
+    }
+
+    #[inline]
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -1474,8 +1731,17 @@ impl<T: Debug + 'static> RustConstructorResource for Variable<T> {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -1496,8 +1762,17 @@ impl<T> Variable<T> {
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -1532,8 +1807,17 @@ impl RustConstructorResource for Font {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -1545,8 +1829,17 @@ impl Font {
     }
 
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -1579,8 +1872,17 @@ impl RustConstructorResource for SplitTime {
         self.tags.clone()
     }
 
-    fn modify_tags(&mut self, tags: &[[String; 2]]) {
-        self.tags = tags.to_owned();
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
     }
 }
 
@@ -1595,8 +1897,571 @@ impl Default for SplitTime {
 
 impl SplitTime {
     #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]]) -> Self {
-        self.tags = tags.to_owned();
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
+        self
+    }
+}
+
+/// 控制Background选择的基础前端资源类型。
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub enum BackgroundType {
+    /// 选择Image为底。
+    Image(ImageConfig),
+    /// 选择CustomRect为底。
+    CustomRect(CustomRectConfig),
+}
+
+impl Default for BackgroundType {
+    fn default() -> Self {
+        BackgroundType::CustomRect(CustomRectConfig::default())
+    }
+}
+
+/// 复合结构体，包含一个Image或一个CustomRect，可以用作UI的背景。
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+pub struct Background {
+    /// 选择填充类型。
+    pub background_type: BackgroundType,
+    /// 是否让Background自动更新配置。
+    pub auto_update: bool,
+    /// 是否使用Background的标签。
+    pub use_background_tags: bool,
+    /// 标签。
+    pub tags: Vec<[String; 2]>,
+}
+
+impl RustConstructorResource for Background {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn display_display_info(&self) -> Option<DisplayInfo> {
+        None
+    }
+
+    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
+
+    fn display_tags(&self) -> Vec<[String; 2]> {
+        self.tags.clone()
+    }
+
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
+    }
+}
+
+impl Background {
+    #[inline]
+    pub fn background_type(mut self, background_type: &BackgroundType) -> Self {
+        self.background_type = background_type.clone();
+        self
+    }
+
+    #[inline]
+    pub fn auto_update(mut self, auto_update: bool) -> Self {
+        self.auto_update = auto_update;
+        self
+    }
+
+    #[inline]
+    pub fn use_background_tags(mut self, use_background_tags: bool) -> Self {
+        self.use_background_tags = use_background_tags;
+        self
+    }
+
+    #[inline]
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
+        self
+    }
+}
+
+/// 滚动区域滚动长度(尺寸)配置。
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum ScrollLengthMethod {
+    /// 固定尺寸。
+    Fixed(f32),
+    /// 自适应尺寸。
+    AutoFit,
+}
+
+/// 鼠标点击资源板的目的。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ClickAim {
+    /// 移动资源板。
+    Move,
+    /// 在上方缩放。
+    TopResize,
+    /// 在下方缩放。
+    BottomResize,
+    /// 在左侧缩放。
+    LeftResize,
+    /// 在右侧缩放。
+    RightResize,
+    /// 在左上方缩放。
+    LeftTopResize,
+    /// 在右上方缩放。
+    RightTopResize,
+    /// 在左下方缩放。
+    LeftBottomResize,
+    /// 在右下方缩放。
+    RightBottomResize,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+/// 滚动条显示方法。
+pub enum ScrollBarDisplayMethod {
+    /// 持续显示。
+    Always(BackgroundType, [f32; 2], f32),
+    /// 滚动时显示。
+    OnlyScroll(BackgroundType, [f32; 2], f32),
+    /// 隐藏。
+    Hidden,
+}
+
+/// 用于确认资源在资源板中的外边距。
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum PanelMargin {
+    /// 垂直布局。
+    Vertical([f32; 4], bool),
+    /// 水平布局。
+    Horizontal([f32; 4], bool),
+    /// 无布局。
+    None([f32; 4], bool),
+}
+
+/// 用于确认资源排版方式。
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct PanelLayout {
+    pub panel_margin: PanelMargin,
+    pub panel_location: PanelLocation,
+}
+
+/// 用于自定义资源排版方式。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum CustomPanelLayout {
+    /// 通过类型自定义。
+    Type(String, PanelLayout),
+    /// 通过ID自定义。
+    Id(RustConstructorId, PanelLayout),
+}
+
+/// 用于控制基本前端资源在资源板中的定位方式。
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum PanelLocation {
+    /// 依照此资源到资源板左上角的距离定位。
+    Absolute([f32; 2]),
+    /// 依照网格式定位方法进行定位。
+    Relative([[u32; 2]; 2]),
+}
+
+/// RC的资源板。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct ResourcePanel {
+    /// 是否可通过拖拽更改尺寸。
+    pub resizable: [bool; 4],
+    /// 在资源底部显示方框。
+    pub background: BackgroundType,
+    /// 最小尺寸。
+    pub min_size: [f32; 2],
+    /// 最大尺寸(可选)。
+    pub max_size: Option<[f32; 2]>,
+    /// 允许拖动资源板。
+    pub movable: [bool; 2],
+    /// 滚动长度计算方法(不需要滚动留空即可)。
+    pub scroll_length_method: [Option<ScrollLengthMethod>; 2],
+    /// 滚动敏感度。
+    pub scroll_sensitivity: f32,
+    /// 是否使用平滑滚动。
+    pub use_smooth_scroll_delta: bool,
+    /// 滚动条显示方法。
+    pub scroll_bar_display_method: ScrollBarDisplayMethod,
+    /// 全局控制资源的排版方式。
+    pub overall_layout: PanelLayout,
+    /// 自定义资源的排版方式。
+    pub custom_layout: Vec<CustomPanelLayout>,
+    /// 滚动长度。
+    pub scroll_length: [f32; 2],
+    /// 滚动进度。
+    pub scroll_progress: [f32; 2],
+    /// 是否按下鼠标与按下后鼠标状态。
+    pub last_frame_mouse_status: Option<([f32; 2], ClickAim, [f32; 2])>,
+    /// 本帧是否滚动。
+    pub scrolled: [bool; 2],
+    /// 滚动条透明度。
+    pub scroll_bar_alpha: [u8; 2],
+    /// 标签。
+    pub tags: Vec<[String; 2]>,
+}
+
+impl RustConstructorResource for ResourcePanel {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn display_display_info(&self) -> Option<DisplayInfo> {
+        None
+    }
+
+    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
+
+    fn display_tags(&self) -> Vec<[String; 2]> {
+        self.tags.clone()
+    }
+
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
+    }
+}
+
+impl Default for ResourcePanel {
+    fn default() -> Self {
+        Self {
+            resizable: [true, true, true, true],
+            background: BackgroundType::default(),
+            min_size: [10_f32, 10_f32],
+            max_size: None,
+            movable: [true, true],
+            scroll_length_method: [None, None],
+            scroll_sensitivity: 0_f32,
+            use_smooth_scroll_delta: true,
+            scroll_bar_display_method: ScrollBarDisplayMethod::OnlyScroll(
+                BackgroundType::default(),
+                [4_f32, 2_f32],
+                4_f32,
+            ),
+            overall_layout: (PanelLayout {
+                panel_margin: PanelMargin::Vertical([0_f32, 0_f32, 0_f32, 0_f32], false),
+                panel_location: PanelLocation::Absolute([0_f32, 0_f32]),
+            }),
+            custom_layout: Vec::new(),
+            scroll_length: [0_f32, 0_f32],
+            scroll_progress: [0_f32, 0_f32],
+            last_frame_mouse_status: None,
+            scrolled: [false, false],
+            scroll_bar_alpha: [0, 0],
+            tags: Vec::new(),
+        }
+    }
+}
+
+impl ResourcePanel {
+    #[inline]
+    pub fn resizable(mut self, top: bool, bottom: bool, left: bool, right: bool) -> Self {
+        self.resizable = [top, bottom, left, right];
+        self
+    }
+
+    #[inline]
+    pub fn background(mut self, background: &BackgroundType) -> Self {
+        self.background = background.clone();
+        self
+    }
+
+    #[inline]
+    pub fn min_size(mut self, width: f32, height: f32) -> Self {
+        self.min_size = [width, height];
+        self
+    }
+
+    #[inline]
+    pub fn max_size(mut self, max_size: Option<[f32; 2]>) -> Self {
+        self.max_size = max_size;
+        self
+    }
+
+    #[inline]
+    pub fn movable(mut self, horizontal: bool, vertical: bool) -> Self {
+        self.movable = [horizontal, vertical];
+        self
+    }
+
+    #[inline]
+    pub fn scroll_length_method(
+        mut self,
+        horizontal: Option<ScrollLengthMethod>,
+        vertical: Option<ScrollLengthMethod>,
+    ) -> Self {
+        self.scroll_length_method = [horizontal, vertical];
+        self
+    }
+
+    #[inline]
+    pub fn scroll_sensitivity(mut self, scroll_sensitivity: f32) -> Self {
+        self.scroll_sensitivity = scroll_sensitivity;
+        self
+    }
+
+    #[inline]
+    pub fn use_smooth_scroll_delta(mut self, use_smooth_scroll_delta: bool) -> Self {
+        self.use_smooth_scroll_delta = use_smooth_scroll_delta;
+        self
+    }
+
+    #[inline]
+    pub fn scroll_bar_display_method(
+        mut self,
+        scroll_bar_display_method: ScrollBarDisplayMethod,
+    ) -> Self {
+        self.scroll_bar_display_method = scroll_bar_display_method;
+        self
+    }
+
+    #[inline]
+    pub fn overall_layout(mut self, overall_layout: PanelLayout) -> Self {
+        self.overall_layout = overall_layout;
+        self
+    }
+
+    #[inline]
+    pub fn push_custom_layout(mut self, custom_layout: CustomPanelLayout) -> Self {
+        self.custom_layout.push(custom_layout);
+        self
+    }
+
+    #[inline]
+    pub fn custom_layout(mut self, custom_layout: &[CustomPanelLayout]) -> Self {
+        self.custom_layout = custom_layout.to_owned();
+        self
+    }
+
+    #[inline]
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
+        self
+    }
+}
+
+/// Switch在不同状态下的的外观配置。
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+pub struct SwitchAppearanceConfig {
+    /// Background的配置项。
+    pub background_config: BackgroundType,
+    /// Text的配置项。
+    pub text_config: TextConfig,
+    /// 提示Text的配置项。
+    pub hint_text_config: TextConfig,
+}
+
+/// Switch的可点击方法配置。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SwitchClickConfig {
+    /// 点击方法。
+    pub click_method: PointerButton,
+    /// 点击后是否改变Switch状态。
+    pub action: bool,
+}
+
+/// 用于Switch资源判定的一些字段集合。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SwitchData {
+    /// 是否点击切换状态。
+    pub switched: bool,
+    /// 点击的方法。
+    pub last_frame_clicked: Option<usize>,
+    /// Switch状态。
+    pub state: u32,
+}
+
+/// RC的开关资源。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Switch {
+    /// 外观（包括各类资源配置项，数量为开启的内容数量*Switch状态总数）。
+    pub appearance: Vec<SwitchAppearanceConfig>,
+    /// Background显示内容类型。
+    pub background_type: BackgroundType,
+    /// Text显示配置。
+    pub text_config: TextConfig,
+    /// 提示Text显示配置。
+    pub hint_text_config: TextConfig,
+    /// 是否启用鼠标悬浮和点击时的显示内容。
+    pub enable_animation: [bool; 2],
+    /// Switch状态总数。
+    pub state_amount: u32,
+    /// 可以用于点击Switch的方法。
+    pub click_method: Vec<SwitchClickConfig>,
+    /// 是否启用Switch(不启用会显示出填充资源，但无法交互)。
+    pub enable: bool,
+    /// Switch当前状态。
+    pub state: u32,
+    /// 上一帧是否有鼠标悬停。
+    pub last_frame_hovered: bool,
+    /// 上一帧是否被鼠标点击。
+    pub last_frame_clicked: Option<usize>,
+    /// 是否切换了Switch状态。
+    pub switched: bool,
+    /// 标签。
+    pub tags: Vec<[String; 2]>,
+}
+
+impl RustConstructorResource for Switch {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn display_display_info(&self) -> Option<DisplayInfo> {
+        None
+    }
+
+    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
+
+    fn display_tags(&self) -> Vec<[String; 2]> {
+        self.tags.clone()
+    }
+
+    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
+    }
+}
+
+impl Default for Switch {
+    fn default() -> Self {
+        Self {
+            appearance: vec![],
+            background_type: BackgroundType::default(),
+            text_config: TextConfig::default(),
+            hint_text_config: TextConfig::default(),
+            enable_animation: [false, false],
+            state_amount: 0,
+            click_method: vec![],
+            enable: true,
+            state: 0,
+            last_frame_hovered: false,
+            last_frame_clicked: None,
+            switched: false,
+            tags: Vec::new(),
+        }
+    }
+}
+
+impl Switch {
+    #[inline]
+    pub fn appearance(mut self, appearance: &[SwitchAppearanceConfig]) -> Self {
+        self.appearance = appearance.to_owned();
+        self
+    }
+
+    #[inline]
+    pub fn background_type(mut self, background_type: &BackgroundType) -> Self {
+        self.background_type = background_type.clone();
+        self
+    }
+
+    #[inline]
+    pub fn text_config(mut self, text_config: &TextConfig) -> Self {
+        self.text_config = text_config.clone();
+        self
+    }
+
+    #[inline]
+    pub fn hint_text_config(mut self, hint_text_config: &TextConfig) -> Self {
+        self.hint_text_config = hint_text_config.clone();
+        self
+    }
+
+    #[inline]
+    pub fn enable_animation(mut self, enable_hover: bool, enable_click: bool) -> Self {
+        self.enable_animation = [enable_hover, enable_click];
+        self
+    }
+
+    #[inline]
+    pub fn state_amount(mut self, state_amount: u32) -> Self {
+        self.state_amount = state_amount;
+        self
+    }
+
+    #[inline]
+    pub fn click_method(mut self, click_method: Vec<SwitchClickConfig>) -> Self {
+        self.click_method = click_method;
+        self
+    }
+
+    #[inline]
+    pub fn enable(mut self, enable: bool) -> Self {
+        self.enable = enable;
+        self
+    }
+
+    #[inline]
+    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
+        if replace {
+            self.tags = tags.to_owned();
+        } else {
+            for tag in tags {
+                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
+                    self.tags.remove(index);
+                };
+            }
+            self.tags.extend(tags.iter().cloned());
+        };
         self
     }
 }
@@ -1649,23 +2514,6 @@ pub enum RenderConfig {
     Rect([u8; 4], [u8; 4], [u8; 4], f32, BorderKind),
 }
 
-/// 用户操作事件。
-#[derive(Debug, Clone, PartialEq)]
-pub struct Event {
-    /// 事件id。
-    pub id: String,
-    /// 事件描述。
-    pub description: String,
-    /// 事件标签。
-    pub tag: HashMap<String, String>,
-    /// 事件发生时的状态。
-    pub event_state: EventState,
-    /// 自动删除事件。
-    pub auto_delete: bool,
-    /// 此事件是否已被处理过。
-    pub handled: bool,
-}
-
 /// 显示信息。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DisplayInfo {
@@ -1684,6 +2532,25 @@ pub enum RequestMethod {
     Id(RustConstructorId),
     /// 使用资源的引用者。
     Citer(RustConstructorId),
+}
+
+/// 请求跳过渲染队列的类型。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RequestType {
+    /// 直接置于顶层。
+    Top,
+    /// 上移指定层级。
+    Up(u32),
+}
+
+/// 控制显示活跃资源列表的方法。
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ActiveListInfoMethod {
+    /// 详细显示，包含资源本身与其id(可以选择是否格式化显示)。
+    Detailed(bool),
+    /// 简单显示，仅包含资源id。
+    #[default]
+    Simple,
 }
 
 /// 程序主体。
@@ -1709,10 +2576,6 @@ pub struct App {
     pub active_list: Vec<RustConstructorId>,
     /// 渲染队列。
     pub render_list: Vec<RustConstructorId>,
-    /// 事件列表。
-    pub event_list: Vec<Event>,
-    /// 事件映射。
-    pub event_map: Vec<[String; 2]>,
 }
 
 impl Default for App {
@@ -1732,27 +2595,11 @@ impl Default for App {
             render_layer: Vec::new(),
             active_list: Vec::new(),
             render_list: Vec::new(),
-            event_list: Vec::new(),
-            event_map: vec![
-                [
-                    "rust_constructor::001".to_string(),
-                    "Attempting to create an external resource.".to_string(),
-                ],
-                [
-                    "rust_constructor::002".to_string(),
-                    "Attempting to remove an external resource.".to_string(),
-                ],
-                [
-                    "rust_constructor::003".to_string(),
-                    "Attempting to use an external resource.".to_string(),
-                ],
-            ],
         }
     }
 }
 
 impl App {
-    const PLACEHOLDER: [&str; 2] = ["PLACEHOLDER", "rust_constructor::Placeholder"];
     #[inline]
     pub fn tick_interval(mut self, tick_interval: f32) -> Self {
         self.tick_interval = tick_interval;
@@ -1765,39 +2612,12 @@ impl App {
         self
     }
 
-    /// 添加事件。
-    pub fn add_event(&mut self, id: &str, tag: HashMap<&str, &str>, auto_delete: bool) {
-        self.event_list.push(Event {
-            id: id.to_string(),
-            tag: tag
-                .into_iter()
-                .map(|s| (s.0.to_string(), s.1.to_string()))
-                .collect(),
-            description: if let Some(index) = self.event_map.iter().position(|x| x[0] == id) {
-                self.event_map[index][1].clone()
-            } else {
-                "This event has no description.".to_string()
-            },
-            event_state: EventState {
-                current_page: self.current_page.clone(),
-                current_total_runtime: self.timer.total_time,
-                current_page_runtime: self.timer.now_time,
-            },
-            auto_delete,
-            handled: false,
-        });
-    }
-
-    /// 更新事件列表。
-    pub fn update_event_list(&mut self) {
-        let mut count = 0;
-        for event in &mut self.event_list.clone() {
-            if event.handled && event.auto_delete {
-                self.event_list.remove(count);
-                continue;
-            };
-            count += 1;
-        }
+    /// 从指定列表中获取标签。
+    pub fn get_tag(&self, tag_name: &str, target: &[[String; 2]]) -> Option<(usize, String)> {
+        target
+            .iter()
+            .position(|x| x[0] == tag_name)
+            .map(|index| (index, target[index][1].clone()))
     }
 
     /// 一次性绘制所有资源，会丢弃所有返回值，不建议使用。
@@ -1815,8 +2635,7 @@ impl App {
         ctx: &Context,
         index: usize,
     ) -> Result<(), RustConstructorError> {
-        if index < self.render_list.len() {
-            let render_resource = &self.render_list.clone()[index];
+        if let Some(render_resource) = self.render_list.clone().get(index) {
             match &*render_resource.discern_type {
                 "rust_constructor::Image" => {
                     let image = self
@@ -1830,13 +2649,7 @@ impl App {
                             )?;
                             image.texture = image_texture.texture.clone();
                         };
-                        [
-                            image
-                                .basic_front_resource_config
-                                .position_size_config
-                                .position,
-                            image.basic_front_resource_config.position_size_config.size,
-                        ] = self.position_size_processor(
+                        [image.position, image.size] = self.position_size_processor(
                             image.basic_front_resource_config.position_size_config,
                             ctx,
                         );
@@ -1847,22 +2660,8 @@ impl App {
                             };
                             if let Some(texture) = &image.texture {
                                 let rect = Rect::from_min_size(
-                                    Pos2::new(
-                                        image
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[0],
-                                        image
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[1],
-                                    ),
-                                    Vec2::new(
-                                        image.basic_front_resource_config.position_size_config.size
-                                            [0],
-                                        image.basic_front_resource_config.position_size_config.size
-                                            [1],
-                                    ),
+                                    Pos2::new(image.position[0], image.position[1]),
+                                    Vec2::new(image.size[0], image.size[1]),
                                 );
 
                                 // 直接绘制图片
@@ -1872,28 +2671,22 @@ impl App {
                                         image.overlay_color[1],
                                         image.overlay_color[2],
                                         // 将图片透明度与覆盖颜色透明度相乘
-                                        (image.alpha as f32 * image.overlay_color[3] as f32 / 255.0)
+                                        (image.alpha as f32 * image.overlay_alpha as f32 / 255_f32)
                                             as u8,
                                     ))
                                     .bg_fill(Color32::from_rgba_unmultiplied(
                                         image.background_color[0],
                                         image.background_color[1],
                                         image.background_color[2],
-                                        image.background_color[3],
+                                        (image.alpha as f32 * image.background_alpha as f32
+                                            / 255_f32)
+                                            as u8,
                                     ))
                                     .rotate(
                                         image.rotate_angle,
                                         [
-                                            image.rotate_center[0]
-                                                / image
-                                                    .basic_front_resource_config
-                                                    .position_size_config
-                                                    .size[0],
-                                            image.rotate_center[1]
-                                                / image
-                                                    .basic_front_resource_config
-                                                    .position_size_config
-                                                    .size[1],
+                                            image.rotate_center[0] / image.size[0],
+                                            image.rotate_center[1] / image.size[1],
                                         ]
                                         .into(),
                                     )
@@ -1916,30 +2709,23 @@ impl App {
                         self.get_resource::<Text>(&render_resource.name, "rust_constructor::Text")?;
                     if text.display_info.enable {
                         let mut text = text.clone();
-                        [
-                            text.basic_front_resource_config
-                                .position_size_config
-                                .position,
-                            text.basic_front_resource_config.position_size_config.size,
-                        ] = self.position_size_processor(
+                        [text.position, text.truncate_size] = self.position_size_processor(
                             text.basic_front_resource_config.position_size_config,
                             ctx,
                         );
-                        let display_content = if text.truncate {
+                        let display_content = {
                             let original_galley = ui.fonts_mut(|f| {
                                 f.layout(
                                     text.content.to_string(),
                                     FontId::proportional(text.font_size),
                                     Color32::default(),
-                                    text.basic_front_resource_config.position_size_config.size[0],
+                                    text.truncate_size[0],
                                 )
                             });
 
                             let mut truncated = text.content.to_string();
                             let mut ellipsis = "";
-                            if original_galley.size().y
-                                > text.basic_front_resource_config.position_size_config.size[1]
-                            {
+                            if original_galley.size().y > text.truncate_size[1] {
                                 // 如果超出，逐步缩短文本直到加上省略号后能放下
                                 ellipsis = "...";
 
@@ -1950,18 +2736,11 @@ impl App {
                                             test_text,
                                             FontId::proportional(text.font_size),
                                             Color32::default(),
-                                            text.basic_front_resource_config
-                                                .position_size_config
-                                                .size[0],
+                                            text.truncate_size[0],
                                         )
                                     });
 
-                                    if test_galley.size().y
-                                        <= text
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .size[1]
-                                    {
+                                    if test_galley.size().y <= text.truncate_size[1] {
                                         break;
                                     }
 
@@ -1970,8 +2749,6 @@ impl App {
                                 }
                             };
                             format!("{}{}", truncated, ellipsis)
-                        } else {
-                            text.content.to_string()
                         };
                         // 计算文本大小
                         let galley: Arc<Galley> = ui.fonts_mut(|f| {
@@ -1982,12 +2759,12 @@ impl App {
                                         .check_resource_exists(&text.font, "rust_constructor::Font")
                                         .is_none()
                                     {
+                                        FontId::proportional(text.font_size)
+                                    } else {
                                         FontId::new(
                                             text.font_size,
                                             FontFamily::Name(text.font.clone().into()),
                                         )
-                                    } else {
-                                        FontId::proportional(text.font_size)
                                     }
                                 } else {
                                     FontId::proportional(text.font_size)
@@ -1996,11 +2773,23 @@ impl App {
                                     text.color[0],
                                     text.color[1],
                                     text.color[2],
-                                    text.color[3],
+                                    text.alpha,
                                 ),
-                                text.basic_front_resource_config.position_size_config.size[0],
+                                text.truncate_size[0],
                             )
                         });
+                        text.size = [
+                            if text.auto_fit[0] {
+                                galley.size().x
+                            } else {
+                                text.truncate_size[0]
+                            },
+                            if text.auto_fit[1] {
+                                galley.size().y
+                            } else {
+                                text.truncate_size[1]
+                            },
+                        ];
                         text.actual_size = [galley.size().x, galley.size().y];
                         // 查找超链接索引值
                         if text.last_frame_content != display_content {
@@ -2052,13 +2841,8 @@ impl App {
                         };
                         if !text.display_info.hidden {
                             // 使用绝对定位放置文本
-                            let rect = Rect::from_min_size(
-                                text.basic_front_resource_config
-                                    .position_size_config
-                                    .position
-                                    .into(),
-                                text.actual_size.into(),
-                            );
+                            let rect =
+                                Rect::from_min_size(text.position.into(), text.actual_size.into());
                             // 绘制背景颜色
                             ui.painter().rect_filled(
                                 rect,
@@ -2067,7 +2851,7 @@ impl App {
                                     text.background_color[0],
                                     text.background_color[1],
                                     text.background_color[2],
-                                    text.background_color[3],
+                                    text.background_alpha,
                                 ),
                             );
 
@@ -2078,16 +2862,13 @@ impl App {
 
                             // 绘制文本
                             ui.painter().galley(
-                                text.basic_front_resource_config
-                                    .position_size_config
-                                    .position
-                                    .into(),
+                                text.position.into(),
                                 galley.clone(),
                                 Color32::from_rgba_unmultiplied(
                                     text.color[0],
                                     text.color[1],
                                     text.color[2],
-                                    text.color[3],
+                                    text.alpha,
                                 ),
                             );
 
@@ -2103,10 +2884,7 @@ impl App {
                                 // 检查超链接是否跨行
                                 if start_cursor.min.y == end_cursor.min.y {
                                     // 单行超链接
-                                    let underline_y = text
-                                        .basic_front_resource_config
-                                        .position_size_config
-                                        .position[1]
+                                    let underline_y = text.position[1]
                                         + start_pos.y
                                         + galley.rows.first().map_or(14.0, |row| row.height())
                                         - 2.0;
@@ -2116,25 +2894,13 @@ impl App {
                                         text.color[0],
                                         text.color[1],
                                         text.color[2],
-                                        text.color[3],
+                                        text.alpha,
                                     );
 
                                     ui.painter().line_segment(
                                         [
-                                            Pos2::new(
-                                                text.basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[0]
-                                                    + start_pos.x,
-                                                underline_y,
-                                            ),
-                                            Pos2::new(
-                                                text.basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[0]
-                                                    + end_pos.x,
-                                                underline_y,
-                                            ),
+                                            Pos2::new(text.position[0] + start_pos.x, underline_y),
+                                            Pos2::new(text.position[0] + end_pos.x, underline_y),
                                         ],
                                         Stroke::new(text.font_size / 10_f32, color),
                                     );
@@ -2148,13 +2914,9 @@ impl App {
                                     let end_row = (end_pos.y / row_height).round() as usize;
 
                                     for row in start_row..=end_row {
-                                        let row_y = text
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[1]
-                                            + row as f32 * row_height
-                                            + row_height
-                                            - 2.0; // 行底部稍微上移一点绘制下划线
+                                        let row_y =
+                                            text.position[1] + row as f32 * row_height + row_height
+                                                - 2.0; // 行底部稍微上移一点绘制下划线
 
                                         // 获取当前行的矩形范围
                                         if let Some(current_row) = galley.rows.get(row) {
@@ -2164,7 +2926,7 @@ impl App {
                                                 text.color[0],
                                                 text.color[1],
                                                 text.color[2],
-                                                text.color[3],
+                                                text.alpha,
                                             );
 
                                             if row == start_row {
@@ -2172,17 +2934,11 @@ impl App {
                                                 ui.painter().line_segment(
                                                     [
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + start_pos.x,
+                                                            text.position[0] + start_pos.x,
                                                             row_y,
                                                         ),
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.max.x,
+                                                            text.position[0] + row_rect.max.x,
                                                             row_y,
                                                         ),
                                                     ],
@@ -2193,17 +2949,11 @@ impl App {
                                                 ui.painter().line_segment(
                                                     [
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.min.x,
+                                                            text.position[0] + row_rect.min.x,
                                                             row_y,
                                                         ),
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + end_pos.x,
+                                                            text.position[0] + end_pos.x,
                                                             row_y,
                                                         ),
                                                     ],
@@ -2214,17 +2964,11 @@ impl App {
                                                 ui.painter().line_segment(
                                                     [
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.min.x,
+                                                            text.position[0] + row_rect.min.x,
                                                             row_y,
                                                         ),
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.max.x,
+                                                            text.position[0] + row_rect.max.x,
                                                             row_y,
                                                         ),
                                                     ],
@@ -2239,22 +2983,14 @@ impl App {
                             if text.selectable {
                                 // 处理选择逻辑
                                 let cursor_at_pointer = |pointer_pos: Vec2| -> usize {
-                                    let relative_pos = pointer_pos
-                                        - text
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position
-                                            .into();
+                                    let relative_pos = pointer_pos - text.position.into();
                                     let cursor = galley.cursor_from_pos(relative_pos);
                                     cursor.index
                                 };
 
                                 let fullscreen_detect_result = ui.input(|i| i.pointer.clone());
                                 let rect = Rect::from_min_size(
-                                    text.basic_front_resource_config
-                                        .position_size_config
-                                        .position
-                                        .into(),
+                                    text.position.into(),
                                     text.actual_size.into(),
                                 );
                                 let detect_result = ui.interact(
@@ -2347,25 +3083,12 @@ impl App {
 
                                             let selection_rect = Rect::from_min_max(
                                                 Pos2::new(
-                                                    text.basic_front_resource_config
-                                                        .position_size_config
-                                                        .position[0]
-                                                        + start_pos.x,
-                                                    text.basic_front_resource_config
-                                                        .position_size_config
-                                                        .position[1]
-                                                        + start_pos.y,
+                                                    text.position[0] + start_pos.x,
+                                                    text.position[1] + start_pos.y,
                                                 ),
                                                 Pos2::new(
-                                                    text.basic_front_resource_config
-                                                        .position_size_config
-                                                        .position[0]
-                                                        + end_pos.x,
-                                                    text.basic_front_resource_config
-                                                        .position_size_config
-                                                        .position[1]
-                                                        + start_pos.y
-                                                        + row_height,
+                                                    text.position[0] + end_pos.x,
+                                                    text.position[1] + start_pos.y + row_height,
                                                 ),
                                             );
                                             ui.painter().rect_filled(
@@ -2384,16 +3107,10 @@ impl App {
                                             };
 
                                             // 计算选择的上下边界
-                                            let selection_top = text
-                                                .basic_front_resource_config
-                                                .position_size_config
-                                                .position[1]
-                                                + start_pos.y.min(end_pos.y);
-                                            let selection_bottom = text
-                                                .basic_front_resource_config
-                                                .position_size_config
-                                                .position[1]
-                                                + start_pos.y.max(end_pos.y);
+                                            let selection_top =
+                                                text.position[1] + start_pos.y.min(end_pos.y);
+                                            let selection_bottom =
+                                                text.position[1] + start_pos.y.max(end_pos.y);
 
                                             // 确定起始行和结束行的索引
                                             let start_row_index =
@@ -2408,11 +3125,8 @@ impl App {
                                                 };
 
                                             for (i, row) in rows.iter().enumerate() {
-                                                let row_y = text
-                                                    .basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[1]
-                                                    + row_height * i as f32;
+                                                let row_y =
+                                                    text.position[1] + row_height * i as f32;
                                                 let row_bottom = row_y + row_height;
                                                 // 检查当前行是否与选择区域相交
                                                 if row_bottom > selection_top
@@ -2420,30 +3134,18 @@ impl App {
                                                 {
                                                     let left = if i == first_row_index {
                                                         // 首行 - 从选择开始位置开始
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + start_pos.x
+                                                        text.position[0] + start_pos.x
                                                     } else {
                                                         // 非首行 - 从行首开始
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + row.rect().min.x
+                                                        text.position[0] + row.rect().min.x
                                                     };
 
                                                     let right = if i == last_row_index {
                                                         // 尾行 - 到选择结束位置结束
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + end_pos.x
+                                                        text.position[0] + end_pos.x
                                                     } else {
                                                         // 非尾行 - 到行尾结束
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + row.rect().max.x
+                                                        text.position[0] + row.rect().max.x
                                                     };
 
                                                     let selection_rect = Rect::from_min_max(
@@ -2487,25 +3189,12 @@ impl App {
                                     // 单行超链接
                                     let link_rect = Rect::from_min_max(
                                         Pos2::new(
-                                            text.basic_front_resource_config
-                                                .position_size_config
-                                                .position[0]
-                                                + start_pos.x,
-                                            text.basic_front_resource_config
-                                                .position_size_config
-                                                .position[1]
-                                                + start_pos.y,
+                                            text.position[0] + start_pos.x,
+                                            text.position[1] + start_pos.y,
                                         ),
                                         Pos2::new(
-                                            text.basic_front_resource_config
-                                                .position_size_config
-                                                .position[0]
-                                                + end_pos.x,
-                                            text.basic_front_resource_config
-                                                .position_size_config
-                                                .position[1]
-                                                + start_pos.y
-                                                + row_height,
+                                            text.position[0] + end_pos.x,
+                                            text.position[1] + start_pos.y + row_height,
                                         ),
                                     );
                                     vec![ui.interact(
@@ -2525,27 +3214,17 @@ impl App {
                                     for row in start_row..=end_row {
                                         if let Some(current_row) = galley.rows.get(row) {
                                             let row_rect = current_row.rect();
-                                            let row_y = text
-                                                .basic_front_resource_config
-                                                .position_size_config
-                                                .position[1]
-                                                + row as f32 * row_height;
+                                            let row_y = text.position[1] + row as f32 * row_height;
 
                                             let link_rect = if row == start_row {
                                                 // 第一行从文本开始位置到行尾
                                                 Rect::from_min_max(
                                                     Pos2::new(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + start_pos.x,
+                                                        text.position[0] + start_pos.x,
                                                         row_y,
                                                     ),
                                                     Pos2::new(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + row_rect.max.x,
+                                                        text.position[0] + row_rect.max.x,
                                                         row_y + row_height,
                                                     ),
                                                 )
@@ -2553,17 +3232,11 @@ impl App {
                                                 // 最后一行从行首到文本结束位置
                                                 Rect::from_min_max(
                                                     Pos2::new(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + row_rect.min.x,
+                                                        text.position[0] + row_rect.min.x,
                                                         row_y,
                                                     ),
                                                     Pos2::new(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + end_pos.x,
+                                                        text.position[0] + end_pos.x,
                                                         row_y + row_height,
                                                     ),
                                                 )
@@ -2571,17 +3244,11 @@ impl App {
                                                 // 中间整行
                                                 Rect::from_min_max(
                                                     Pos2::new(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + row_rect.min.x,
+                                                        text.position[0] + row_rect.min.x,
                                                         row_y,
                                                     ),
                                                     Pos2::new(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position[0]
-                                                            + row_rect.max.x,
+                                                        text.position[0] + row_rect.max.x,
                                                         row_y + row_height,
                                                     ),
                                                 )
@@ -2618,11 +3285,7 @@ impl App {
                                                 ui.input(|i| i.pointer.interact_pos())
                                             {
                                                 let relative_pos = pointer_pos
-                                                    - <[f32; 2] as Into<Pos2>>::into(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position,
-                                                    );
+                                                    - <[f32; 2] as Into<Pos2>>::into(text.position);
                                                 let cursor = galley.cursor_from_pos(relative_pos);
                                                 if cursor.index >= *start && cursor.index <= *end {
                                                     is_pressing_link = true;
@@ -2638,11 +3301,7 @@ impl App {
                                                     ui.input(|i| i.pointer.interact_pos())
                                             {
                                                 let relative_pos = pointer_pos
-                                                    - <[f32; 2] as Into<Pos2>>::into(
-                                                        text.basic_front_resource_config
-                                                            .position_size_config
-                                                            .position,
-                                                    );
+                                                    - <[f32; 2] as Into<Pos2>>::into(text.position);
                                                 let cursor = galley.cursor_from_pos(relative_pos);
                                                 if cursor.index >= *start && cursor.index <= *end {
                                                     clicked_on_link = true;
@@ -2666,23 +3325,12 @@ impl App {
                                         // 单行超链接高亮
                                         let selection_rect = Rect::from_min_max(
                                             Pos2::new(
-                                                text.basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[0]
-                                                    + start_pos.x,
-                                                text.basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[1]
-                                                    + start_pos.y,
+                                                text.position[0] + start_pos.x,
+                                                text.position[1] + start_pos.y,
                                             ),
                                             Pos2::new(
-                                                text.basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[0]
-                                                    + end_pos.x,
-                                                text.basic_front_resource_config
-                                                    .position_size_config
-                                                    .position[1]
+                                                text.position[0] + end_pos.x,
+                                                text.position[1]
                                                     + start_pos.y
                                                     + galley
                                                         .rows
@@ -2710,23 +3358,13 @@ impl App {
                                                     // 第一行从文本开始位置到行尾
                                                     let selection_rect = Rect::from_min_max(
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + start_pos.x,
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[1]
+                                                            text.position[0] + start_pos.x,
+                                                            text.position[1]
                                                                 + row as f32 * row_height,
                                                         ),
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.max.x,
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[1]
+                                                            text.position[0] + row_rect.max.x,
+                                                            text.position[1]
                                                                 + row as f32 * row_height
                                                                 + row_height,
                                                         ),
@@ -2742,23 +3380,13 @@ impl App {
                                                     // 最后一行从行首到文本结束位置
                                                     let selection_rect = Rect::from_min_max(
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.min.x,
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[1]
+                                                            text.position[0] + row_rect.min.x,
+                                                            text.position[1]
                                                                 + row as f32 * row_height,
                                                         ),
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + end_pos.x,
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[1]
+                                                            text.position[0] + end_pos.x,
+                                                            text.position[1]
                                                                 + row as f32 * row_height
                                                                 + row_height,
                                                         ),
@@ -2774,23 +3402,13 @@ impl App {
                                                     // 中间整行高亮
                                                     let selection_rect = Rect::from_min_max(
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.min.x,
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[1]
+                                                            text.position[0] + row_rect.min.x,
+                                                            text.position[1]
                                                                 + row as f32 * row_height,
                                                         ),
                                                         Pos2::new(
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[0]
-                                                                + row_rect.max.x,
-                                                            text.basic_front_resource_config
-                                                                .position_size_config
-                                                                .position[1]
+                                                            text.position[0] + row_rect.max.x,
+                                                            text.position[1]
                                                                 + row as f32 * row_height
                                                                 + row_height,
                                                         ),
@@ -2829,16 +3447,7 @@ impl App {
                     )?;
                     if custom_rect.display_info.enable {
                         let mut custom_rect = custom_rect.clone();
-                        [
-                            custom_rect
-                                .basic_front_resource_config
-                                .position_size_config
-                                .position,
-                            custom_rect
-                                .basic_front_resource_config
-                                .position_size_config
-                                .size,
-                        ] = self.position_size_processor(
+                        [custom_rect.position, custom_rect.size] = self.position_size_processor(
                             custom_rect.basic_front_resource_config.position_size_config,
                             ctx,
                         );
@@ -2851,33 +3460,10 @@ impl App {
                             };
                             ui.painter().rect(
                                 Rect::from_min_max(
+                                    Pos2::new(custom_rect.position[0], custom_rect.position[1]),
                                     Pos2::new(
-                                        custom_rect
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[0],
-                                        custom_rect
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[1],
-                                    ),
-                                    Pos2::new(
-                                        custom_rect
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[0]
-                                            + custom_rect
-                                                .basic_front_resource_config
-                                                .position_size_config
-                                                .size[0],
-                                        custom_rect
-                                            .basic_front_resource_config
-                                            .position_size_config
-                                            .position[1]
-                                            + custom_rect
-                                                .basic_front_resource_config
-                                                .position_size_config
-                                                .size[1],
+                                        custom_rect.position[0] + custom_rect.size[0],
+                                        custom_rect.position[1] + custom_rect.size[1],
                                     ),
                                 ),
                                 custom_rect.rounding,
@@ -2885,7 +3471,7 @@ impl App {
                                     custom_rect.color[0],
                                     custom_rect.color[1],
                                     custom_rect.color[2],
-                                    custom_rect.color[3],
+                                    custom_rect.alpha,
                                 ),
                                 Stroke {
                                     width: custom_rect.border_width,
@@ -2893,7 +3479,7 @@ impl App {
                                         custom_rect.border_color[0],
                                         custom_rect.border_color[1],
                                         custom_rect.border_color[2],
-                                        custom_rect.border_color[3],
+                                        custom_rect.alpha,
                                     ),
                                 },
                                 match custom_rect.border_kind {
@@ -2930,10 +3516,10 @@ impl App {
     }
 
     /// 打印资源活跃情况。
-    pub fn active_list_info(&self, display_complex_info: bool, format: bool) -> String {
+    pub fn active_list_info(&self, method: ActiveListInfoMethod) -> String {
         let mut text = String::from("Resource Active Info:\n");
         for info in &self.active_list {
-            if display_complex_info {
+            if let ActiveListInfoMethod::Detailed(format) = method {
                 if let Some(index) = self.check_resource_exists(&info.name, &info.discern_type) {
                     text += &if format {
                         format!(
@@ -3011,24 +3597,30 @@ impl App {
                                 discern_type: info.discern_type.clone(),
                             },
                         );
-                    } else {
                         insert_index += 1;
-                    }
+                    } else if self.render_list[insert_index].cmp(info) == Ordering::Equal {
+                        insert_index += 1;
+                    };
                 };
             }
         };
     }
 
     /// 请求在渲染队列中插队，且无视申请跳过队列的资源是否存在。
-    pub fn unsafe_request_jump_render_list(&mut self, requester: RequestMethod) {
+    pub fn unsafe_request_jump_render_list(
+        &mut self,
+        requester: RequestMethod,
+        request_type: RequestType,
+    ) {
         #[allow(warnings)]
-        self.request_jump_render_list(requester);
+        self.request_jump_render_list(requester, request_type);
     }
 
     /// 请求在渲染队列中插队。
     pub fn request_jump_render_list(
         &mut self,
         requester: RequestMethod,
+        request_type: RequestType,
     ) -> Result<(), RustConstructorError> {
         match requester {
             RequestMethod::Id(RustConstructorId { name, discern_type }) => {
@@ -3037,9 +3629,7 @@ impl App {
                     .iter()
                     .position(|x| x.name == name && x.discern_type == discern_type)
                 {
-                    self.render_list.remove(index);
-                    self.render_list
-                        .push(RustConstructorId { name, discern_type });
+                    self.jump_render_list_processor(index, request_type)?;
                     Ok(())
                 } else {
                     Err(RustConstructorError {
@@ -3052,18 +3642,20 @@ impl App {
             }
             RequestMethod::Citer(RustConstructorId { name, discern_type }) => {
                 for (i, render_resource) in self.render_list.iter().enumerate() {
+                    let [resource_name, resource_type] = [
+                        render_resource.name.clone(),
+                        render_resource.discern_type.clone(),
+                    ];
                     let tags = self
-                        .get_box_resource(&render_resource.name, &render_resource.discern_type)?
+                        .get_box_resource(&resource_name, &resource_type)?
                         .display_tags();
                     if let [Some(tag_name), Some(tag_type)] = [
-                        tags.iter().find(|x| x[0] == "citer_name"),
-                        tags.iter().find(|x| x[0] == "citer_type"),
-                    ] && tag_name[1] == name
-                        && tag_type[1] == discern_type
+                        self.get_tag("citer_name", &tags),
+                        self.get_tag("citer_type", &tags),
+                    ] && tag_name.1 == name
+                        && tag_type.1 == discern_type
                     {
-                        self.render_list.remove(i);
-                        self.render_list
-                            .push(RustConstructorId { name, discern_type });
+                        self.jump_render_list_processor(i, request_type)?;
                         return Ok(());
                     };
                 }
@@ -3072,6 +3664,37 @@ impl App {
                     description: format!("Render resource \"{name}({discern_type})\" not found.",),
                 })
             }
+        }
+    }
+
+    /// 执行跳过渲染队列操作。
+    pub fn jump_render_list_processor(
+        &mut self,
+        requester_index: usize,
+        request_type: RequestType,
+    ) -> Result<(), RustConstructorError> {
+        if requester_index < self.render_list.len() {
+            let requester = self.render_list.remove(requester_index);
+            let new_index = match request_type {
+                RequestType::Top => self.render_list.len(),
+                RequestType::Up(up) => {
+                    if requester_index + up as usize <= self.render_list.len() {
+                        requester_index + up as usize
+                    } else {
+                        self.render_list.len()
+                    }
+                }
+            };
+            self.render_list.insert(new_index, requester);
+            Ok(())
+        } else {
+            Err(RustConstructorError {
+                error_id: "IndexOutOfRange".to_string(),
+                description: format!(
+                    "The maximum index of the target list is {}, but the index is {requester_index}.",
+                    self.render_list.len() - 1
+                ),
+            })
         }
     }
 
@@ -3113,12 +3736,12 @@ impl App {
                     self.render_layer.push((
                         info.clone(),
                         [
-                            basic_front_resource.display_position_size_config().position,
+                            basic_front_resource.display_position(),
                             [
-                                basic_front_resource.display_position_size_config().position[0]
-                                    + basic_front_resource.display_position_size_config().size[0],
-                                basic_front_resource.display_position_size_config().position[1]
-                                    + basic_front_resource.display_position_size_config().size[1],
+                                basic_front_resource.display_position()[0]
+                                    + basic_front_resource.display_size()[0],
+                                basic_front_resource.display_position()[1]
+                                    + basic_front_resource.display_size()[1],
                             ],
                         ],
                         display_info.ignore_render_layer,
@@ -3221,26 +3844,11 @@ impl App {
         name: &str,
         discern_type: &str,
     ) -> Result<(), RustConstructorError> {
-        let is_placeholder = name == Self::PLACEHOLDER[0] && discern_type == Self::PLACEHOLDER[1];
-        if self.check_resource_exists(name, discern_type).is_some() || is_placeholder {
-            if let Some(index) = self.active_list.iter().position(|x| {
-                x.name == Self::PLACEHOLDER[0] && x.discern_type == Self::PLACEHOLDER[1]
-            }) && !is_placeholder
-            {
-                self.active_list.remove(index);
-                self.active_list.insert(
-                    index,
-                    RustConstructorId {
-                        name: name.to_string(),
-                        discern_type: discern_type.to_string(),
-                    },
-                );
-            } else {
-                self.active_list.push(RustConstructorId {
-                    name: name.to_string(),
-                    discern_type: discern_type.to_string(),
-                });
-            };
+        if self.check_resource_exists(name, discern_type).is_some() {
+            self.active_list.push(RustConstructorId {
+                name: name.to_string(),
+                discern_type: discern_type.to_string(),
+            });
             Ok(())
         } else {
             Err(RustConstructorError {
@@ -3274,10 +3882,6 @@ impl App {
             });
         };
         match discern_type {
-            "rust_constructor::PageData" => {}
-            "rust_constructor::CustomRect" => {}
-            "rust_constructor::Text" => {}
-            "rust_constructor::Variable" => {}
             "rust_constructor::SplitTime" => {
                 if let Some(split_time) = resource.as_any_mut().downcast_mut::<SplitTime>() {
                     split_time.time = [self.timer.now_time, self.timer.total_time];
@@ -3367,12 +3971,221 @@ impl App {
                     }
                 };
             }
-            _ => {
-                let mut tag = HashMap::new();
-                tag.insert("name", name);
-                tag.insert("type", discern_type);
-                self.add_event("rust_constructor::001", tag, false);
+            "rust_constructor::Background" => {
+                if let Some(background) = resource.as_any_mut().downcast_mut::<Background>() {
+                    match &background.background_type {
+                        BackgroundType::CustomRect(config) => {
+                            let mut custom_rect = CustomRect::default().from_config(config);
+                            if background.use_background_tags {
+                                custom_rect.modify_tags(&background.tags, false);
+                            };
+                            self.add_resource(name, custom_rect)
+                        }
+                        BackgroundType::Image(config) => {
+                            let mut image = Image::default().from_config(config);
+                            if background.use_background_tags {
+                                image.modify_tags(&background.tags, false);
+                            };
+                            self.add_resource(name, image)
+                        }
+                    }?;
+                };
             }
+            "rust_constructor::Switch" => {
+                if let Some(switch) = resource.as_any_mut().downcast_mut::<Switch>() {
+                    let count = 1 + switch.enable_animation.iter().filter(|x| **x).count();
+                    if switch.appearance.len() != count * switch.state_amount as usize {
+                        return Err(RustConstructorError {
+                            error_id: "SwitchAppearanceConfigMismatch".to_string(),
+                            description: format!(
+                                "Expected {} elements, found {}.",
+                                count * switch.state_amount as usize,
+                                switch.appearance.len()
+                            ),
+                        });
+                    };
+                    self.add_resource(
+                        &format!("{name}Background"),
+                        Background::default()
+                            .background_type(&switch.background_type)
+                            .auto_update(true)
+                            .use_background_tags(true)
+                            .tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}Text"),
+                        Text::default().from_config(&switch.text_config).tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}HintText"),
+                        Text::default()
+                            .from_config(&switch.hint_text_config)
+                            .ignore_render_layer(true)
+                            .hidden(true)
+                            .tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                    ["disable_x_scrolling".to_string(), "".to_string()],
+                                    ["disable_y_scrolling".to_string(), "".to_string()],
+                                ],
+                                false,
+                            ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}StartHoverTime"),
+                        SplitTime::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}HintFadeAnimation"),
+                        SplitTime::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
+                };
+            }
+            "rust_constructor::ResourcePanel" => {
+                if let Some(resource_panel) = resource.as_any_mut().downcast_mut::<ResourcePanel>()
+                {
+                    self.add_resource(
+                        &format!("{name}Background"),
+                        Background::default()
+                            .background_type(&resource_panel.background)
+                            .auto_update(true)
+                            .use_background_tags(true)
+                            .tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
+                    )?;
+                    if let ScrollBarDisplayMethod::Always(_, _, _) =
+                        &resource_panel.scroll_bar_display_method
+                    {
+                        self.add_resource(
+                            &format!("{name}XScroll"),
+                            Background::default()
+                                .auto_update(true)
+                                .use_background_tags(true)
+                                .tags(
+                                    &[
+                                        ["citer_name".to_string(), name.to_string()],
+                                        ["citer_type".to_string(), discern_type.to_string()],
+                                    ],
+                                    false,
+                                ),
+                        )?;
+                        self.add_resource(
+                            &format!("{name}YScroll"),
+                            Background::default()
+                                .auto_update(true)
+                                .use_background_tags(true)
+                                .tags(
+                                    &[
+                                        ["citer_name".to_string(), name.to_string()],
+                                        ["citer_type".to_string(), discern_type.to_string()],
+                                    ],
+                                    false,
+                                ),
+                        )?;
+                    };
+                    if let ScrollBarDisplayMethod::OnlyScroll(_, _, _) =
+                        &resource_panel.scroll_bar_display_method
+                    {
+                        self.add_resource(
+                            &format!("{name}XScroll"),
+                            Background::default()
+                                .auto_update(true)
+                                .use_background_tags(true)
+                                .tags(
+                                    &[
+                                        ["citer_name".to_string(), name.to_string()],
+                                        ["citer_type".to_string(), discern_type.to_string()],
+                                    ],
+                                    false,
+                                ),
+                        )?;
+                        self.add_resource(
+                            &format!("{name}YScroll"),
+                            Background::default()
+                                .auto_update(true)
+                                .use_background_tags(true)
+                                .tags(
+                                    &[
+                                        ["citer_name".to_string(), name.to_string()],
+                                        ["citer_type".to_string(), discern_type.to_string()],
+                                    ],
+                                    false,
+                                ),
+                        )?;
+                        self.add_resource(
+                            &format!("{name}ScrollBarXAlpha"),
+                            SplitTime::default().tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
+                        )?;
+                        self.add_resource(
+                            &format!("{name}ScrollBarXAlphaStart"),
+                            SplitTime::default().tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
+                        )?;
+                        self.add_resource(
+                            &format!("{name}ScrollBarYAlpha"),
+                            SplitTime::default().tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
+                        )?;
+                        self.add_resource(
+                            &format!("{name}ScrollBarYAlphaStart"),
+                            SplitTime::default().tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
+                        )?;
+                    };
+                };
+            }
+            _ => {}
         };
         self.rust_constructor_resource
             .push(RustConstructorResourceBox::new(
@@ -3405,10 +4218,6 @@ impl App {
             {
                 self.render_layer.remove(index);
             };
-            let mut tag = HashMap::new();
-            tag.insert("name", name);
-            tag.insert("type", discern_type);
-            self.add_event("rust_constructor::002", tag, false);
             Ok(())
         } else {
             Err(RustConstructorError {
@@ -3540,7 +4349,6 @@ impl App {
         resource: T,
         ui: &mut Ui,
         ctx: &Context,
-        need_place_holder: NeedPlaceholder,
     ) -> Result<(), RustConstructorError> {
         let discern_type = if let Some(list) = type_name_of_val(&resource).split_once("<") {
             list.0
@@ -3550,7 +4358,7 @@ impl App {
         if self.check_resource_exists(name, discern_type).is_none() {
             self.add_resource(name, resource)
         } else {
-            self.use_resource(name, discern_type, ui, ctx, need_place_holder)
+            self.use_resource(name, discern_type, ui, ctx)
         }
     }
 
@@ -3561,7 +4369,6 @@ impl App {
         discern_type: &str,
         ui: &mut Ui,
         ctx: &Context,
-        need_place_holder: NeedPlaceholder,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(name, discern_type).is_some() {
             match discern_type {
@@ -3581,8 +4388,6 @@ impl App {
                     }
                     // 更新渲染列表。
                     self.update_render_layer();
-                    // 更新事件列表。
-                    self.update_event_list();
                     // 更新资源活跃状态。
                     self.active_list.clear();
                     // 更新资源启用状态。
@@ -3604,17 +4409,2050 @@ impl App {
                         ctx.request_repaint();
                     };
                 }
-                _ => {
-                    let mut tag = HashMap::new();
-                    tag.insert("name", name);
-                    tag.insert("type", discern_type);
-                    self.add_event("rust_constructor::003", tag, true);
+                "rust_constructor::Background" => {
+                    let background = self.get_resource::<Background>(name, discern_type)?.clone();
+                    if background.auto_update {
+                        match &background.background_type {
+                            BackgroundType::CustomRect(config) => {
+                                let mut custom_rect = self
+                                    .get_resource::<CustomRect>(
+                                        name,
+                                        "rust_constructor::CustomRect",
+                                    )?
+                                    .clone()
+                                    .from_config(config);
+                                if background.use_background_tags {
+                                    custom_rect.modify_tags(&background.tags, false);
+                                };
+                                self.replace_resource(name, custom_rect)?;
+                            }
+                            BackgroundType::Image(config) => {
+                                let mut image = self
+                                    .get_resource::<Image>(name, "rust_constructor::Image")?
+                                    .clone()
+                                    .from_config(config);
+                                if background.use_background_tags {
+                                    image.modify_tags(&background.tags, false);
+                                };
+                                self.replace_resource(name, image)?;
+                            }
+                        };
+                    };
+                    match background.background_type {
+                        BackgroundType::CustomRect(_) => {
+                            self.use_resource(name, "rust_constructor::CustomRect", ui, ctx)
+                        }
+                        BackgroundType::Image(_) => {
+                            self.use_resource(name, "rust_constructor::Image", ui, ctx)
+                        }
+                    }?;
                 }
-            }
-            if let NeedPlaceholder::Yes(amount) = need_place_holder {
-                for _ in 0..amount {
-                    self.add_active_resource(Self::PLACEHOLDER[0], Self::PLACEHOLDER[1])?;
+                "rust_constructor::Switch" => {
+                    let mut switch = self
+                        .get_resource::<Switch>(name, "rust_constructor::Switch")?
+                        .clone();
+                    let mut background = self
+                        .get_resource::<Background>(
+                            &format!("{name}Background"),
+                            "rust_constructor::Background",
+                        )?
+                        .clone();
+                    let background_resource_type = match switch.background_type {
+                        BackgroundType::CustomRect(_) => "rust_constructor::CustomRect",
+                        BackgroundType::Image(_) => "rust_constructor::Image",
+                    };
+                    let background_resource: Box<dyn BasicFrontResource> =
+                        match background_resource_type {
+                            "rust_constructor::CustomRect" => Box::new(
+                                self.get_resource::<CustomRect>(
+                                    &format!("{name}Background"),
+                                    background_resource_type,
+                                )?
+                                .clone(),
+                            ),
+                            "rust_constructor::Image" => Box::new(
+                                self.get_resource::<Image>(
+                                    &format!("{name}Background"),
+                                    background_resource_type,
+                                )?
+                                .clone(),
+                            ),
+                            _ => {
+                                unreachable!()
+                            }
+                        };
+                    let mut text = self
+                        .get_resource::<Text>(&format!("{name}Text"), "rust_constructor::Text")?
+                        .clone();
+                    let mut hint_text = self
+                        .get_resource::<Text>(&format!("{name}HintText"), "rust_constructor::Text")?
+                        .clone();
+                    let rect = Rect::from_min_size(
+                        background_resource.display_position().into(),
+                        background_resource.display_size().into(),
+                    );
+                    switch.switched = false;
+                    let animation_count =
+                        1 + switch.enable_animation.iter().filter(|x| **x).count();
+                    let mut clicked = None;
+                    let mut hovered = false;
+                    let mut appearance_count = 0;
+                    // 处理点击事件
+                    if let Some(index) = self.get_render_layer_resource(
+                        &format!("{name}Background"),
+                        background_resource_type,
+                    ) && switch.enable
+                        && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
+                        && self.resource_get_focus(index, mouse_pos.into())
+                    {
+                        // 判断是否在矩形内
+                        if rect.contains(mouse_pos) {
+                            if !switch.last_frame_hovered {
+                                self.reset_split_time(&format!("{name}StartHoverTime"))?;
+                            } else if self.timer.total_time
+                                - self.get_split_time(&format!("{name}StartHoverTime"))?[1]
+                                >= 2_f32
+                                || hint_text.alpha != 0
+                            {
+                                hint_text.alpha = 255;
+                                hint_text
+                                    .basic_front_resource_config
+                                    .position_size_config
+                                    .origin_position = [mouse_pos.x, mouse_pos.y];
+                            };
+                            hint_text
+                                .basic_front_resource_config
+                                .position_size_config
+                                .display_method
+                                .0 = if mouse_pos.x + hint_text.actual_size[0]
+                                <= ctx.available_rect().width()
+                            {
+                                HorizontalAlign::Left
+                            } else {
+                                HorizontalAlign::Right
+                            };
+                            hint_text
+                                .basic_front_resource_config
+                                .position_size_config
+                                .display_method
+                                .1 = if mouse_pos.y + hint_text.actual_size[1]
+                                <= ctx.available_rect().height()
+                            {
+                                VerticalAlign::Top
+                            } else {
+                                VerticalAlign::Bottom
+                            };
+                            hovered = true;
+                            for (count, click_method) in switch.click_method.iter().enumerate() {
+                                if ui.input(|i| i.pointer.button_down(click_method.click_method)) {
+                                    clicked = Some(count);
+                                    break;
+                                };
+                            }
+                            if let Some(clicked_index) = switch.last_frame_clicked
+                                && clicked.is_none()
+                            {
+                                switch.switched = true;
+                                if switch.click_method[clicked_index].action {
+                                    if switch.state
+                                        < (switch.appearance.len() / animation_count - 1) as u32
+                                    {
+                                        switch.state += 1;
+                                    } else {
+                                        switch.state = 0;
+                                    };
+                                };
+                            };
+                            appearance_count = if clicked.is_some() {
+                                match switch.enable_animation {
+                                    [true, true] => 2,
+                                    [true, false] | [false, true] => 1,
+                                    [false, false] => 0,
+                                }
+                            } else if switch.enable_animation[0] {
+                                1
+                            } else {
+                                0
+                            };
+                        };
+                    };
+
+                    // 若鼠标未悬挂在开关上，逐渐隐藏提示文本
+                    if !hovered {
+                        if switch.last_frame_hovered {
+                            self.reset_split_time(&format!("{name}HintFadeAnimation"))?;
+                        };
+                        if self.timer.total_time
+                            - self.get_split_time(&format!("{name}HintFadeAnimation"))?[1]
+                            >= self.tick_interval
+                        {
+                            self.reset_split_time(&format!("{name}HintFadeAnimation"))?;
+                            hint_text.alpha = hint_text.alpha.saturating_sub(10);
+                        };
+                    };
+
+                    hint_text.display_info.hidden = hint_text.alpha == 0;
+
+                    // 更新Background样式。
+                    background.background_type = switch.appearance
+                        [(switch.state * animation_count as u32 + appearance_count) as usize]
+                        .background_config
+                        .clone();
+
+                    // 刷新提示Text。
+                    let alpha = hint_text.alpha;
+                    hint_text = hint_text.from_config(
+                        &switch.appearance
+                            [(switch.state * animation_count as u32 + appearance_count) as usize]
+                            .hint_text_config,
+                    );
+                    hint_text.background_alpha = alpha;
+                    hint_text.alpha = alpha;
+
+                    // 更新Text样式。
+                    text = text.from_config(
+                        &switch.appearance
+                            [(switch.state * animation_count as u32 + appearance_count) as usize]
+                            .text_config,
+                    );
+
+                    switch.last_frame_hovered = hovered;
+                    switch.last_frame_clicked = clicked;
+
+                    self.replace_resource(&format!("{name}Text"), text)?;
+                    self.replace_resource(&format!("{name}HintText"), hint_text)?;
+                    self.replace_resource(name, switch)?;
+                    self.replace_resource(&format!("{name}Background"), background)?;
+
+                    self.use_resource(
+                        &format!("{name}Background"),
+                        "rust_constructor::Background",
+                        ui,
+                        ctx,
+                    )?;
+                    self.use_resource(&format!("{name}Text"), "rust_constructor::Text", ui, ctx)?;
+                    self.use_resource(
+                        &format!("{name}HintText"),
+                        "rust_constructor::Text",
+                        ui,
+                        ctx,
+                    )?;
                 }
+                "rust_constructor::ResourcePanel" => {
+                    let mut resource_panel = self
+                        .get_resource::<ResourcePanel>(name, "rust_constructor::ResourcePanel")?
+                        .clone();
+                    let background = self
+                        .get_resource::<Background>(
+                            &format!("{name}Background"),
+                            "rust_constructor::Background",
+                        )?
+                        .clone();
+                    let background_resource: Box<dyn BasicFrontResource> =
+                        match background.background_type.clone() {
+                            BackgroundType::CustomRect(_) => Box::new(
+                                self.get_resource::<CustomRect>(
+                                    &format!("{name}Background"),
+                                    "rust_constructor::CustomRect",
+                                )?
+                                .clone(),
+                            ),
+                            BackgroundType::Image(_) => Box::new(
+                                self.get_resource::<Image>(
+                                    &format!("{name}Background"),
+                                    "rust_constructor::Image",
+                                )?
+                                .clone(),
+                            ),
+                        };
+                    let (mut position_size_config, mut position, mut size) = (
+                        background_resource
+                            .display_basic_front_resource_config()
+                            .position_size_config,
+                        background_resource.display_position(),
+                        background_resource.display_size(),
+                    );
+                    let rect = Rect::from_min_size(position.into(), size.into());
+                    resource_panel.scrolled = [false, false];
+                    if resource_panel.resizable.contains(&true)
+                        || resource_panel.movable.contains(&true)
+                    {
+                        position_size_config.x_location_grid = [0_f32, 0_f32];
+                        position_size_config.y_location_grid = [0_f32, 0_f32];
+                        position_size_config.x_size_grid = [0_f32, 0_f32];
+                        position_size_config.y_size_grid = [0_f32, 0_f32];
+                    };
+                    if resource_panel.min_size[0] < 10_f32 {
+                        resource_panel.min_size[0] = 10_f32;
+                    };
+                    if resource_panel.min_size[1] < 10_f32 {
+                        resource_panel.min_size[1] = 10_f32;
+                    };
+                    if position_size_config.origin_size[0] < resource_panel.min_size[0] {
+                        position_size_config.origin_size[0] = resource_panel.min_size[0];
+                    };
+                    if position_size_config.origin_size[1] < resource_panel.min_size[1] {
+                        position_size_config.origin_size[1] = resource_panel.min_size[1];
+                    };
+                    [position, size] = self.position_size_processor(position_size_config, ctx);
+                    if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                        let top_rect = Rect::from_min_size(
+                            [position[0] - 3_f32, position[1] - 3_f32].into(),
+                            [size[0] + 6_f32, 6_f32].into(),
+                        );
+                        let bottom_rect = Rect::from_min_size(
+                            [position[0] - 3_f32, position[1] + size[1] - 3_f32].into(),
+                            [size[0] + 6_f32, 6_f32].into(),
+                        );
+                        let left_rect = Rect::from_min_size(
+                            [position[0] - 3_f32, position[1] - 3_f32].into(),
+                            [6_f32, size[1] + 6_f32].into(),
+                        );
+                        let right_rect = Rect::from_min_size(
+                            [position[0] + size[0] - 3_f32, position[1] - 3_f32].into(),
+                            [6_f32, size[1] + 6_f32].into(),
+                        );
+                        match [
+                            top_rect.contains(mouse_pos),
+                            bottom_rect.contains(mouse_pos),
+                            left_rect.contains(mouse_pos),
+                            right_rect.contains(mouse_pos),
+                        ] {
+                            [true, false, false, false] => {
+                                if resource_panel.resizable[0] {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::TopResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[1] >= resource_panel.max_size.unwrap()[1]
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    } else {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    };
+                                };
+                            }
+                            [false, true, false, false] => {
+                                if resource_panel.resizable[1] {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::BottomResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[1] >= resource_panel.max_size.unwrap()[1]
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    } else {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    };
+                                };
+                            }
+                            [false, false, true, false] => {
+                                if resource_panel.resizable[2] {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::LeftResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[0] > resource_panel.min_size[0]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[0] < resource_panel.max_size.unwrap()[0])
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                    } else {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                    };
+                                };
+                            }
+                            [false, false, false, true] => {
+                                if resource_panel.resizable[3] {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::RightResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[0] > resource_panel.min_size[0]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[0] < resource_panel.max_size.unwrap()[0])
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                    } else {
+                                        ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                    };
+                                };
+                            }
+                            [true, false, true, false] => {
+                                match [resource_panel.resizable[0], resource_panel.resizable[2]] {
+                                    [true, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::LeftTopResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                            || size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                        };
+                                    }
+                                    [false, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::LeftResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                        };
+                                    }
+                                    [true, false] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::TopResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[1] > resource_panel.min_size[1]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[1] < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        };
+                                    }
+                                    [false, false] => {}
+                                }
+                            }
+                            [false, true, false, true] => {
+                                match [resource_panel.resizable[1], resource_panel.resizable[3]] {
+                                    [true, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::RightBottomResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                            || size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                        };
+                                    }
+                                    [false, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::RightResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                        };
+                                    }
+                                    [true, false] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::BottomResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[1] > resource_panel.min_size[1]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[1] < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        };
+                                    }
+                                    [false, false] => {}
+                                }
+                            }
+                            [true, false, false, true] => {
+                                match [resource_panel.resizable[0], resource_panel.resizable[3]] {
+                                    [true, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::RightTopResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                            || size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                        };
+                                    }
+                                    [false, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::RightResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                        };
+                                    }
+                                    [true, false] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::TopResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[1] > resource_panel.min_size[1]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[1] < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        };
+                                    }
+                                    [false, false] => {}
+                                }
+                            }
+                            [false, true, true, false] => {
+                                match [resource_panel.resizable[1], resource_panel.resizable[2]] {
+                                    [true, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::LeftBottomResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                            || size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                        };
+                                    }
+                                    [false, true] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::LeftResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                        };
+                                    }
+                                    [true, false] => {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::BottomResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[1] > resource_panel.min_size[1]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[1] < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        };
+                                    }
+                                    [false, false] => {}
+                                }
+                            }
+                            _ => {}
+                        };
+                        resource_panel.last_frame_mouse_status =
+                            if resource_panel.last_frame_mouse_status.is_none()
+                                && rect.contains(mouse_pos)
+                                && ui.input(|i| i.pointer.primary_pressed())
+                            {
+                                Some((
+                                    [mouse_pos.x, mouse_pos.y],
+                                    ClickAim::Move,
+                                    [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                ))
+                            } else if resource_panel.last_frame_mouse_status.is_some()
+                                && !ui.input(|i| i.pointer.primary_released())
+                            {
+                                Some((
+                                    [mouse_pos.x, mouse_pos.y],
+                                    resource_panel.last_frame_mouse_status.unwrap().1,
+                                    resource_panel.last_frame_mouse_status.unwrap().2,
+                                ))
+                            } else {
+                                None
+                            };
+                        let [x_scroll_delta, y_scroll_delta] =
+                            if resource_panel.use_smooth_scroll_delta {
+                                ui.input(|i| i.smooth_scroll_delta).into()
+                            } else {
+                                ui.input(|i| i.raw_scroll_delta).into()
+                            };
+                        if resource_panel.scroll_length_method[0].is_some()
+                            && x_scroll_delta != 0_f32
+                            && rect.contains(mouse_pos)
+                        {
+                            resource_panel.scrolled[0] = true;
+                            resource_panel.scroll_progress[0] = if resource_panel.scroll_progress[0]
+                                + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                > resource_panel.scroll_length[0]
+                            {
+                                resource_panel.scroll_length[0]
+                            } else if resource_panel.scroll_progress[0]
+                                + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                > 0_f32
+                            {
+                                resource_panel.scroll_progress[0]
+                                    + -x_scroll_delta * resource_panel.scroll_sensitivity
+                            } else {
+                                0_f32
+                            };
+                        };
+                        if resource_panel.scroll_length_method[1].is_some()
+                            && y_scroll_delta != 0_f32
+                            && rect.contains(mouse_pos)
+                        {
+                            resource_panel.scrolled[1] = true;
+                            resource_panel.scroll_progress[1] = if resource_panel.scroll_progress[1]
+                                + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                > resource_panel.scroll_length[1]
+                            {
+                                resource_panel.scroll_length[1]
+                            } else if resource_panel.scroll_progress[1]
+                                + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                > 0_f32
+                            {
+                                resource_panel.scroll_progress[1]
+                                    + -y_scroll_delta * resource_panel.scroll_sensitivity
+                            } else {
+                                0_f32
+                            };
+                        };
+                    };
+                    if let Some((mouse_pos, click_aim, offset)) =
+                        resource_panel.last_frame_mouse_status
+                    {
+                        match click_aim {
+                            ClickAim::LeftTopResize => {
+                                if position[0] - mouse_pos[0] + size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || position[0] - mouse_pos[0] + size[0]
+                                            < resource_panel.max_size.unwrap()[0])
+                                {
+                                    position_size_config.origin_size[0] +=
+                                        position[0] - mouse_pos[0];
+                                    position_size_config.origin_position[0] = mouse_pos[0];
+                                } else if resource_panel.max_size.is_some()
+                                    && position[0] - mouse_pos[0] + size[0]
+                                        >= resource_panel.max_size.unwrap()[0]
+                                {
+                                    position_size_config.origin_position[0] -=
+                                        resource_panel.max_size.unwrap()[0]
+                                            - position_size_config.origin_size[0];
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.max_size.unwrap()[0];
+                                } else {
+                                    position_size_config.origin_position[0] += position_size_config
+                                        .origin_size[0]
+                                        - resource_panel.min_size[0];
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.min_size[0];
+                                };
+                                if position[1] - mouse_pos[1] + size[1] > resource_panel.min_size[1]
+                                    && (resource_panel.max_size.is_none()
+                                        || position[1] - mouse_pos[1] + size[1]
+                                            < resource_panel.max_size.unwrap()[1])
+                                {
+                                    position_size_config.origin_size[1] +=
+                                        position[1] - mouse_pos[1];
+                                    position_size_config.origin_position[1] = mouse_pos[1];
+                                } else if resource_panel.max_size.is_some()
+                                    && position[1] - mouse_pos[1] + size[1]
+                                        >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    position_size_config.origin_position[1] -=
+                                        resource_panel.max_size.unwrap()[1]
+                                            - position_size_config.origin_size[1];
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.max_size.unwrap()[1];
+                                } else {
+                                    position_size_config.origin_position[1] += position_size_config
+                                        .origin_size[1]
+                                        - resource_panel.min_size[1];
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.min_size[1];
+                                };
+                                if size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || size[0] < resource_panel.max_size.unwrap()[0])
+                                    || size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                } else if resource_panel.max_size.is_some()
+                                    && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    && size[1] >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                } else {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                };
+                            }
+                            ClickAim::RightBottomResize => {
+                                if mouse_pos[0] - position[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || mouse_pos[0] - position[0]
+                                            < resource_panel.max_size.unwrap()[0])
+                                {
+                                    position_size_config.origin_size[0] =
+                                        mouse_pos[0] - position[0];
+                                } else if resource_panel.max_size.is_some()
+                                    && mouse_pos[0] - position[0]
+                                        >= resource_panel.max_size.unwrap()[0]
+                                {
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.max_size.unwrap()[0];
+                                } else {
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.min_size[0];
+                                };
+                                if mouse_pos[1] - position[1] > resource_panel.min_size[1]
+                                    && (resource_panel.max_size.is_none()
+                                        || mouse_pos[1] - position[1]
+                                            < resource_panel.max_size.unwrap()[1])
+                                {
+                                    position_size_config.origin_size[1] =
+                                        mouse_pos[1] - position[1];
+                                } else if resource_panel.max_size.is_some()
+                                    && mouse_pos[1] - position[1]
+                                        >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.max_size.unwrap()[1];
+                                } else {
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.min_size[1];
+                                };
+                                if size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || size[0] < resource_panel.max_size.unwrap()[0])
+                                    || size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                } else if resource_panel.max_size.is_some()
+                                    && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    && size[1] >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                } else {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                };
+                            }
+                            ClickAim::RightTopResize => {
+                                if mouse_pos[0] - position[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || mouse_pos[0] - position[0]
+                                            < resource_panel.max_size.unwrap()[0])
+                                {
+                                    position_size_config.origin_size[0] =
+                                        mouse_pos[0] - position[0];
+                                } else if resource_panel.max_size.is_some()
+                                    && mouse_pos[0] - position[0]
+                                        >= resource_panel.max_size.unwrap()[0]
+                                {
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.max_size.unwrap()[0];
+                                } else {
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.min_size[0];
+                                };
+                                if position[1] - mouse_pos[1] + size[1] > resource_panel.min_size[1]
+                                    && (resource_panel.max_size.is_none()
+                                        || position[1] - mouse_pos[1] + size[1]
+                                            < resource_panel.max_size.unwrap()[1])
+                                {
+                                    position_size_config.origin_size[1] +=
+                                        position[1] - mouse_pos[1];
+                                    position_size_config.origin_position[1] = mouse_pos[1];
+                                } else if resource_panel.max_size.is_some()
+                                    && position[1] - mouse_pos[1] + size[1]
+                                        >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    position_size_config.origin_position[1] -=
+                                        resource_panel.max_size.unwrap()[1]
+                                            - position_size_config.origin_size[1];
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.max_size.unwrap()[1];
+                                } else {
+                                    position_size_config.origin_position[1] += position_size_config
+                                        .origin_size[1]
+                                        - resource_panel.min_size[1];
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.min_size[1];
+                                };
+                                if size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || size[0] < resource_panel.max_size.unwrap()[0])
+                                    || size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                } else if resource_panel.max_size.is_some()
+                                    && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    && size[1] >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                } else {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                };
+                            }
+                            ClickAim::LeftBottomResize => {
+                                if position[0] - mouse_pos[0] + size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || position[0] - mouse_pos[0] + size[0]
+                                            < resource_panel.max_size.unwrap()[0])
+                                {
+                                    position_size_config.origin_size[0] +=
+                                        position[0] - mouse_pos[0];
+                                    position_size_config.origin_position[0] = mouse_pos[0];
+                                } else if resource_panel.max_size.is_some()
+                                    && position[0] - mouse_pos[0] + size[0]
+                                        >= resource_panel.max_size.unwrap()[0]
+                                {
+                                    position_size_config.origin_position[0] -=
+                                        resource_panel.max_size.unwrap()[0]
+                                            - position_size_config.origin_size[0];
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.max_size.unwrap()[0];
+                                } else {
+                                    position_size_config.origin_position[0] += position_size_config
+                                        .origin_size[0]
+                                        - resource_panel.min_size[0];
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.min_size[0];
+                                };
+                                if mouse_pos[1] - position[1] > resource_panel.min_size[1]
+                                    && (resource_panel.max_size.is_none()
+                                        || mouse_pos[1] - position[1]
+                                            < resource_panel.max_size.unwrap()[1])
+                                {
+                                    position_size_config.origin_size[1] =
+                                        mouse_pos[1] - position[1];
+                                } else if resource_panel.max_size.is_some()
+                                    && mouse_pos[1] - position[1]
+                                        >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.max_size.unwrap()[1];
+                                } else {
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.min_size[1];
+                                };
+                                if size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || size[0] < resource_panel.max_size.unwrap()[0])
+                                    || size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                } else if resource_panel.max_size.is_some()
+                                    && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    && size[1] >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                } else {
+                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                };
+                            }
+                            ClickAim::TopResize => {
+                                if position[1] - mouse_pos[1] + size[1] > resource_panel.min_size[1]
+                                    && (resource_panel.max_size.is_none()
+                                        || position[1] - mouse_pos[1] + size[1]
+                                            < resource_panel.max_size.unwrap()[1])
+                                {
+                                    position_size_config.origin_size[1] +=
+                                        position[1] - mouse_pos[1];
+                                    position_size_config.origin_position[1] = mouse_pos[1];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                } else if resource_panel.max_size.is_some()
+                                    && position[1] - mouse_pos[1] + size[1]
+                                        >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    position_size_config.origin_position[1] -=
+                                        resource_panel.max_size.unwrap()[1]
+                                            - position_size_config.origin_size[1];
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.max_size.unwrap()[1];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                } else {
+                                    position_size_config.origin_position[1] += position_size_config
+                                        .origin_size[1]
+                                        - resource_panel.min_size[1];
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.min_size[1];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                };
+                            }
+                            ClickAim::BottomResize => {
+                                if mouse_pos[1] - position[1] > resource_panel.min_size[1]
+                                    && (resource_panel.max_size.is_none()
+                                        || mouse_pos[1] - position[1]
+                                            < resource_panel.max_size.unwrap()[1])
+                                {
+                                    position_size_config.origin_size[1] =
+                                        mouse_pos[1] - position[1];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                } else if resource_panel.max_size.is_some()
+                                    && mouse_pos[1] - position[1]
+                                        >= resource_panel.max_size.unwrap()[1]
+                                {
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.max_size.unwrap()[1];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                } else {
+                                    position_size_config.origin_size[1] =
+                                        resource_panel.min_size[1];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                };
+                            }
+                            ClickAim::LeftResize => {
+                                if position[0] - mouse_pos[0] + size[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || position[0] - mouse_pos[0] + size[0]
+                                            < resource_panel.max_size.unwrap()[0])
+                                {
+                                    position_size_config.origin_size[0] +=
+                                        position[0] - mouse_pos[0];
+                                    position_size_config.origin_position[0] = mouse_pos[0];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                } else if resource_panel.max_size.is_some()
+                                    && position[0] - mouse_pos[0] + size[0]
+                                        >= resource_panel.max_size.unwrap()[0]
+                                {
+                                    position_size_config.origin_position[0] -=
+                                        resource_panel.max_size.unwrap()[0]
+                                            - position_size_config.origin_size[0];
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.max_size.unwrap()[0];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                } else {
+                                    position_size_config.origin_position[0] += position_size_config
+                                        .origin_size[0]
+                                        - resource_panel.min_size[0];
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.min_size[0];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                };
+                            }
+                            ClickAim::RightResize => {
+                                if mouse_pos[0] - position[0] > resource_panel.min_size[0]
+                                    && (resource_panel.max_size.is_none()
+                                        || mouse_pos[0] - position[0]
+                                            < resource_panel.max_size.unwrap()[0])
+                                {
+                                    position_size_config.origin_size[0] =
+                                        mouse_pos[0] - position[0];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                } else if resource_panel.max_size.is_some()
+                                    && mouse_pos[0] - position[0]
+                                        >= resource_panel.max_size.unwrap()[0]
+                                {
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.max_size.unwrap()[0];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                } else {
+                                    position_size_config.origin_size[0] =
+                                        resource_panel.min_size[0];
+                                    ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                };
+                            }
+                            ClickAim::Move => {
+                                if resource_panel.movable[0] {
+                                    position_size_config.origin_position[0] =
+                                        mouse_pos[0] - offset[0];
+                                };
+                                if resource_panel.movable[1] {
+                                    position_size_config.origin_position[1] =
+                                        mouse_pos[1] - offset[1];
+                                };
+                            }
+                        };
+                    };
+                    [position, size] = self.position_size_processor(position_size_config, ctx);
+                    let background_type = match background.background_type.clone() {
+                        BackgroundType::CustomRect(config) => BackgroundType::CustomRect(
+                            config.position_size_config(Some(position_size_config)),
+                        ),
+                        BackgroundType::Image(config) => BackgroundType::Image(
+                            config.position_size_config(Some(position_size_config)),
+                        ),
+                    };
+                    self.replace_resource(
+                        &format!("{name}Background"),
+                        background.clone().background_type(&background_type).clone(),
+                    )?;
+                    self.use_resource(
+                        &format!("{name}Background"),
+                        "rust_constructor::Background",
+                        ui,
+                        ctx,
+                    )?;
+                    let mut resource_point_list: Vec<([f32; 2], [f32; 2], [bool; 2])> = Vec::new();
+                    let mut use_resource_list = Vec::new();
+                    let mut replace_resource_list = Vec::new();
+                    for rcr in &self.rust_constructor_resource {
+                        if self
+                            .basic_front_resource_list
+                            .contains(&rcr.id.discern_type)
+                            && let Some(panel_name) =
+                                self.get_tag("panel_name", &rcr.content.display_tags())
+                            && panel_name.1 == name
+                        {
+                            if let [Some(citer_name), Some(citer_type)] = [
+                                self.get_tag("citer_name", &rcr.content.display_tags()),
+                                self.get_tag("citer_type", &rcr.content.display_tags()),
+                            ] {
+                                if !use_resource_list
+                                    .iter()
+                                    .any(|x| x == &[citer_name.1.clone(), citer_type.1.clone()])
+                                {
+                                    use_resource_list.push([citer_name.1, citer_type.1]);
+                                };
+                            } else if !use_resource_list
+                                .iter()
+                                .any(|x| x == &[rcr.id.name.clone(), rcr.id.discern_type.clone()])
+                            {
+                                use_resource_list
+                                    .push([rcr.id.name.clone(), rcr.id.discern_type.clone()]);
+                            };
+                            let mut basic_front_resource: Box<dyn BasicFrontResource> = match &*rcr
+                                .id
+                                .discern_type
+                            {
+                                "rust_constructor::Image" => Box::new(
+                                    rcr.content
+                                        .as_any()
+                                        .downcast_ref::<Image>()
+                                        .unwrap()
+                                        .clone(),
+                                ),
+                                "rust_constructor::Text" => Box::new(
+                                    rcr.content.as_any().downcast_ref::<Text>().unwrap().clone(),
+                                ),
+                                "rust_constructor::CustomRect" => Box::new(
+                                    rcr.content
+                                        .as_any()
+                                        .downcast_ref::<CustomRect>()
+                                        .unwrap()
+                                        .clone(),
+                                ),
+                                _ => {
+                                    unreachable!()
+                                }
+                            };
+                            let enable_scrolling = [
+                                self.get_tag("disable_x_scrolling", &rcr.content.display_tags())
+                                    .is_none(),
+                                self.get_tag("disable_y_scrolling", &rcr.content.display_tags())
+                                    .is_none(),
+                            ];
+                            let offset = basic_front_resource.display_position_size_config().offset;
+                            basic_front_resource.modify_position_size_config(
+                                basic_front_resource.display_position_size_config().offset(
+                                    if enable_scrolling[0] {
+                                        -resource_panel.scroll_progress[0]
+                                    } else {
+                                        offset[0]
+                                    },
+                                    if enable_scrolling[1] {
+                                        -resource_panel.scroll_progress[1]
+                                    } else {
+                                        offset[1]
+                                    },
+                                ),
+                            );
+                            let mut layout = resource_panel.overall_layout;
+                            for custom_layout in &resource_panel.custom_layout {
+                                match custom_layout {
+                                    CustomPanelLayout::Id(layout_id, panel_layout) => {
+                                        if rcr.id.cmp(layout_id) == Ordering::Equal {
+                                            layout = *panel_layout;
+                                            break;
+                                        };
+                                    }
+                                    CustomPanelLayout::Type(layout_type, panel_layout) => {
+                                        if *layout_type == rcr.id.discern_type {
+                                            layout = *panel_layout;
+                                        }
+                                    }
+                                };
+                            }
+                            if enable_scrolling.contains(&false) {
+                                layout.panel_margin = match layout.panel_margin {
+                                    PanelMargin::Horizontal([top, bottom, left, right], _) => {
+                                        PanelMargin::None([top, bottom, left, right], false)
+                                    }
+                                    PanelMargin::Vertical([top, bottom, left, right], _) => {
+                                        PanelMargin::None([top, bottom, left, right], false)
+                                    }
+                                    PanelMargin::None([_, _, _, _], _) => layout.panel_margin,
+                                };
+                            };
+                            match layout.panel_margin {
+                                PanelMargin::Vertical(
+                                    [top, bottom, left, right],
+                                    move_to_bottom,
+                                ) => {
+                                    let mut modify_y = 0_f32;
+                                    let [default_x_position, default_y_position] =
+                                        match layout.panel_location {
+                                            PanelLocation::Absolute([x, y]) => {
+                                                [position[0] + x, position[1] + y]
+                                            }
+                                            PanelLocation::Relative([x, y]) => [
+                                                position[0] + (size[0] / x[1] as f32 * x[0] as f32),
+                                                position[1] + (size[1] / y[1] as f32 * y[0] as f32),
+                                            ],
+                                        };
+                                    let default_x_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .0
+                                    {
+                                        HorizontalAlign::Left => default_x_position,
+                                        HorizontalAlign::Center => {
+                                            default_x_position
+                                                - basic_front_resource.display_size()[0] / 2.0
+                                        }
+                                        HorizontalAlign::Right => {
+                                            default_x_position
+                                                - basic_front_resource.display_size()[0]
+                                        }
+                                    };
+                                    let default_y_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .1
+                                    {
+                                        VerticalAlign::Top => default_y_position,
+                                        VerticalAlign::Center => {
+                                            default_y_position
+                                                - basic_front_resource.display_size()[1] / 2.0
+                                        }
+                                        VerticalAlign::Bottom => {
+                                            default_y_position
+                                                - basic_front_resource.display_size()[1]
+                                        }
+                                    };
+                                    for point in &resource_point_list {
+                                        if default_x_position - left < point.1[0]
+                                            && default_y_position - top + modify_y < point.1[1]
+                                            && default_x_position
+                                                + basic_front_resource.display_size()[0]
+                                                + right
+                                                > point.0[0]
+                                            && default_y_position
+                                                + basic_front_resource.display_size()[1]
+                                                + bottom
+                                                + modify_y
+                                                > point.0[1]
+                                        {
+                                            if move_to_bottom
+                                                && point.1[1] - default_y_position + top > modify_y
+                                            {
+                                                modify_y = point.1[1] - default_y_position + top;
+                                            } else if !move_to_bottom
+                                                && point.0[1]
+                                                    - default_y_position
+                                                    - basic_front_resource.display_size()[1]
+                                                    - bottom
+                                                    < modify_y
+                                            {
+                                                modify_y = point.0[1]
+                                                    - default_y_position
+                                                    - basic_front_resource.display_size()[1]
+                                                    - bottom;
+                                            };
+                                        };
+                                    }
+                                    let real_x_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .0
+                                    {
+                                        HorizontalAlign::Left => default_x_position,
+                                        HorizontalAlign::Center => {
+                                            default_x_position
+                                                + basic_front_resource.display_size()[0] / 2.0
+                                        }
+                                        HorizontalAlign::Right => {
+                                            default_x_position
+                                                + basic_front_resource.display_size()[0]
+                                        }
+                                    };
+                                    let real_y_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .1
+                                    {
+                                        VerticalAlign::Top => default_y_position + modify_y,
+                                        VerticalAlign::Center => {
+                                            default_y_position
+                                                + modify_y
+                                                + basic_front_resource.display_size()[1] / 2.0
+                                        }
+                                        VerticalAlign::Bottom => {
+                                            default_y_position
+                                                + modify_y
+                                                + basic_front_resource.display_size()[1]
+                                        }
+                                    };
+                                    basic_front_resource.modify_position_size_config(
+                                        basic_front_resource
+                                            .display_position_size_config()
+                                            .origin_position(real_x_position, real_y_position),
+                                    );
+                                    replace_resource_list.push((
+                                        basic_front_resource.display_position_size_config(),
+                                        [rcr.id.name.clone(), rcr.id.discern_type.clone()],
+                                    ));
+                                    resource_point_list.push((
+                                        [real_x_position - left, real_y_position - top],
+                                        [
+                                            real_x_position
+                                                + basic_front_resource.display_size()[0]
+                                                + right,
+                                            real_y_position
+                                                + basic_front_resource.display_size()[1]
+                                                + bottom,
+                                        ],
+                                        enable_scrolling,
+                                    ));
+                                }
+                                PanelMargin::Horizontal(
+                                    [top, bottom, left, right],
+                                    move_to_right,
+                                ) => {
+                                    let mut modify_x = 0_f32;
+                                    let [default_x_position, default_y_position] =
+                                        match layout.panel_location {
+                                            PanelLocation::Absolute([x, y]) => {
+                                                [position[0] + x, position[1] + y]
+                                            }
+                                            PanelLocation::Relative([x, y]) => [
+                                                position[0] + (size[0] / x[1] as f32 * x[0] as f32),
+                                                position[1] + (size[1] / y[1] as f32 * y[0] as f32),
+                                            ],
+                                        };
+                                    let default_x_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .0
+                                    {
+                                        HorizontalAlign::Left => default_x_position,
+                                        HorizontalAlign::Center => {
+                                            default_x_position
+                                                - basic_front_resource.display_size()[0] / 2.0
+                                        }
+                                        HorizontalAlign::Right => {
+                                            default_x_position
+                                                - basic_front_resource.display_size()[0]
+                                        }
+                                    };
+                                    let default_y_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .1
+                                    {
+                                        VerticalAlign::Top => default_y_position,
+                                        VerticalAlign::Center => {
+                                            default_y_position
+                                                - basic_front_resource.display_size()[1] / 2.0
+                                        }
+                                        VerticalAlign::Bottom => {
+                                            default_y_position
+                                                - basic_front_resource.display_size()[1]
+                                        }
+                                    };
+                                    for point in &resource_point_list {
+                                        if default_x_position - left + modify_x < point.1[0]
+                                            && default_y_position - top < point.1[1]
+                                            && default_x_position
+                                                + basic_front_resource.display_size()[0]
+                                                + right
+                                                + modify_x
+                                                > point.0[0]
+                                            && default_y_position
+                                                + basic_front_resource.display_size()[1]
+                                                + bottom
+                                                > point.0[1]
+                                        {
+                                            if move_to_right
+                                                && point.1[0] - default_x_position + left > modify_x
+                                            {
+                                                modify_x = point.1[0] - default_x_position + left;
+                                            } else if !move_to_right
+                                                && point.0[0]
+                                                    - default_x_position
+                                                    - basic_front_resource.display_size()[0]
+                                                    - right
+                                                    < modify_x
+                                            {
+                                                modify_x = point.0[0]
+                                                    - default_x_position
+                                                    - basic_front_resource.display_size()[0]
+                                                    - right;
+                                            };
+                                        };
+                                    }
+                                    let real_x_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .0
+                                    {
+                                        HorizontalAlign::Left => default_x_position + modify_x,
+                                        HorizontalAlign::Center => {
+                                            default_x_position
+                                                + modify_x
+                                                + basic_front_resource.display_size()[0] / 2.0
+                                        }
+                                        HorizontalAlign::Right => {
+                                            default_x_position
+                                                + modify_x
+                                                + basic_front_resource.display_size()[0]
+                                        }
+                                    };
+                                    let real_y_position = match basic_front_resource
+                                        .display_position_size_config()
+                                        .display_method
+                                        .1
+                                    {
+                                        VerticalAlign::Top => default_y_position,
+                                        VerticalAlign::Center => {
+                                            default_y_position
+                                                + basic_front_resource.display_size()[1] / 2.0
+                                        }
+                                        VerticalAlign::Bottom => {
+                                            default_y_position
+                                                + basic_front_resource.display_size()[1]
+                                        }
+                                    };
+                                    basic_front_resource.modify_position_size_config(
+                                        basic_front_resource
+                                            .display_position_size_config()
+                                            .origin_position(real_x_position, real_y_position),
+                                    );
+                                    replace_resource_list.push((
+                                        basic_front_resource.display_position_size_config(),
+                                        [rcr.id.name.clone(), rcr.id.discern_type.clone()],
+                                    ));
+                                    resource_point_list.push((
+                                        [real_x_position - left, real_y_position - top],
+                                        [
+                                            real_x_position
+                                                + basic_front_resource.display_size()[0]
+                                                + right,
+                                            real_y_position
+                                                + basic_front_resource.display_size()[1]
+                                                + bottom,
+                                        ],
+                                        enable_scrolling,
+                                    ));
+                                }
+                                PanelMargin::None([top, bottom, left, right], influence_layout) => {
+                                    let [default_x_position, default_y_position] =
+                                        match layout.panel_location {
+                                            PanelLocation::Absolute([x, y]) => {
+                                                [position[0] + x, position[1] + y]
+                                            }
+                                            PanelLocation::Relative([x, y]) => [
+                                                position[0] + (size[0] / x[1] as f32 * x[0] as f32),
+                                                position[1] + (size[1] / y[1] as f32 * y[0] as f32),
+                                            ],
+                                        };
+                                    basic_front_resource.modify_position_size_config(
+                                        basic_front_resource
+                                            .display_position_size_config()
+                                            .origin_position(
+                                                default_x_position,
+                                                default_y_position,
+                                            ),
+                                    );
+                                    replace_resource_list.push((
+                                        basic_front_resource.display_position_size_config(),
+                                        [rcr.id.name.clone(), rcr.id.discern_type.clone()],
+                                    ));
+                                    if influence_layout {
+                                        resource_point_list.push((
+                                            [default_x_position - left, default_y_position - top],
+                                            [
+                                                default_x_position
+                                                    + basic_front_resource.display_size()[0]
+                                                    + right,
+                                                default_y_position
+                                                    + basic_front_resource.display_size()[1]
+                                                    + bottom,
+                                            ],
+                                            enable_scrolling,
+                                        ));
+                                    };
+                                }
+                            };
+                        };
+                    }
+                    for (new_position_size_config, [name, discern_type]) in replace_resource_list {
+                        match &*discern_type {
+                            "rust_constructor::CustomRect" => {
+                                let mut custom_rect = self
+                                    .get_resource::<CustomRect>(&name, &discern_type)?
+                                    .clone();
+                                custom_rect.basic_front_resource_config.position_size_config =
+                                    new_position_size_config;
+                                custom_rect.basic_front_resource_config.clip_rect =
+                                    Some(position_size_config);
+                                self.replace_resource(&name, custom_rect)?;
+                            }
+                            "rust_constructor::Image" => {
+                                let mut image =
+                                    self.get_resource::<Image>(&name, &discern_type)?.clone();
+                                image.basic_front_resource_config.position_size_config =
+                                    new_position_size_config;
+                                image.basic_front_resource_config.clip_rect =
+                                    Some(position_size_config);
+                                self.replace_resource(&name, image)?;
+                            }
+                            "rust_constructor::Text" => {
+                                let mut text =
+                                    self.get_resource::<Text>(&name, &discern_type)?.clone();
+                                text.basic_front_resource_config.position_size_config =
+                                    new_position_size_config;
+                                text.basic_front_resource_config.clip_rect =
+                                    Some(position_size_config);
+                                self.replace_resource(&name, text)?;
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    for info in use_resource_list {
+                        self.use_resource(&info[0], &info[1], ui, ctx)?;
+                    }
+                    let mut resource_length = [None, None];
+                    for point in resource_point_list {
+                        resource_length = [
+                            if resource_length[0].is_none()
+                                || resource_length[0].is_some()
+                                    && point.1[0] > resource_length[0].unwrap()
+                                    && point.2[0]
+                            {
+                                Some(point.1[0])
+                            } else {
+                                resource_length[0]
+                            },
+                            if resource_length[1].is_none()
+                                || resource_length[1].is_some()
+                                    && point.1[1] > resource_length[1].unwrap()
+                                    && point.2[1]
+                            {
+                                Some(point.1[1])
+                            } else {
+                                resource_length[1]
+                            },
+                        ]
+                    }
+                    if let Some(horizontal_scroll_length_method) =
+                        resource_panel.scroll_length_method[0]
+                    {
+                        resource_panel.scroll_length[0] = match horizontal_scroll_length_method {
+                            ScrollLengthMethod::Fixed(fixed_length) => fixed_length,
+                            ScrollLengthMethod::AutoFit => {
+                                if let Some(max) = resource_length[0] {
+                                    let width = max - position[0];
+                                    if width - size[0] > 0_f32 {
+                                        width - size[0]
+                                    } else {
+                                        0_f32
+                                    }
+                                } else {
+                                    0_f32
+                                }
+                            }
+                        };
+                        resource_panel.scroll_progress[0] = if resource_panel.scroll_progress[0]
+                            > resource_panel.scroll_length[0]
+                        {
+                            resource_panel.scroll_length[0]
+                        } else {
+                            resource_panel.scroll_progress[0]
+                        };
+                    };
+                    if let Some(vertical_scroll_length_method) =
+                        resource_panel.scroll_length_method[1]
+                    {
+                        resource_panel.scroll_length[1] = match vertical_scroll_length_method {
+                            ScrollLengthMethod::Fixed(fixed_length) => fixed_length,
+                            ScrollLengthMethod::AutoFit => {
+                                if let Some(max) = resource_length[1] {
+                                    let height = max - position[1];
+                                    if height - size[1] > 0_f32 {
+                                        height - size[1]
+                                    } else {
+                                        0_f32
+                                    }
+                                } else {
+                                    0_f32
+                                }
+                            }
+                        };
+                        resource_panel.scroll_progress[1] = if resource_panel.scroll_progress[1]
+                            > resource_panel.scroll_length[1]
+                        {
+                            resource_panel.scroll_length[1]
+                        } else {
+                            resource_panel.scroll_progress[1]
+                        };
+                    };
+                    match resource_panel.scroll_bar_display_method {
+                        ScrollBarDisplayMethod::Always(ref config, margin, width) => {
+                            let line_length = if resource_panel.scroll_length[1] == 0_f32 {
+                                (size[0] - margin[0] * 2_f32)
+                                    * (size[0] / (resource_panel.scroll_length[0] + size[0]))
+                            } else {
+                                (size[0] - width - margin[1] - margin[0] * 2_f32)
+                                    * (size[0] / (resource_panel.scroll_length[0] + size[0]))
+                            };
+                            let line_position = if resource_panel.scroll_length[1] == 0_f32 {
+                                position[0]
+                                    + margin[0]
+                                    + (size[0] - margin[0] * 2_f32 - line_length)
+                                        * (resource_panel.scroll_progress[0]
+                                            / resource_panel.scroll_length[0])
+                            } else {
+                                position[0]
+                                    + margin[0]
+                                    + (size[0]
+                                        - margin[0] * 2_f32
+                                        - width
+                                        - margin[1]
+                                        - line_length)
+                                        * (resource_panel.scroll_progress[0]
+                                            / resource_panel.scroll_length[0])
+                            };
+                            self.replace_resource(
+                                &format!("{name}XScroll"),
+                                background.clone().background_type(&match config.clone() {
+                                    BackgroundType::CustomRect(config) => {
+                                        BackgroundType::CustomRect(
+                                            config.position_size_config(Some(
+                                                PositionSizeConfig::default()
+                                                    .display_method(
+                                                        HorizontalAlign::Left,
+                                                        VerticalAlign::Bottom,
+                                                    )
+                                                    .origin_position(
+                                                        line_position,
+                                                        position[1] + size[1] - margin[1],
+                                                    )
+                                                    .origin_size(line_length, width),
+                                            )),
+                                        )
+                                    }
+                                    BackgroundType::Image(config) => BackgroundType::Image(
+                                        config.position_size_config(Some(
+                                            PositionSizeConfig::default()
+                                                .display_method(
+                                                    HorizontalAlign::Left,
+                                                    VerticalAlign::Bottom,
+                                                )
+                                                .origin_position(
+                                                    line_position,
+                                                    position[1] + size[1] - margin[1],
+                                                )
+                                                .origin_size(line_length, width),
+                                        )),
+                                    ),
+                                }),
+                            )?;
+                            self.use_resource(
+                                &format!("{name}XScroll"),
+                                "rust_constructor::Background",
+                                ui,
+                                ctx,
+                            )?;
+                            let line_length = if resource_panel.scroll_length[0] == 0_f32 {
+                                (size[1] - margin[0] * 2_f32)
+                                    * (size[1] / (resource_panel.scroll_length[1] + size[1]))
+                            } else {
+                                (size[1] - width - margin[1] - margin[0] * 2_f32)
+                                    * (size[1] / (resource_panel.scroll_length[1] + size[1]))
+                            };
+                            let line_position = if resource_panel.scroll_length[0] == 0_f32 {
+                                position[1]
+                                    + margin[0]
+                                    + (size[1] - margin[0] * 2_f32 - line_length)
+                                        * (resource_panel.scroll_progress[1]
+                                            / resource_panel.scroll_length[1])
+                            } else {
+                                position[1]
+                                    + margin[0]
+                                    + (size[1]
+                                        - margin[0] * 2_f32
+                                        - width
+                                        - margin[1]
+                                        - line_length)
+                                        * (resource_panel.scroll_progress[1]
+                                            / resource_panel.scroll_length[1])
+                            };
+                            self.replace_resource(
+                                &format!("{name}YScroll"),
+                                background.background_type(&match config.clone() {
+                                    BackgroundType::CustomRect(config) => {
+                                        BackgroundType::CustomRect(
+                                            config.position_size_config(Some(
+                                                PositionSizeConfig::default()
+                                                    .display_method(
+                                                        HorizontalAlign::Right,
+                                                        VerticalAlign::Top,
+                                                    )
+                                                    .origin_position(
+                                                        position[0] + size[0] - margin[1],
+                                                        line_position,
+                                                    )
+                                                    .origin_size(width, line_length),
+                                            )),
+                                        )
+                                    }
+                                    BackgroundType::Image(config) => BackgroundType::Image(
+                                        config.position_size_config(Some(
+                                            PositionSizeConfig::default()
+                                                .display_method(
+                                                    HorizontalAlign::Right,
+                                                    VerticalAlign::Top,
+                                                )
+                                                .origin_position(
+                                                    position[0] + size[0] - margin[1],
+                                                    line_position,
+                                                )
+                                                .origin_size(width, line_length),
+                                        )),
+                                    ),
+                                }),
+                            )?;
+                            self.use_resource(
+                                &format!("{name}YScroll"),
+                                "rust_constructor::Background",
+                                ui,
+                                ctx,
+                            )?;
+                        }
+                        ScrollBarDisplayMethod::OnlyScroll(ref config, margin, width) => {
+                            resource_panel.scroll_bar_alpha[0] = if resource_panel.scrolled[0] {
+                                self.reset_split_time(&format!("{name}ScrollBarXAlphaStart",))?;
+                                255
+                            } else if self.timer.now_time
+                                - self.get_split_time(&format!("{name}ScrollBarXAlphaStart",))?[0]
+                                >= 1_f32
+                                && self.timer.now_time
+                                    - self.get_split_time(&format!("{name}ScrollBarXAlpha",))?[0]
+                                    >= self.tick_interval
+                            {
+                                self.reset_split_time(&format!("{name}ScrollBarXAlpha",))?;
+                                resource_panel.scroll_bar_alpha[0].saturating_sub(10)
+                            } else {
+                                resource_panel.scroll_bar_alpha[0]
+                            };
+                            resource_panel.scroll_bar_alpha[1] = if resource_panel.scrolled[1] {
+                                self.reset_split_time(&format!("{name}ScrollBarYAlphaStart",))?;
+                                255
+                            } else if self.timer.now_time
+                                - self.get_split_time(&format!("{name}ScrollBarYAlphaStart",))?[0]
+                                >= 1_f32
+                                && self.timer.now_time
+                                    - self.get_split_time(&format!("{name}ScrollBarYAlpha",))?[0]
+                                    >= self.tick_interval
+                            {
+                                self.reset_split_time(&format!("{name}ScrollBarYAlpha",))?;
+                                resource_panel.scroll_bar_alpha[1].saturating_sub(10)
+                            } else {
+                                resource_panel.scroll_bar_alpha[1]
+                            };
+                            let line_length = if resource_panel.scroll_length[1] == 0_f32 {
+                                (size[0] - margin[0] * 2_f32)
+                                    * (size[0] / (resource_panel.scroll_length[0] + size[0]))
+                            } else {
+                                (size[0] - width - margin[1] - margin[0] * 2_f32)
+                                    * (size[0] / (resource_panel.scroll_length[0] + size[0]))
+                            };
+                            let line_position = if resource_panel.scroll_length[1] == 0_f32 {
+                                position[0]
+                                    + margin[0]
+                                    + (size[0] - margin[0] * 2_f32 - line_length)
+                                        * (resource_panel.scroll_progress[0]
+                                            / resource_panel.scroll_length[0])
+                            } else {
+                                position[0]
+                                    + margin[0]
+                                    + (size[0]
+                                        - margin[0] * 2_f32
+                                        - width
+                                        - margin[1]
+                                        - line_length)
+                                        * (resource_panel.scroll_progress[0]
+                                            / resource_panel.scroll_length[0])
+                            };
+                            self.replace_resource(
+                                &format!("{name}XScroll"),
+                                background.clone().background_type(&match config.clone() {
+                                    BackgroundType::CustomRect(config) => {
+                                        BackgroundType::CustomRect(
+                                            config
+                                                .position_size_config(Some(
+                                                    PositionSizeConfig::default()
+                                                        .display_method(
+                                                            HorizontalAlign::Left,
+                                                            VerticalAlign::Bottom,
+                                                        )
+                                                        .origin_position(
+                                                            line_position,
+                                                            position[1] + size[1] - margin[1],
+                                                        )
+                                                        .origin_size(line_length, width),
+                                                ))
+                                                .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                                .border_alpha(Some(
+                                                    resource_panel.scroll_bar_alpha[0],
+                                                )),
+                                        )
+                                    }
+                                    BackgroundType::Image(config) => BackgroundType::Image(
+                                        config
+                                            .position_size_config(Some(
+                                                PositionSizeConfig::default()
+                                                    .display_method(
+                                                        HorizontalAlign::Left,
+                                                        VerticalAlign::Bottom,
+                                                    )
+                                                    .origin_position(
+                                                        line_position,
+                                                        position[1] + size[1] - margin[1],
+                                                    )
+                                                    .origin_size(line_length, width),
+                                            ))
+                                            .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                            .background_alpha(Some(
+                                                resource_panel.scroll_bar_alpha[0],
+                                            ))
+                                            .overlay_alpha(Some(
+                                                resource_panel.scroll_bar_alpha[0],
+                                            )),
+                                    ),
+                                }),
+                            )?;
+                            self.use_resource(
+                                &format!("{name}XScroll"),
+                                "rust_constructor::Background",
+                                ui,
+                                ctx,
+                            )?;
+                            let line_length = if resource_panel.scroll_length[0] == 0_f32 {
+                                (size[1] - margin[0] * 2_f32)
+                                    * (size[1] / (resource_panel.scroll_length[1] + size[1]))
+                            } else {
+                                (size[1] - width - margin[1] - margin[0] * 2_f32)
+                                    * (size[1] / (resource_panel.scroll_length[1] + size[1]))
+                            };
+                            let line_position = if resource_panel.scroll_length[0] == 0_f32 {
+                                position[1]
+                                    + margin[0]
+                                    + (size[1] - margin[0] * 2_f32 - line_length)
+                                        * (resource_panel.scroll_progress[1]
+                                            / resource_panel.scroll_length[1])
+                            } else {
+                                position[1]
+                                    + margin[0]
+                                    + (size[1]
+                                        - margin[0] * 2_f32
+                                        - width
+                                        - margin[1]
+                                        - line_length)
+                                        * (resource_panel.scroll_progress[1]
+                                            / resource_panel.scroll_length[1])
+                            };
+                            self.replace_resource(
+                                &format!("{name}YScroll"),
+                                background.clone().background_type(&match config.clone() {
+                                    BackgroundType::CustomRect(config) => {
+                                        BackgroundType::CustomRect(
+                                            config
+                                                .position_size_config(Some(
+                                                    PositionSizeConfig::default()
+                                                        .display_method(
+                                                            HorizontalAlign::Right,
+                                                            VerticalAlign::Top,
+                                                        )
+                                                        .origin_position(
+                                                            position[0] + size[0] - margin[1],
+                                                            line_position,
+                                                        )
+                                                        .origin_size(width, line_length),
+                                                ))
+                                                .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                                .border_alpha(Some(
+                                                    resource_panel.scroll_bar_alpha[0],
+                                                )),
+                                        )
+                                    }
+                                    BackgroundType::Image(config) => BackgroundType::Image(
+                                        config
+                                            .position_size_config(Some(
+                                                PositionSizeConfig::default()
+                                                    .display_method(
+                                                        HorizontalAlign::Right,
+                                                        VerticalAlign::Top,
+                                                    )
+                                                    .origin_position(
+                                                        position[0] + size[0] - margin[1],
+                                                        line_position,
+                                                    )
+                                                    .origin_size(width, line_length),
+                                            ))
+                                            .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                            .background_alpha(Some(
+                                                resource_panel.scroll_bar_alpha[0],
+                                            ))
+                                            .overlay_alpha(Some(
+                                                resource_panel.scroll_bar_alpha[0],
+                                            )),
+                                    ),
+                                }),
+                            )?;
+                            self.use_resource(
+                                &format!("{name}YScroll"),
+                                "rust_constructor::Background",
+                                ui,
+                                ctx,
+                            )?;
+                        }
+                        ScrollBarDisplayMethod::Hidden => {}
+                    };
+                    self.replace_resource(name, resource_panel.clone())?;
+                }
+                _ => {}
             };
             Ok(())
         } else {
@@ -3902,5 +6740,26 @@ impl App {
             });
         }
         Ok(())
+    }
+
+    /// 修改开关的启用状态。
+    pub fn set_switch_enable(
+        &mut self,
+        name: &str,
+        enable: bool,
+    ) -> Result<(), RustConstructorError> {
+        let switch = self.get_resource_mut::<Switch>(name, "rust_constructor::Switch")?;
+        switch.enable = enable;
+        Ok(())
+    }
+
+    /// 查找指定开关的常用判定字段集合。
+    pub fn check_switch_data(&self, name: &str) -> Result<SwitchData, RustConstructorError> {
+        let switch = self.get_resource::<Switch>(name, "rust_constructor::Switch")?;
+        Ok(SwitchData {
+            switched: switch.switched,
+            last_frame_clicked: switch.last_frame_clicked,
+            state: switch.state,
+        })
     }
 }

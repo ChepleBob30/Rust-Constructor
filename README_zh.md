@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.7.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.8.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -27,12 +27,18 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.7.1`。主要更新了以下内容：
-  - 添加`RequestMethod`用于管理申请跳过渲染队列的方法；
-  - 将一部分字段中的`[String; 2]`改为`RustConstructorId`；
-  - 更新了`request_jump_render_list`,现在可以通过检查资源引用者的方式来查找渲染资源并跳过队列；
-  - 添加了`unsafe_request_jump_render_list`方法，用于在渲染队列中插队，且无视申请跳过队列的资源是否存在。
-  - 添加了`get_box_resource`和`get_box_resource_mut`方法，用于在不提供具体类型的情况下获取资源。
+- 目前的最新版本为`v2.8.0 三个重点`。
+  - 本更新围绕“多维度”“快运行”“好使用”三个重点进行了一系列改进。
+    - 修改了`RustConstructorResource`中`modify_tags`的定义，现在可以选择是否要清空原有标签；
+    - 将`position`和`size`从`position_size_config`中取出，并在`BasicFrontResource`中添加了`display_position``display_size`两个新方法；
+    - 移除了事件机制及与其相关的所有内容；
+    - 将`Rust Constructor Extra`重新整合到`Rust Constructor`中(也就是说，添加了`Background` `Switch` `ResourcePanel`三个新资源及其相关方法)；
+    - 将颜色和透明度拆成了`color`和`alpha`两个字段；
+    - 移除了`Text`的`truncate`，现在`Text`强制截断文本，且可以通过`auto_fit`指定是否让渲染层大小(设定`size`等于实际文本大小还是文本框大小)；
+    - 改进了`ResourcePanel`的布局方式，现在只需在`ResourcePanel`内部定义排版方式即可；
+    - 添加了`ResourcePanel`的滚动条；
+    - 修复了`ResourcePanel`的布局错乱问题；
+    - 修复了一些已知问题。
 ---
 
 ## 简介

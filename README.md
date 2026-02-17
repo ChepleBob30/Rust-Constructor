@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-v2.7.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/version-v2.8.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -27,12 +27,18 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current latest version is `v2.7.1`. The main updates include:
-  - Added `RequestMethod` to manage methods for requesting to skip rendering queue;
-  - Replaced `[String; 2]` with `RustConstructorId` in certain fields;
-  - Updated `request_jump_render_list` to now locate rendering resources and bypass queue through resource reference inspection;
-  - Added `unsafe_request_jump_render_list` method to preemptively jump rendering queue regardless of referenced resource existence;
-  - Added `get_box_resource` and `get_box_resource_mut` methods to retrieve resources without specifying concrete types.
+- Current latest version is `v2.8.0 Three Core Principles`.
+  - This update introduces improvements centered around three key aspects: "Multiple Dimensions", "Fast Execution", and "Ease of Use".
+    - Modified `modify_tags` definition in `RustConstructorResource` to support optional clearing of existing tags;
+    - Extracted `position` and `size` from `position_size_config`, added new methods `display_position` and `display_size` in `BasicFrontResource`;
+    - Removed event system and all associated components;
+    - Reintegrated `Rust Constructor Extra` into `Rust Constructor` (i.e., added three new resources `Background`, `Switch`, `ResourcePanel` with their corresponding methods);
+    - Split color property into separate `color` and `alpha` fields;
+    - Removed `truncate` from `Text`, now enforces text truncation with `auto_fit` parameter controlling render layer sizing behavior (whether `size` reflects actual text dimensions or bounding box dimensions);
+    - Enhanced `ResourcePanel` layout system - layout strategy can now be defined internally within `ResourcePanel`;
+    - Implemented scrollbars for `ResourcePanel`;
+    - Fixed layout corruption issues in `ResourcePanel`;
+    - Resolved several known bugs.
 
 ---
 
