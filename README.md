@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-v2.8.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/version-v2.8.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -27,18 +27,12 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- Current latest version is `v2.8.0 Three Core Principles`.
-  - This update introduces improvements centered around three key aspects: "Multiple Dimensions", "Fast Execution", and "Ease of Use".
-    - Modified `modify_tags` definition in `RustConstructorResource` to support optional clearing of existing tags;
-    - Extracted `position` and `size` from `position_size_config`, added new methods `display_position` and `display_size` in `BasicFrontResource`;
-    - Removed event system and all associated components;
-    - Reintegrated `Rust Constructor Extra` into `Rust Constructor` (i.e., added three new resources `Background`, `Switch`, `ResourcePanel` with their corresponding methods);
-    - Split color property into separate `color` and `alpha` fields;
-    - Removed `truncate` from `Text`, now enforces text truncation with `auto_fit` parameter controlling render layer sizing behavior (whether `size` reflects actual text dimensions or bounding box dimensions);
-    - Enhanced `ResourcePanel` layout system - layout strategy can now be defined internally within `ResourcePanel`;
-    - Implemented scrollbars for `ResourcePanel`;
-    - Fixed layout corruption issues in `ResourcePanel`;
-    - Resolved several known bugs.
+- Current latest version is `v2.8.1`.
+  - Fixed several known issues:
+    - Resolved layout corruption issue in `Text` component;
+    - Fixed `Text` displaying ellipsis `...` when text content is empty;
+    - Addressed automatic tooltip triggering during `Switch` initialization;
+    - Changed mutable references to immutable references in certain method implementations;
 
 ---
 

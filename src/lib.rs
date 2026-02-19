@@ -2709,11 +2709,13 @@ impl App {
                         self.get_resource::<Text>(&render_resource.name, "rust_constructor::Text")?;
                     if text.display_info.enable {
                         let mut text = text.clone();
-                        [text.position, text.truncate_size] = self.position_size_processor(
+                        [_, text.truncate_size] = self.position_size_processor(
                             text.basic_front_resource_config.position_size_config,
                             ctx,
                         );
-                        let display_content = {
+                        let display_content = if text.content.is_empty() {
+                            "".to_string()
+                        } else {
                             let original_galley = ui.fonts_mut(|f| {
                                 f.layout(
                                     text.content.to_string(),
@@ -2791,6 +2793,14 @@ impl App {
                             },
                         ];
                         text.actual_size = [galley.size().x, galley.size().y];
+                        [text.position, _] = self.position_size_processor(
+                            text.basic_front_resource_config
+                                .position_size_config
+                                .x_size_grid(0_f32, 0_f32)
+                                .y_size_grid(0_f32, 0_f32)
+                                .origin_size(text.size[0], text.size[1]),
+                            ctx,
+                        );
                         // 查找超链接索引值
                         if text.last_frame_content != display_content {
                             text.hyperlink_index.clear();
@@ -4034,6 +4044,7 @@ impl App {
                             .from_config(&switch.hint_text_config)
                             .ignore_render_layer(true)
                             .hidden(true)
+                            .alpha(0)
                             .tags(
                                 &[
                                     ["citer_name".to_string(), name.to_string()],
@@ -6474,13 +6485,13 @@ impl App {
     }
 
     /// 输出字体资源。
-    pub fn get_font(&mut self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
+    pub fn get_font(&self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
         let font = self.get_resource::<Font>(name, "rust_constructor::Font")?;
         Ok(font.font_definitions.clone())
     }
 
     /// 将所有已添加到RC的字体资源添加到egui中。
-    pub fn register_all_fonts(&mut self, ctx: &Context) {
+    pub fn register_all_fonts(&self, ctx: &Context) {
         let mut font_definitions_amount = FontDefinitions::default();
         let mut fonts = Vec::new();
         for i in 0..self.rust_constructor_resource.len() {
@@ -6639,7 +6650,7 @@ impl App {
     }
 
     /// 输出分段时间。
-    pub fn get_split_time(&mut self, name: &str) -> Result<[f32; 2], RustConstructorError> {
+    pub fn get_split_time(&self, name: &str) -> Result<[f32; 2], RustConstructorError> {
         let split_time = self.get_resource::<SplitTime>(name, "rust_constructor::SplitTime")?;
         Ok(split_time.time)
     }
@@ -6666,7 +6677,7 @@ impl App {
 
     /// 取出变量。
     pub fn get_variable<T: Debug + Clone + 'static>(
-        &mut self,
+        &self,
         name: &str,
     ) -> Result<Option<T>, RustConstructorError> {
         if let Ok(variable) = self.get_resource::<Variable<T>>(name, "rust_constructor::Variable") {
@@ -6693,11 +6704,11 @@ impl App {
 
     /// 输出图片纹理。
     pub fn get_image_texture(
-        &mut self,
+        &self,
         name: &str,
     ) -> Result<Option<DebugTextureHandle>, RustConstructorError> {
         let image_texture =
-            self.get_resource_mut::<ImageTexture>(name, "rust_constructor::ImageTexture")?;
+            self.get_resource::<ImageTexture>(name, "rust_constructor::ImageTexture")?;
         Ok(image_texture.texture.clone())
     }
 
