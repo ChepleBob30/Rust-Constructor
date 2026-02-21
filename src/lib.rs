@@ -2014,7 +2014,7 @@ pub enum ScrollLengthMethod {
     /// 固定尺寸。
     Fixed(f32),
     /// 自适应尺寸。
-    AutoFit,
+    AutoFit(f32),
 }
 
 /// 鼠标点击资源板的目的。
@@ -2069,15 +2069,6 @@ pub struct PanelLayout {
     pub panel_location: PanelLocation,
 }
 
-/// 用于自定义资源排版方式。
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum CustomPanelLayout {
-    /// 通过类型自定义。
-    Type(String, PanelLayout),
-    /// 通过ID自定义。
-    Id(RustConstructorId, PanelLayout),
-}
-
 /// 用于控制基本前端资源在资源板中的定位方式。
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum PanelLocation {
@@ -2087,10 +2078,23 @@ pub enum PanelLocation {
     Relative([[u32; 2]; 2]),
 }
 
+/// 用于存储资源数据的结构体。
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
+pub struct PanelStorage {
+    /// 资源Id。
+    pub id: RustConstructorId,
+    /// 存储资源是否忽略渲染层。
+    pub ignore_render_layer: bool,
+    /// 存储资源是否隐藏。
+    pub hidden: bool,
+    /// 存储资源原始尺寸。
+    pub origin_size: [f32; 2],
+}
+
 /// RC的资源板。
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ResourcePanel {
-    /// 是否可通过拖拽更改尺寸。
+    /// 是否可通过拖拽更改ResourcePanel尺寸。
     pub resizable: [bool; 4],
     /// 在资源底部显示方框。
     pub background: BackgroundType,
@@ -2098,7 +2102,7 @@ pub struct ResourcePanel {
     pub min_size: [f32; 2],
     /// 最大尺寸(可选)。
     pub max_size: Option<[f32; 2]>,
-    /// 允许拖动资源板。
+    /// 允许拖动ResourcePanel。
     pub movable: [bool; 2],
     /// 滚动长度计算方法(不需要滚动留空即可)。
     pub scroll_length_method: [Option<ScrollLengthMethod>; 2],
@@ -2108,10 +2112,14 @@ pub struct ResourcePanel {
     pub use_smooth_scroll_delta: bool,
     /// 滚动条显示方法。
     pub scroll_bar_display_method: ScrollBarDisplayMethod,
-    /// 全局控制资源的排版方式。
-    pub overall_layout: PanelLayout,
-    /// 自定义资源的排版方式。
-    pub custom_layout: Vec<CustomPanelLayout>,
+    /// 控制资源的排版方式。
+    pub layout: PanelLayout,
+    /// 是否隐藏ResourcePanel。
+    pub hidden: bool,
+    /// 反转滚动方向。
+    pub reverse_scroll_direction: [bool; 2],
+    /// 自动缩放资源。
+    pub auto_shrink: [bool; 2],
     /// 滚动长度。
     pub scroll_length: [f32; 2],
     /// 滚动进度。
@@ -2122,6 +2130,8 @@ pub struct ResourcePanel {
     pub scrolled: [bool; 2],
     /// 滚动条透明度。
     pub scroll_bar_alpha: [u8; 2],
+    /// 资源原始信息储存列表。
+    pub resource_storage: Vec<PanelStorage>,
     /// 标签。
     pub tags: Vec<[String; 2]>,
 }
@@ -2175,16 +2185,19 @@ impl Default for ResourcePanel {
                 [4_f32, 2_f32],
                 4_f32,
             ),
-            overall_layout: (PanelLayout {
+            layout: (PanelLayout {
                 panel_margin: PanelMargin::Vertical([0_f32, 0_f32, 0_f32, 0_f32], false),
                 panel_location: PanelLocation::Absolute([0_f32, 0_f32]),
             }),
-            custom_layout: Vec::new(),
+            hidden: false,
+            reverse_scroll_direction: [false, false],
+            auto_shrink: [true, false],
             scroll_length: [0_f32, 0_f32],
             scroll_progress: [0_f32, 0_f32],
             last_frame_mouse_status: None,
             scrolled: [false, false],
             scroll_bar_alpha: [0, 0],
+            resource_storage: Vec::new(),
             tags: Vec::new(),
         }
     }
@@ -2253,20 +2266,26 @@ impl ResourcePanel {
     }
 
     #[inline]
-    pub fn overall_layout(mut self, overall_layout: PanelLayout) -> Self {
-        self.overall_layout = overall_layout;
+    pub fn layout(mut self, layout: PanelLayout) -> Self {
+        self.layout = layout;
         self
     }
 
     #[inline]
-    pub fn push_custom_layout(mut self, custom_layout: CustomPanelLayout) -> Self {
-        self.custom_layout.push(custom_layout);
+    pub fn hidden(mut self, hidden: bool) -> Self {
+        self.hidden = hidden;
         self
     }
 
     #[inline]
-    pub fn custom_layout(mut self, custom_layout: &[CustomPanelLayout]) -> Self {
-        self.custom_layout = custom_layout.to_owned();
+    pub fn reverse_scroll_direction(mut self, horizontal: bool, vertical: bool) -> Self {
+        self.reverse_scroll_direction = [horizontal, vertical];
+        self
+    }
+
+    #[inline]
+    pub fn auto_shrink(mut self, horizontal: bool, vertical: bool) -> Self {
+        self.auto_shrink = [horizontal, vertical];
         self
     }
 
@@ -2344,6 +2363,8 @@ pub struct Switch {
     pub last_frame_clicked: Option<usize>,
     /// 是否切换了Switch状态。
     pub switched: bool,
+    /// 是否让创建的资源使用Switch的标签。
+    pub use_switch_tags: bool,
     /// 标签。
     pub tags: Vec<[String; 2]>,
 }
@@ -2396,6 +2417,7 @@ impl Default for Switch {
             last_frame_hovered: false,
             last_frame_clicked: None,
             switched: false,
+            use_switch_tags: false,
             tags: Vec::new(),
         }
     }
@@ -2447,6 +2469,12 @@ impl Switch {
     #[inline]
     pub fn enable(mut self, enable: bool) -> Self {
         self.enable = enable;
+        self
+    }
+
+    #[inline]
+    pub fn use_switch_tags(mut self, use_switch_tags: bool) -> Self {
+        self.use_switch_tags = use_switch_tags;
         self
     }
 
@@ -2713,7 +2741,13 @@ impl App {
                             text.basic_front_resource_config.position_size_config,
                             ctx,
                         );
-                        let display_content = if text.content.is_empty() {
+                        let display_content = if text.content.is_empty()
+                            || text
+                                .basic_front_resource_config
+                                .position_size_config
+                                .origin_size
+                                .contains(&0_f32)
+                        {
                             "".to_string()
                         } else {
                             let original_galley = ui.fonts_mut(|f| {
@@ -3617,7 +3651,7 @@ impl App {
     }
 
     /// 请求在渲染队列中插队，且无视申请跳过队列的资源是否存在。
-    pub fn unsafe_request_jump_render_list(
+    pub fn try_request_jump_render_list(
         &mut self,
         requester: RequestMethod,
         request_type: RequestType,
@@ -4021,6 +4055,14 @@ impl App {
                             .auto_update(true)
                             .use_background_tags(true)
                             .tags(
+                                if switch.use_switch_tags {
+                                    &switch.tags
+                                } else {
+                                    &[]
+                                },
+                                false,
+                            )
+                            .tags(
                                 &[
                                     ["citer_name".to_string(), name.to_string()],
                                     ["citer_type".to_string(), discern_type.to_string()],
@@ -4030,13 +4072,23 @@ impl App {
                     )?;
                     self.add_resource(
                         &format!("{name}Text"),
-                        Text::default().from_config(&switch.text_config).tags(
-                            &[
-                                ["citer_name".to_string(), name.to_string()],
-                                ["citer_type".to_string(), discern_type.to_string()],
-                            ],
-                            false,
-                        ),
+                        Text::default()
+                            .from_config(&switch.text_config)
+                            .tags(
+                                if switch.use_switch_tags {
+                                    &switch.tags
+                                } else {
+                                    &[]
+                                },
+                                false,
+                            )
+                            .tags(
+                                &[
+                                    ["citer_name".to_string(), name.to_string()],
+                                    ["citer_type".to_string(), discern_type.to_string()],
+                                ],
+                                false,
+                            ),
                     )?;
                     self.add_resource(
                         &format!("{name}HintText"),
@@ -4515,6 +4567,8 @@ impl App {
                     ) && switch.enable
                         && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
                         && self.resource_get_focus(index, mouse_pos.into())
+                        && let Some(display_info) = background_resource.display_display_info()
+                        && !display_info.hidden
                     {
                         // 判断是否在矩形内
                         if rect.contains(mouse_pos) {
@@ -4555,7 +4609,12 @@ impl App {
                             };
                             hovered = true;
                             for (count, click_method) in switch.click_method.iter().enumerate() {
-                                if ui.input(|i| i.pointer.button_down(click_method.click_method)) {
+                                if ui.input(|i| {
+                                    switch.last_frame_clicked.is_none()
+                                        && i.pointer.button_pressed(click_method.click_method)
+                                        || switch.last_frame_clicked.is_some()
+                                            && i.pointer.button_down(click_method.click_method)
+                                }) {
                                     clicked = Some(count);
                                     break;
                                 };
@@ -4610,22 +4669,52 @@ impl App {
                         .background_config
                         .clone();
 
+                    background.modify_tags(
+                        if switch.use_switch_tags {
+                            &switch.tags
+                        } else {
+                            &[]
+                        },
+                        false,
+                    );
+
                     // 刷新提示Text。
                     let alpha = hint_text.alpha;
-                    hint_text = hint_text.from_config(
-                        &switch.appearance
-                            [(switch.state * animation_count as u32 + appearance_count) as usize]
-                            .hint_text_config,
-                    );
+                    hint_text = hint_text
+                        .from_config(
+                            &switch.appearance[(switch.state * animation_count as u32
+                                + appearance_count)
+                                as usize]
+                                .hint_text_config,
+                        )
+                        .ignore_render_layer(true);
                     hint_text.background_alpha = alpha;
                     hint_text.alpha = alpha;
+                    hint_text.display_info.hidden = if let Some(display_info) =
+                        background_resource.display_display_info()
+                        && display_info.hidden
+                    {
+                        true
+                    } else {
+                        hint_text.display_info.hidden
+                    };
 
                     // 更新Text样式。
-                    text = text.from_config(
-                        &switch.appearance
-                            [(switch.state * animation_count as u32 + appearance_count) as usize]
-                            .text_config,
-                    );
+                    text = text
+                        .tags(
+                            if switch.use_switch_tags {
+                                &switch.tags
+                            } else {
+                                &[]
+                            },
+                            false,
+                        )
+                        .from_config(
+                            &switch.appearance[(switch.state * animation_count as u32
+                                + appearance_count)
+                                as usize]
+                                .text_config,
+                        );
 
                     switch.last_frame_hovered = hovered;
                     switch.last_frame_clicked = clicked;
@@ -4642,12 +4731,14 @@ impl App {
                         ctx,
                     )?;
                     self.use_resource(&format!("{name}Text"), "rust_constructor::Text", ui, ctx)?;
-                    self.use_resource(
-                        &format!("{name}HintText"),
-                        "rust_constructor::Text",
-                        ui,
-                        ctx,
-                    )?;
+                    if alpha != 0 {
+                        self.use_resource(
+                            &format!("{name}HintText"),
+                            "rust_constructor::Text",
+                            ui,
+                            ctx,
+                        )?;
+                    };
                 }
                 "rust_constructor::ResourcePanel" => {
                     let mut resource_panel = self
@@ -4706,549 +4797,719 @@ impl App {
                         position_size_config.origin_size[1] = resource_panel.min_size[1];
                     };
                     [position, size] = self.position_size_processor(position_size_config, ctx);
-                    if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                        let top_rect = Rect::from_min_size(
-                            [position[0] - 3_f32, position[1] - 3_f32].into(),
-                            [size[0] + 6_f32, 6_f32].into(),
-                        );
-                        let bottom_rect = Rect::from_min_size(
-                            [position[0] - 3_f32, position[1] + size[1] - 3_f32].into(),
-                            [size[0] + 6_f32, 6_f32].into(),
-                        );
-                        let left_rect = Rect::from_min_size(
-                            [position[0] - 3_f32, position[1] - 3_f32].into(),
-                            [6_f32, size[1] + 6_f32].into(),
-                        );
-                        let right_rect = Rect::from_min_size(
-                            [position[0] + size[0] - 3_f32, position[1] - 3_f32].into(),
-                            [6_f32, size[1] + 6_f32].into(),
-                        );
-                        match [
-                            top_rect.contains(mouse_pos),
-                            bottom_rect.contains(mouse_pos),
-                            left_rect.contains(mouse_pos),
-                            right_rect.contains(mouse_pos),
-                        ] {
-                            [true, false, false, false] => {
-                                if resource_panel.resizable[0] {
-                                    if resource_panel.last_frame_mouse_status.is_none()
-                                        && ui.input(|i| i.pointer.primary_pressed())
-                                    {
-                                        resource_panel.last_frame_mouse_status = Some((
-                                            mouse_pos.into(),
-                                            ClickAim::TopResize,
-                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
-                                        ))
-                                    };
-                                    if size[1] > resource_panel.min_size[1]
-                                        && (resource_panel.max_size.is_none()
-                                            || size[1] < resource_panel.max_size.unwrap()[1])
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                    } else if resource_panel.max_size.is_some()
-                                        && size[1] >= resource_panel.max_size.unwrap()[1]
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                    } else {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                    };
-                                };
-                            }
-                            [false, true, false, false] => {
-                                if resource_panel.resizable[1] {
-                                    if resource_panel.last_frame_mouse_status.is_none()
-                                        && ui.input(|i| i.pointer.primary_pressed())
-                                    {
-                                        resource_panel.last_frame_mouse_status = Some((
-                                            mouse_pos.into(),
-                                            ClickAim::BottomResize,
-                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
-                                        ))
-                                    };
-                                    if size[1] > resource_panel.min_size[1]
-                                        && (resource_panel.max_size.is_none()
-                                            || size[1] < resource_panel.max_size.unwrap()[1])
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                    } else if resource_panel.max_size.is_some()
-                                        && size[1] >= resource_panel.max_size.unwrap()[1]
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                    } else {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                    };
-                                };
-                            }
-                            [false, false, true, false] => {
-                                if resource_panel.resizable[2] {
-                                    if resource_panel.last_frame_mouse_status.is_none()
-                                        && ui.input(|i| i.pointer.primary_pressed())
-                                    {
-                                        resource_panel.last_frame_mouse_status = Some((
-                                            mouse_pos.into(),
-                                            ClickAim::LeftResize,
-                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
-                                        ))
-                                    };
-                                    if size[0] > resource_panel.min_size[0]
-                                        && (resource_panel.max_size.is_none()
-                                            || size[0] < resource_panel.max_size.unwrap()[0])
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                    } else if resource_panel.max_size.is_some()
-                                        && size[0] >= resource_panel.max_size.unwrap()[0]
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                    } else {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                    };
-                                };
-                            }
-                            [false, false, false, true] => {
-                                if resource_panel.resizable[3] {
-                                    if resource_panel.last_frame_mouse_status.is_none()
-                                        && ui.input(|i| i.pointer.primary_pressed())
-                                    {
-                                        resource_panel.last_frame_mouse_status = Some((
-                                            mouse_pos.into(),
-                                            ClickAim::RightResize,
-                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
-                                        ))
-                                    };
-                                    if size[0] > resource_panel.min_size[0]
-                                        && (resource_panel.max_size.is_none()
-                                            || size[0] < resource_panel.max_size.unwrap()[0])
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                    } else if resource_panel.max_size.is_some()
-                                        && size[0] >= resource_panel.max_size.unwrap()[0]
-                                    {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                    } else {
-                                        ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                    };
-                                };
-                            }
-                            [true, false, true, false] => {
-                                match [resource_panel.resizable[0], resource_panel.resizable[2]] {
-                                    [true, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::LeftTopResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                            || size[1] > resource_panel.min_size[1]
-                                                && (resource_panel.max_size.is_none()
-                                                    || size[1]
-                                                        < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthEast);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthWest)
-                                        };
-                                    }
-                                    [false, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::LeftResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                        };
-                                    }
-                                    [true, false] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::TopResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[1] > resource_panel.min_size[1]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[1] < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                        };
-                                    }
-                                    [false, false] => {}
-                                }
-                            }
-                            [false, true, false, true] => {
-                                match [resource_panel.resizable[1], resource_panel.resizable[3]] {
-                                    [true, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::RightBottomResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                            || size[1] > resource_panel.min_size[1]
-                                                && (resource_panel.max_size.is_none()
-                                                    || size[1]
-                                                        < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthWest);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthEast)
-                                        };
-                                    }
-                                    [false, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::RightResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                        };
-                                    }
-                                    [true, false] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::BottomResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[1] > resource_panel.min_size[1]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[1] < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                        };
-                                    }
-                                    [false, false] => {}
-                                }
-                            }
-                            [true, false, false, true] => {
-                                match [resource_panel.resizable[0], resource_panel.resizable[3]] {
-                                    [true, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::RightTopResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                            || size[1] > resource_panel.min_size[1]
-                                                && (resource_panel.max_size.is_none()
-                                                    || size[1]
-                                                        < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthWest);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthEast)
-                                        };
-                                    }
-                                    [false, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::RightResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                        };
-                                    }
-                                    [true, false] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::TopResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[1] > resource_panel.min_size[1]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[1] < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                        };
-                                    }
-                                    [false, false] => {}
-                                }
-                            }
-                            [false, true, true, false] => {
-                                match [resource_panel.resizable[1], resource_panel.resizable[2]] {
-                                    [true, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::LeftBottomResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                            || size[1] > resource_panel.min_size[1]
-                                                && (resource_panel.max_size.is_none()
-                                                    || size[1]
-                                                        < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorthEast);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouthWest)
-                                        };
-                                    }
-                                    [false, true] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::LeftResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                        };
-                                    }
-                                    [true, false] => {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::BottomResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[1] > resource_panel.min_size[1]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[1] < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                        };
-                                    }
-                                    [false, false] => {}
-                                }
-                            }
-                            _ => {}
+                    let scroll_delta: [f32; 2] = if resource_panel.use_smooth_scroll_delta {
+                        ui.input(|i| i.smooth_scroll_delta).into()
+                    } else {
+                        ui.input(|i| i.raw_scroll_delta).into()
+                    };
+                    let [x_scroll_delta, y_scroll_delta] =
+                        if scroll_delta[0].abs() >= scroll_delta[1].abs() {
+                            [
+                                if resource_panel.reverse_scroll_direction[0] {
+                                    -scroll_delta[0]
+                                } else {
+                                    scroll_delta[0]
+                                },
+                                0_f32,
+                            ]
+                        } else {
+                            [
+                                0_f32,
+                                if resource_panel.reverse_scroll_direction[1] {
+                                    -scroll_delta[1]
+                                } else {
+                                    scroll_delta[1]
+                                },
+                            ]
                         };
-                        resource_panel.last_frame_mouse_status =
-                            if resource_panel.last_frame_mouse_status.is_none()
+                    if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
+                        && !resource_panel.hidden
+                    {
+                        if let Some(index) = self.get_render_layer_resource(
+                            &format!("{name}Background"),
+                            match background.background_type {
+                                BackgroundType::CustomRect(_) => "rust_constructor::CustomRect",
+                                BackgroundType::Image(_) => "rust_constructor::Image",
+                            },
+                        ) && self.resource_get_focus(index, mouse_pos.into())
+                        {
+                            if ui.input(|i| i.pointer.primary_pressed())
+                                && Rect::from_min_size(position.into(), size.into())
+                                    .contains(mouse_pos)
+                            {
+                                self.request_jump_render_list(
+                                    RequestMethod::Id(RustConstructorId {
+                                        name: format!("{name}Background"),
+                                        discern_type: match background.background_type {
+                                            BackgroundType::CustomRect(_) => {
+                                                "rust_constructor::CustomRect"
+                                            }
+                                            BackgroundType::Image(_) => "rust_constructor::Image",
+                                        }
+                                        .to_string(),
+                                    }),
+                                    RequestType::Top,
+                                )
+                                .unwrap();
+                                let mut update_list = Vec::new();
+                                for rcr in &self.rust_constructor_resource {
+                                    if self
+                                        .basic_front_resource_list
+                                        .contains(&rcr.id.discern_type)
+                                        && let Some(panel_name) =
+                                            self.get_tag("panel_name", &rcr.content.display_tags())
+                                        && panel_name.1 == name
+                                    {
+                                        update_list.push(rcr.id.clone());
+                                    };
+                                }
+                                for id in update_list {
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(id),
+                                        RequestType::Top,
+                                    );
+                                }
+                                if let ScrollBarDisplayMethod::Always(ref background_type, _, _) =
+                                    resource_panel.scroll_bar_display_method
+                                {
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{name}XScroll"),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => {
+                                                    "rust_constructor::CustomRect"
+                                                }
+                                                BackgroundType::Image(_) => {
+                                                    "rust_constructor::Image"
+                                                }
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{name}YScroll"),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => {
+                                                    "rust_constructor::CustomRect"
+                                                }
+                                                BackgroundType::Image(_) => {
+                                                    "rust_constructor::Image"
+                                                }
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                };
+                                if let ScrollBarDisplayMethod::OnlyScroll(
+                                    ref background_type,
+                                    _,
+                                    _,
+                                ) = resource_panel.scroll_bar_display_method
+                                {
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{name}XScroll"),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => {
+                                                    "rust_constructor::CustomRect"
+                                                }
+                                                BackgroundType::Image(_) => {
+                                                    "rust_constructor::Image"
+                                                }
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{name}YScroll"),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => {
+                                                    "rust_constructor::CustomRect"
+                                                }
+                                                BackgroundType::Image(_) => {
+                                                    "rust_constructor::Image"
+                                                }
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                };
+                            };
+                            let top_rect = Rect::from_min_size(
+                                [position[0], position[1]].into(),
+                                [size[0], 3_f32].into(),
+                            );
+                            let bottom_rect = Rect::from_min_size(
+                                [position[0], position[1] + size[1] - 3_f32].into(),
+                                [size[0], 3_f32].into(),
+                            );
+                            let left_rect = Rect::from_min_size(
+                                [position[0], position[1]].into(),
+                                [3_f32, size[1]].into(),
+                            );
+                            let right_rect = Rect::from_min_size(
+                                [position[0] + size[0] - 3_f32, position[1]].into(),
+                                [3_f32, size[1]].into(),
+                            );
+                            match [
+                                top_rect.contains(mouse_pos),
+                                bottom_rect.contains(mouse_pos),
+                                left_rect.contains(mouse_pos),
+                                right_rect.contains(mouse_pos),
+                            ] {
+                                [true, false, false, false] => {
+                                    if resource_panel.resizable[0] {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::TopResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[1] > resource_panel.min_size[1]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[1] < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        };
+                                    };
+                                }
+                                [false, true, false, false] => {
+                                    if resource_panel.resizable[1] {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::BottomResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[1] > resource_panel.min_size[1]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[1] < resource_panel.max_size.unwrap()[1])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[1] >= resource_panel.max_size.unwrap()[1]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        };
+                                    };
+                                }
+                                [false, false, true, false] => {
+                                    if resource_panel.resizable[2] {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::LeftResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                        };
+                                    };
+                                }
+                                [false, false, false, true] => {
+                                    if resource_panel.resizable[3] {
+                                        if resource_panel.last_frame_mouse_status.is_none()
+                                            && ui.input(|i| i.pointer.primary_pressed())
+                                        {
+                                            resource_panel.last_frame_mouse_status = Some((
+                                                mouse_pos.into(),
+                                                ClickAim::RightResize,
+                                                [
+                                                    mouse_pos.x - position[0],
+                                                    mouse_pos.y - position[1],
+                                                ],
+                                            ))
+                                        };
+                                        if size[0] > resource_panel.min_size[0]
+                                            && (resource_panel.max_size.is_none()
+                                                || size[0] < resource_panel.max_size.unwrap()[0])
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        } else if resource_panel.max_size.is_some()
+                                            && size[0] >= resource_panel.max_size.unwrap()[0]
+                                        {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                        } else {
+                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                        };
+                                    };
+                                }
+                                [true, false, true, false] => {
+                                    match [resource_panel.resizable[0], resource_panel.resizable[2]]
+                                    {
+                                        [true, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::LeftTopResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                                || size[1] > resource_panel.min_size[1]
+                                                    && (resource_panel.max_size.is_none()
+                                                        || size[1]
+                                                            < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                            };
+                                        }
+                                        [false, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::LeftResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                            };
+                                        }
+                                        [true, false] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::TopResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                            };
+                                        }
+                                        [false, false] => {}
+                                    }
+                                }
+                                [false, true, false, true] => {
+                                    match [resource_panel.resizable[1], resource_panel.resizable[3]]
+                                    {
+                                        [true, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::RightBottomResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                                || size[1] > resource_panel.min_size[1]
+                                                    && (resource_panel.max_size.is_none()
+                                                        || size[1]
+                                                            < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                            };
+                                        }
+                                        [false, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::RightResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                            };
+                                        }
+                                        [true, false] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::BottomResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                            };
+                                        }
+                                        [false, false] => {}
+                                    }
+                                }
+                                [true, false, false, true] => {
+                                    match [resource_panel.resizable[0], resource_panel.resizable[3]]
+                                    {
+                                        [true, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::RightTopResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                                || size[1] > resource_panel.min_size[1]
+                                                    && (resource_panel.max_size.is_none()
+                                                        || size[1]
+                                                            < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                            };
+                                        }
+                                        [false, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::RightResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                            };
+                                        }
+                                        [true, false] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::TopResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                            };
+                                        }
+                                        [false, false] => {}
+                                    }
+                                }
+                                [false, true, true, false] => {
+                                    match [resource_panel.resizable[1], resource_panel.resizable[2]]
+                                    {
+                                        [true, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::LeftBottomResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                                || size[1] > resource_panel.min_size[1]
+                                                    && (resource_panel.max_size.is_none()
+                                                        || size[1]
+                                                            < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                            };
+                                        }
+                                        [false, true] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::LeftResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[0] > resource_panel.min_size[0]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[0]
+                                                        < resource_panel.max_size.unwrap()[0])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[0] >= resource_panel.max_size.unwrap()[0]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                            };
+                                        }
+                                        [true, false] => {
+                                            if resource_panel.last_frame_mouse_status.is_none()
+                                                && ui.input(|i| i.pointer.primary_pressed())
+                                            {
+                                                resource_panel.last_frame_mouse_status = Some((
+                                                    mouse_pos.into(),
+                                                    ClickAim::BottomResize,
+                                                    [
+                                                        mouse_pos.x - position[0],
+                                                        mouse_pos.y - position[1],
+                                                    ],
+                                                ))
+                                            };
+                                            if size[1] > resource_panel.min_size[1]
+                                                && (resource_panel.max_size.is_none()
+                                                    || size[1]
+                                                        < resource_panel.max_size.unwrap()[1])
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                            } else if resource_panel.max_size.is_some()
+                                                && size[1] >= resource_panel.max_size.unwrap()[1]
+                                            {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                            } else {
+                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                            };
+                                        }
+                                        [false, false] => {}
+                                    }
+                                }
+                                _ => {}
+                            };
+                            resource_panel.last_frame_mouse_status =
+                                if resource_panel.last_frame_mouse_status.is_none()
+                                    && rect.contains(mouse_pos)
+                                    && ui.input(|i| i.pointer.primary_pressed())
+                                {
+                                    Some((
+                                        [mouse_pos.x, mouse_pos.y],
+                                        ClickAim::Move,
+                                        [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                    ))
+                                } else if resource_panel.last_frame_mouse_status.is_some()
+                                    && !ui.input(|i| i.pointer.primary_released())
+                                {
+                                    Some((
+                                        [mouse_pos.x, mouse_pos.y],
+                                        resource_panel.last_frame_mouse_status.unwrap().1,
+                                        resource_panel.last_frame_mouse_status.unwrap().2,
+                                    ))
+                                } else {
+                                    None
+                                };
+                            if resource_panel.scroll_length_method[0].is_some()
+                                && x_scroll_delta != 0_f32
                                 && rect.contains(mouse_pos)
-                                && ui.input(|i| i.pointer.primary_pressed())
                             {
-                                Some((
-                                    [mouse_pos.x, mouse_pos.y],
-                                    ClickAim::Move,
-                                    [mouse_pos.x - position[0], mouse_pos.y - position[1]],
-                                ))
-                            } else if resource_panel.last_frame_mouse_status.is_some()
-                                && !ui.input(|i| i.pointer.primary_released())
-                            {
-                                Some((
-                                    [mouse_pos.x, mouse_pos.y],
-                                    resource_panel.last_frame_mouse_status.unwrap().1,
-                                    resource_panel.last_frame_mouse_status.unwrap().2,
-                                ))
-                            } else {
-                                None
-                            };
-                        let [x_scroll_delta, y_scroll_delta] =
-                            if resource_panel.use_smooth_scroll_delta {
-                                ui.input(|i| i.smooth_scroll_delta).into()
-                            } else {
-                                ui.input(|i| i.raw_scroll_delta).into()
-                            };
-                        if resource_panel.scroll_length_method[0].is_some()
-                            && x_scroll_delta != 0_f32
-                            && rect.contains(mouse_pos)
-                        {
-                            resource_panel.scrolled[0] = true;
-                            resource_panel.scroll_progress[0] = if resource_panel.scroll_progress[0]
-                                + -x_scroll_delta * resource_panel.scroll_sensitivity
-                                > resource_panel.scroll_length[0]
-                            {
-                                resource_panel.scroll_length[0]
-                            } else if resource_panel.scroll_progress[0]
-                                + -x_scroll_delta * resource_panel.scroll_sensitivity
-                                > 0_f32
-                            {
-                                resource_panel.scroll_progress[0]
+                                resource_panel.scrolled[0] = true;
+                                resource_panel.scroll_progress[0] = if resource_panel
+                                    .scroll_progress[0]
                                     + -x_scroll_delta * resource_panel.scroll_sensitivity
-                            } else {
-                                0_f32
+                                    > resource_panel.scroll_length[0]
+                                {
+                                    resource_panel.scroll_length[0]
+                                } else if resource_panel.scroll_progress[0]
+                                    + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                    > 0_f32
+                                {
+                                    resource_panel.scroll_progress[0]
+                                        + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                } else {
+                                    0_f32
+                                };
                             };
-                        };
-                        if resource_panel.scroll_length_method[1].is_some()
-                            && y_scroll_delta != 0_f32
-                            && rect.contains(mouse_pos)
-                        {
-                            resource_panel.scrolled[1] = true;
-                            resource_panel.scroll_progress[1] = if resource_panel.scroll_progress[1]
-                                + -y_scroll_delta * resource_panel.scroll_sensitivity
-                                > resource_panel.scroll_length[1]
+                            if resource_panel.scroll_length_method[1].is_some()
+                                && y_scroll_delta != 0_f32
+                                && rect.contains(mouse_pos)
                             {
-                                resource_panel.scroll_length[1]
-                            } else if resource_panel.scroll_progress[1]
-                                + -y_scroll_delta * resource_panel.scroll_sensitivity
-                                > 0_f32
-                            {
-                                resource_panel.scroll_progress[1]
+                                resource_panel.scrolled[1] = true;
+                                resource_panel.scroll_progress[1] = if resource_panel
+                                    .scroll_progress[1]
                                     + -y_scroll_delta * resource_panel.scroll_sensitivity
-                            } else {
-                                0_f32
+                                    > resource_panel.scroll_length[1]
+                                {
+                                    resource_panel.scroll_length[1]
+                                } else if resource_panel.scroll_progress[1]
+                                    + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                    > 0_f32
+                                {
+                                    resource_panel.scroll_progress[1]
+                                        + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                } else {
+                                    0_f32
+                                };
                             };
+                        } else if ui.input(|i| i.pointer.primary_released()) {
+                            resource_panel.last_frame_mouse_status = None;
                         };
                     };
                     if let Some((mouse_pos, click_aim, offset)) =
@@ -5608,10 +5869,14 @@ impl App {
                     [position, size] = self.position_size_processor(position_size_config, ctx);
                     let background_type = match background.background_type.clone() {
                         BackgroundType::CustomRect(config) => BackgroundType::CustomRect(
-                            config.position_size_config(Some(position_size_config)),
+                            config
+                                .position_size_config(Some(position_size_config))
+                                .hidden(Some(resource_panel.hidden)),
                         ),
                         BackgroundType::Image(config) => BackgroundType::Image(
-                            config.position_size_config(Some(position_size_config)),
+                            config
+                                .position_size_config(Some(position_size_config))
+                                .hidden(Some(resource_panel.hidden)),
                         ),
                     };
                     self.replace_resource(
@@ -5677,6 +5942,32 @@ impl App {
                                     unreachable!()
                                 }
                             };
+                            if !resource_panel
+                                .resource_storage
+                                .iter()
+                                .any(|x| x.id == rcr.id)
+                            {
+                                resource_panel.resource_storage.push(PanelStorage {
+                                    id: rcr.id.clone(),
+                                    ignore_render_layer: if let Some(display_info) =
+                                        basic_front_resource.display_display_info()
+                                    {
+                                        display_info.ignore_render_layer
+                                    } else {
+                                        false
+                                    },
+                                    hidden: if let Some(display_info) =
+                                        basic_front_resource.display_display_info()
+                                    {
+                                        display_info.hidden
+                                    } else {
+                                        false
+                                    },
+                                    origin_size: basic_front_resource
+                                        .display_position_size_config()
+                                        .origin_size,
+                                });
+                            };
                             let enable_scrolling = [
                                 self.get_tag("disable_x_scrolling", &rcr.content.display_tags())
                                     .is_none(),
@@ -5685,54 +5976,33 @@ impl App {
                             ];
                             let offset = basic_front_resource.display_position_size_config().offset;
                             basic_front_resource.modify_position_size_config(
-                                basic_front_resource.display_position_size_config().offset(
-                                    if enable_scrolling[0] {
-                                        -resource_panel.scroll_progress[0]
-                                    } else {
-                                        offset[0]
-                                    },
-                                    if enable_scrolling[1] {
-                                        -resource_panel.scroll_progress[1]
-                                    } else {
-                                        offset[1]
-                                    },
-                                ),
+                                basic_front_resource
+                                    .display_position_size_config()
+                                    .x_location_grid(0_f32, 0_f32)
+                                    .y_location_grid(0_f32, 0_f32)
+                                    .x_size_grid(0_f32, 0_f32)
+                                    .y_size_grid(0_f32, 0_f32)
+                                    .offset(
+                                        if enable_scrolling[0] {
+                                            -resource_panel.scroll_progress[0]
+                                        } else {
+                                            offset[0]
+                                        },
+                                        if enable_scrolling[1] {
+                                            -resource_panel.scroll_progress[1]
+                                        } else {
+                                            offset[1]
+                                        },
+                                    ),
                             );
-                            let mut layout = resource_panel.overall_layout;
-                            for custom_layout in &resource_panel.custom_layout {
-                                match custom_layout {
-                                    CustomPanelLayout::Id(layout_id, panel_layout) => {
-                                        if rcr.id.cmp(layout_id) == Ordering::Equal {
-                                            layout = *panel_layout;
-                                            break;
-                                        };
-                                    }
-                                    CustomPanelLayout::Type(layout_type, panel_layout) => {
-                                        if *layout_type == rcr.id.discern_type {
-                                            layout = *panel_layout;
-                                        }
-                                    }
-                                };
-                            }
-                            if enable_scrolling.contains(&false) {
-                                layout.panel_margin = match layout.panel_margin {
-                                    PanelMargin::Horizontal([top, bottom, left, right], _) => {
-                                        PanelMargin::None([top, bottom, left, right], false)
-                                    }
-                                    PanelMargin::Vertical([top, bottom, left, right], _) => {
-                                        PanelMargin::None([top, bottom, left, right], false)
-                                    }
-                                    PanelMargin::None([_, _, _, _], _) => layout.panel_margin,
-                                };
-                            };
-                            match layout.panel_margin {
+                            match resource_panel.layout.panel_margin {
                                 PanelMargin::Vertical(
                                     [top, bottom, left, right],
                                     move_to_bottom,
                                 ) => {
                                     let mut modify_y = 0_f32;
                                     let [default_x_position, default_y_position] =
-                                        match layout.panel_location {
+                                        match resource_panel.layout.panel_location {
                                             PanelLocation::Absolute([x, y]) => {
                                                 [position[0] + x, position[1] + y]
                                             }
@@ -5834,9 +6104,105 @@ impl App {
                                                 + basic_front_resource.display_size()[1]
                                         }
                                     };
+                                    let default_storage = if let Some(resource_storage) =
+                                        resource_panel
+                                            .resource_storage
+                                            .iter()
+                                            .find(|x| x.id == rcr.id)
+                                    {
+                                        (true, resource_storage.origin_size)
+                                    } else {
+                                        (false, [0_f32, 0_f32])
+                                    };
                                     basic_front_resource.modify_position_size_config(
                                         basic_front_resource
                                             .display_position_size_config()
+                                            .origin_size(
+                                                if basic_front_resource.display_position()[0]
+                                                    < position[0] + size[0]
+                                                {
+                                                    if resource_panel.auto_shrink[0]
+                                                        && basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[0]
+                                                            > position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                    {
+                                                        position_size_config.origin_size[0]
+                                                            - (basic_front_resource
+                                                                .display_position()[0]
+                                                                - position[0])
+                                                            - right
+                                                    } else if default_storage.0 {
+                                                        if default_storage.1[0]
+                                                            > position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                        {
+                                                            position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                        } else {
+                                                            default_storage.1[0]
+                                                        }
+                                                    } else {
+                                                        basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[0]
+                                                    }
+                                                } else {
+                                                    0_f32
+                                                },
+                                                if basic_front_resource.display_position()[1]
+                                                    < position[1] + size[1]
+                                                {
+                                                    if resource_panel.auto_shrink[1]
+                                                        && basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[1]
+                                                            > position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                    {
+                                                        position_size_config.origin_size[1]
+                                                            - (basic_front_resource
+                                                                .display_position()[1]
+                                                                - position[1])
+                                                            - bottom
+                                                    } else if default_storage.0 {
+                                                        if default_storage.1[1]
+                                                            > position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                        {
+                                                            position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                        } else {
+                                                            default_storage.1[1]
+                                                        }
+                                                    } else {
+                                                        basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[1]
+                                                    }
+                                                } else {
+                                                    0_f32
+                                                },
+                                            )
                                             .origin_position(real_x_position, real_y_position),
                                     );
                                     replace_resource_list.push((
@@ -5862,7 +6228,7 @@ impl App {
                                 ) => {
                                     let mut modify_x = 0_f32;
                                     let [default_x_position, default_y_position] =
-                                        match layout.panel_location {
+                                        match resource_panel.layout.panel_location {
                                             PanelLocation::Absolute([x, y]) => {
                                                 [position[0] + x, position[1] + y]
                                             }
@@ -5964,9 +6330,105 @@ impl App {
                                                 + basic_front_resource.display_size()[1]
                                         }
                                     };
+                                    let default_storage = if let Some(resource_storage) =
+                                        resource_panel
+                                            .resource_storage
+                                            .iter()
+                                            .find(|x| x.id == rcr.id)
+                                    {
+                                        (true, resource_storage.origin_size)
+                                    } else {
+                                        (false, [0_f32, 0_f32])
+                                    };
                                     basic_front_resource.modify_position_size_config(
                                         basic_front_resource
                                             .display_position_size_config()
+                                            .origin_size(
+                                                if basic_front_resource.display_position()[0]
+                                                    < position[0] + size[0]
+                                                {
+                                                    if resource_panel.auto_shrink[0]
+                                                        && basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[0]
+                                                            > position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                    {
+                                                        position_size_config.origin_size[0]
+                                                            - (basic_front_resource
+                                                                .display_position()[0]
+                                                                - position[0])
+                                                            - right
+                                                    } else if default_storage.0 {
+                                                        if default_storage.1[0]
+                                                            > position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                        {
+                                                            position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                        } else {
+                                                            default_storage.1[0]
+                                                        }
+                                                    } else {
+                                                        basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[0]
+                                                    }
+                                                } else {
+                                                    0_f32
+                                                },
+                                                if basic_front_resource.display_position()[1]
+                                                    < position[1] + size[1]
+                                                {
+                                                    if resource_panel.auto_shrink[1]
+                                                        && basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[1]
+                                                            > position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                    {
+                                                        position_size_config.origin_size[1]
+                                                            - (basic_front_resource
+                                                                .display_position()[1]
+                                                                - position[1])
+                                                            - bottom
+                                                    } else if default_storage.0 {
+                                                        if default_storage.1[1]
+                                                            > position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                        {
+                                                            position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                        } else {
+                                                            default_storage.1[1]
+                                                        }
+                                                    } else {
+                                                        basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[1]
+                                                    }
+                                                } else {
+                                                    0_f32
+                                                },
+                                            )
                                             .origin_position(real_x_position, real_y_position),
                                     );
                                     replace_resource_list.push((
@@ -5988,7 +6450,7 @@ impl App {
                                 }
                                 PanelMargin::None([top, bottom, left, right], influence_layout) => {
                                     let [default_x_position, default_y_position] =
-                                        match layout.panel_location {
+                                        match resource_panel.layout.panel_location {
                                             PanelLocation::Absolute([x, y]) => {
                                                 [position[0] + x, position[1] + y]
                                             }
@@ -5997,9 +6459,105 @@ impl App {
                                                 position[1] + (size[1] / y[1] as f32 * y[0] as f32),
                                             ],
                                         };
+                                    let default_storage = if let Some(resource_storage) =
+                                        resource_panel
+                                            .resource_storage
+                                            .iter()
+                                            .find(|x| x.id == rcr.id)
+                                    {
+                                        (true, resource_storage.origin_size)
+                                    } else {
+                                        (false, [0_f32, 0_f32])
+                                    };
                                     basic_front_resource.modify_position_size_config(
                                         basic_front_resource
                                             .display_position_size_config()
+                                            .origin_size(
+                                                if basic_front_resource.display_position()[0]
+                                                    < position[0] + size[0]
+                                                {
+                                                    if resource_panel.auto_shrink[0]
+                                                        && basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[0]
+                                                            > position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                    {
+                                                        position_size_config.origin_size[0]
+                                                            - (basic_front_resource
+                                                                .display_position()[0]
+                                                                - position[0])
+                                                            - right
+                                                    } else if default_storage.0 {
+                                                        if default_storage.1[0]
+                                                            > position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                        {
+                                                            position_size_config.origin_size[0]
+                                                                - (basic_front_resource
+                                                                    .display_position()[0]
+                                                                    - position[0])
+                                                                - right
+                                                        } else {
+                                                            default_storage.1[0]
+                                                        }
+                                                    } else {
+                                                        basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[0]
+                                                    }
+                                                } else {
+                                                    0_f32
+                                                },
+                                                if basic_front_resource.display_position()[1]
+                                                    < position[1] + size[1]
+                                                {
+                                                    if resource_panel.auto_shrink[1]
+                                                        && basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[1]
+                                                            > position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                    {
+                                                        position_size_config.origin_size[1]
+                                                            - (basic_front_resource
+                                                                .display_position()[1]
+                                                                - position[1])
+                                                            - bottom
+                                                    } else if default_storage.0 {
+                                                        if default_storage.1[1]
+                                                            > position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                        {
+                                                            position_size_config.origin_size[1]
+                                                                - (basic_front_resource
+                                                                    .display_position()[1]
+                                                                    - position[1])
+                                                                - bottom
+                                                        } else {
+                                                            default_storage.1[1]
+                                                        }
+                                                    } else {
+                                                        basic_front_resource
+                                                            .display_position_size_config()
+                                                            .origin_size[1]
+                                                    }
+                                                } else {
+                                                    0_f32
+                                                },
+                                            )
                                             .origin_position(
                                                 default_x_position,
                                                 default_y_position,
@@ -6028,6 +6586,21 @@ impl App {
                         };
                     }
                     for (new_position_size_config, [name, discern_type]) in replace_resource_list {
+                        let default_storage = if let Some(resource_storage) =
+                            resource_panel.resource_storage.iter().find(|x| {
+                                x.id == RustConstructorId {
+                                    name: name.clone(),
+                                    discern_type: discern_type.clone(),
+                                }
+                            }) {
+                            [
+                                true,
+                                resource_storage.ignore_render_layer,
+                                resource_storage.hidden,
+                            ]
+                        } else {
+                            [false, true, true]
+                        };
                         match &*discern_type {
                             "rust_constructor::CustomRect" => {
                                 let mut custom_rect = self
@@ -6035,8 +6608,26 @@ impl App {
                                     .clone();
                                 custom_rect.basic_front_resource_config.position_size_config =
                                     new_position_size_config;
+                                custom_rect.display_info.ignore_render_layer = if resource_panel
+                                    .last_frame_mouse_status
+                                    .is_some()
+                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32)
+                                {
+                                    true
+                                } else if default_storage[0] {
+                                    default_storage[1]
+                                } else {
+                                    custom_rect.display_info.ignore_render_layer
+                                };
                                 custom_rect.basic_front_resource_config.clip_rect =
                                     Some(position_size_config);
+                                custom_rect.display_info.hidden = if resource_panel.hidden {
+                                    true
+                                } else if default_storage[0] {
+                                    default_storage[2]
+                                } else {
+                                    custom_rect.display_info.hidden
+                                };
                                 self.replace_resource(&name, custom_rect)?;
                             }
                             "rust_constructor::Image" => {
@@ -6044,8 +6635,20 @@ impl App {
                                     self.get_resource::<Image>(&name, &discern_type)?.clone();
                                 image.basic_front_resource_config.position_size_config =
                                     new_position_size_config;
+                                image.display_info.ignore_render_layer = if resource_panel
+                                    .last_frame_mouse_status
+                                    .is_some()
+                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32)
+                                {
+                                    true
+                                } else if default_storage[0] {
+                                    default_storage[1]
+                                } else {
+                                    image.display_info.ignore_render_layer
+                                };
                                 image.basic_front_resource_config.clip_rect =
                                     Some(position_size_config);
+                                image.display_info.hidden = resource_panel.hidden;
                                 self.replace_resource(&name, image)?;
                             }
                             "rust_constructor::Text" => {
@@ -6053,8 +6656,21 @@ impl App {
                                     self.get_resource::<Text>(&name, &discern_type)?.clone();
                                 text.basic_front_resource_config.position_size_config =
                                     new_position_size_config;
+                                text.display_info.ignore_render_layer = if resource_panel
+                                    .last_frame_mouse_status
+                                    .is_some()
+                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32)
+                                {
+                                    true
+                                } else if default_storage[0] {
+                                    default_storage[1]
+                                } else {
+                                    text.display_info.ignore_render_layer
+                                };
+                                text.auto_fit = [false, false];
                                 text.basic_front_resource_config.clip_rect =
                                     Some(position_size_config);
+                                text.display_info.hidden = resource_panel.hidden;
                                 self.replace_resource(&name, text)?;
                             }
                             _ => unreachable!(),
@@ -6063,53 +6679,42 @@ impl App {
                     for info in use_resource_list {
                         self.use_resource(&info[0], &info[1], ui, ctx)?;
                     }
-                    let mut resource_length = [None, None];
-                    for point in resource_point_list {
-                        resource_length = [
-                            if resource_length[0].is_none()
-                                || resource_length[0].is_some()
-                                    && point.1[0] > resource_length[0].unwrap()
-                                    && point.2[0]
-                            {
-                                Some(point.1[0])
-                            } else {
-                                resource_length[0]
-                            },
-                            if resource_length[1].is_none()
-                                || resource_length[1].is_some()
-                                    && point.1[1] > resource_length[1].unwrap()
-                                    && point.2[1]
-                            {
-                                Some(point.1[1])
-                            } else {
-                                resource_length[1]
-                            },
-                        ]
-                    }
                     if let Some(horizontal_scroll_length_method) =
                         resource_panel.scroll_length_method[0]
                     {
                         resource_panel.scroll_length[0] = match horizontal_scroll_length_method {
                             ScrollLengthMethod::Fixed(fixed_length) => fixed_length,
-                            ScrollLengthMethod::AutoFit => {
-                                if let Some(max) = resource_length[0] {
-                                    let width = max - position[0];
-                                    if width - size[0] > 0_f32 {
-                                        width - size[0]
-                                    } else {
-                                        0_f32
+                            ScrollLengthMethod::AutoFit(expand) => {
+                                let mut length = -background_resource.display_size()[0];
+                                match resource_panel.layout.panel_margin {
+                                    PanelMargin::Horizontal(_, _) => {
+                                        for storage in &resource_panel.resource_storage {
+                                            length += storage.origin_size[0];
+                                        }
                                     }
+                                    PanelMargin::Vertical(_, _) | PanelMargin::None(_, _) => {
+                                        for storage in &resource_panel.resource_storage {
+                                            length = if storage.origin_size[0]
+                                                - background_resource.display_size()[0]
+                                                > length
+                                            {
+                                                storage.origin_size[0]
+                                                    - background_resource.display_size()[0]
+                                            } else {
+                                                length
+                                            };
+                                        }
+                                    }
+                                }
+                                if length >= 0_f32 {
+                                    length + expand.abs()
                                 } else {
                                     0_f32
                                 }
                             }
                         };
-                        resource_panel.scroll_progress[0] = if resource_panel.scroll_progress[0]
-                            > resource_panel.scroll_length[0]
-                        {
-                            resource_panel.scroll_length[0]
-                        } else {
-                            resource_panel.scroll_progress[0]
+                        if resource_panel.scroll_progress[0] > resource_panel.scroll_length[0] {
+                            resource_panel.scroll_progress[0] = resource_panel.scroll_length[0];
                         };
                     };
                     if let Some(vertical_scroll_length_method) =
@@ -6117,25 +6722,37 @@ impl App {
                     {
                         resource_panel.scroll_length[1] = match vertical_scroll_length_method {
                             ScrollLengthMethod::Fixed(fixed_length) => fixed_length,
-                            ScrollLengthMethod::AutoFit => {
-                                if let Some(max) = resource_length[1] {
-                                    let height = max - position[1];
-                                    if height - size[1] > 0_f32 {
-                                        height - size[1]
-                                    } else {
-                                        0_f32
+                            ScrollLengthMethod::AutoFit(expand) => {
+                                let mut length = -background_resource.display_size()[1];
+                                match resource_panel.layout.panel_margin {
+                                    PanelMargin::Vertical(_, _) => {
+                                        for storage in &resource_panel.resource_storage {
+                                            length += storage.origin_size[1];
+                                        }
                                     }
+                                    PanelMargin::Horizontal(_, _) | PanelMargin::None(_, _) => {
+                                        for storage in &resource_panel.resource_storage {
+                                            length = if storage.origin_size[1]
+                                                - background_resource.display_size()[1]
+                                                > length
+                                            {
+                                                storage.origin_size[1]
+                                                    - background_resource.display_size()[1]
+                                            } else {
+                                                length
+                                            };
+                                        }
+                                    }
+                                }
+                                if length >= 0_f32 {
+                                    length + expand.abs()
                                 } else {
                                     0_f32
                                 }
                             }
                         };
-                        resource_panel.scroll_progress[1] = if resource_panel.scroll_progress[1]
-                            > resource_panel.scroll_length[1]
-                        {
-                            resource_panel.scroll_length[1]
-                        } else {
-                            resource_panel.scroll_progress[1]
+                        if resource_panel.scroll_progress[1] > resource_panel.scroll_length[1] {
+                            resource_panel.scroll_progress[1] = resource_panel.scroll_length[1];
                         };
                     };
                     match resource_panel.scroll_bar_display_method {
@@ -6169,7 +6786,28 @@ impl App {
                                 background.clone().background_type(&match config.clone() {
                                     BackgroundType::CustomRect(config) => {
                                         BackgroundType::CustomRect(
-                                            config.position_size_config(Some(
+                                            config
+                                                .ignore_render_layer(Some(true))
+                                                .hidden(Some(resource_panel.hidden))
+                                                .position_size_config(Some(
+                                                    PositionSizeConfig::default()
+                                                        .display_method(
+                                                            HorizontalAlign::Left,
+                                                            VerticalAlign::Bottom,
+                                                        )
+                                                        .origin_position(
+                                                            line_position,
+                                                            position[1] + size[1] - margin[1],
+                                                        )
+                                                        .origin_size(line_length, width),
+                                                )),
+                                        )
+                                    }
+                                    BackgroundType::Image(config) => BackgroundType::Image(
+                                        config
+                                            .ignore_render_layer(Some(true))
+                                            .hidden(Some(resource_panel.hidden))
+                                            .position_size_config(Some(
                                                 PositionSizeConfig::default()
                                                     .display_method(
                                                         HorizontalAlign::Left,
@@ -6181,21 +6819,6 @@ impl App {
                                                     )
                                                     .origin_size(line_length, width),
                                             )),
-                                        )
-                                    }
-                                    BackgroundType::Image(config) => BackgroundType::Image(
-                                        config.position_size_config(Some(
-                                            PositionSizeConfig::default()
-                                                .display_method(
-                                                    HorizontalAlign::Left,
-                                                    VerticalAlign::Bottom,
-                                                )
-                                                .origin_position(
-                                                    line_position,
-                                                    position[1] + size[1] - margin[1],
-                                                )
-                                                .origin_size(line_length, width),
-                                        )),
                                     ),
                                 }),
                             )?;
@@ -6234,7 +6857,28 @@ impl App {
                                 background.background_type(&match config.clone() {
                                     BackgroundType::CustomRect(config) => {
                                         BackgroundType::CustomRect(
-                                            config.position_size_config(Some(
+                                            config
+                                                .ignore_render_layer(Some(true))
+                                                .hidden(Some(resource_panel.hidden))
+                                                .position_size_config(Some(
+                                                    PositionSizeConfig::default()
+                                                        .display_method(
+                                                            HorizontalAlign::Right,
+                                                            VerticalAlign::Top,
+                                                        )
+                                                        .origin_position(
+                                                            position[0] + size[0] - margin[1],
+                                                            line_position,
+                                                        )
+                                                        .origin_size(width, line_length),
+                                                )),
+                                        )
+                                    }
+                                    BackgroundType::Image(config) => BackgroundType::Image(
+                                        config
+                                            .ignore_render_layer(Some(true))
+                                            .hidden(Some(resource_panel.hidden))
+                                            .position_size_config(Some(
                                                 PositionSizeConfig::default()
                                                     .display_method(
                                                         HorizontalAlign::Right,
@@ -6246,21 +6890,6 @@ impl App {
                                                     )
                                                     .origin_size(width, line_length),
                                             )),
-                                        )
-                                    }
-                                    BackgroundType::Image(config) => BackgroundType::Image(
-                                        config.position_size_config(Some(
-                                            PositionSizeConfig::default()
-                                                .display_method(
-                                                    HorizontalAlign::Right,
-                                                    VerticalAlign::Top,
-                                                )
-                                                .origin_position(
-                                                    position[0] + size[0] - margin[1],
-                                                    line_position,
-                                                )
-                                                .origin_size(width, line_length),
-                                        )),
                                     ),
                                 }),
                             )?;
@@ -6273,31 +6902,31 @@ impl App {
                         }
                         ScrollBarDisplayMethod::OnlyScroll(ref config, margin, width) => {
                             resource_panel.scroll_bar_alpha[0] = if resource_panel.scrolled[0] {
-                                self.reset_split_time(&format!("{name}ScrollBarXAlphaStart",))?;
+                                self.reset_split_time(&format!("{name}ScrollBarXAlphaStart"))?;
                                 255
                             } else if self.timer.now_time
-                                - self.get_split_time(&format!("{name}ScrollBarXAlphaStart",))?[0]
+                                - self.get_split_time(&format!("{name}ScrollBarXAlphaStart"))?[0]
                                 >= 1_f32
                                 && self.timer.now_time
-                                    - self.get_split_time(&format!("{name}ScrollBarXAlpha",))?[0]
+                                    - self.get_split_time(&format!("{name}ScrollBarXAlpha"))?[0]
                                     >= self.tick_interval
                             {
-                                self.reset_split_time(&format!("{name}ScrollBarXAlpha",))?;
+                                self.reset_split_time(&format!("{name}ScrollBarXAlpha"))?;
                                 resource_panel.scroll_bar_alpha[0].saturating_sub(10)
                             } else {
                                 resource_panel.scroll_bar_alpha[0]
                             };
                             resource_panel.scroll_bar_alpha[1] = if resource_panel.scrolled[1] {
-                                self.reset_split_time(&format!("{name}ScrollBarYAlphaStart",))?;
+                                self.reset_split_time(&format!("{name}ScrollBarYAlphaStart"))?;
                                 255
                             } else if self.timer.now_time
-                                - self.get_split_time(&format!("{name}ScrollBarYAlphaStart",))?[0]
+                                - self.get_split_time(&format!("{name}ScrollBarYAlphaStart"))?[0]
                                 >= 1_f32
                                 && self.timer.now_time
-                                    - self.get_split_time(&format!("{name}ScrollBarYAlpha",))?[0]
+                                    - self.get_split_time(&format!("{name}ScrollBarYAlpha"))?[0]
                                     >= self.tick_interval
                             {
-                                self.reset_split_time(&format!("{name}ScrollBarYAlpha",))?;
+                                self.reset_split_time(&format!("{name}ScrollBarYAlpha"))?;
                                 resource_panel.scroll_bar_alpha[1].saturating_sub(10)
                             } else {
                                 resource_panel.scroll_bar_alpha[1]
@@ -6332,6 +6961,8 @@ impl App {
                                     BackgroundType::CustomRect(config) => {
                                         BackgroundType::CustomRect(
                                             config
+                                                .ignore_render_layer(Some(true))
+                                                .hidden(Some(resource_panel.hidden))
                                                 .position_size_config(Some(
                                                     PositionSizeConfig::default()
                                                         .display_method(
@@ -6352,6 +6983,8 @@ impl App {
                                     }
                                     BackgroundType::Image(config) => BackgroundType::Image(
                                         config
+                                            .ignore_render_layer(Some(true))
+                                            .hidden(Some(resource_panel.hidden))
                                             .position_size_config(Some(
                                                 PositionSizeConfig::default()
                                                     .display_method(
@@ -6410,6 +7043,8 @@ impl App {
                                     BackgroundType::CustomRect(config) => {
                                         BackgroundType::CustomRect(
                                             config
+                                                .ignore_render_layer(Some(true))
+                                                .hidden(Some(resource_panel.hidden))
                                                 .position_size_config(Some(
                                                     PositionSizeConfig::default()
                                                         .display_method(
@@ -6422,14 +7057,16 @@ impl App {
                                                         )
                                                         .origin_size(width, line_length),
                                                 ))
-                                                .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                                .alpha(Some(resource_panel.scroll_bar_alpha[1]))
                                                 .border_alpha(Some(
-                                                    resource_panel.scroll_bar_alpha[0],
+                                                    resource_panel.scroll_bar_alpha[1],
                                                 )),
                                         )
                                     }
                                     BackgroundType::Image(config) => BackgroundType::Image(
                                         config
+                                            .ignore_render_layer(Some(true))
+                                            .hidden(Some(resource_panel.hidden))
                                             .position_size_config(Some(
                                                 PositionSizeConfig::default()
                                                     .display_method(
@@ -6442,12 +7079,12 @@ impl App {
                                                     )
                                                     .origin_size(width, line_length),
                                             ))
-                                            .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                            .alpha(Some(resource_panel.scroll_bar_alpha[1]))
                                             .background_alpha(Some(
-                                                resource_panel.scroll_bar_alpha[0],
+                                                resource_panel.scroll_bar_alpha[1],
                                             ))
                                             .overlay_alpha(Some(
-                                                resource_panel.scroll_bar_alpha[0],
+                                                resource_panel.scroll_bar_alpha[1],
                                             )),
                                     ),
                                 }),

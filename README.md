@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-v2.8.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/version-v2.9.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -27,12 +27,23 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- Current latest version is `v2.8.1`.
-  - Fixed several known issues:
-    - Resolved layout corruption issue in `Text` component;
-    - Fixed `Text` displaying ellipsis `...` when text content is empty;
-    - Addressed automatic tooltip triggering during `Switch` initialization;
-    - Changed mutable references to immutable references in certain method implementations;
+- Current latest version is `v2.9.0 Scientific Resource Panel`.
+  - This update expands `ResourcePanel` with extensive practical features and addresses several issues.
+    - `AutoFit` now supports allocating additional scroll margin;
+    - Added `PanelStorage` to store internal resource metadata in `ResourcePanel`;
+    - Deprecated `custom_layout` and `overall_layout` - unified layout configuration via `layout` setter;
+    - Implemented dynamic resource hiding capability in `ResourcePanel`;
+    - Scroll direction reversal via `reverse_scroll_direction` now supports axis-specific control with single-direction enforcement;
+    - Fixed scrollbar visibility logic inconsistencies;
+    - Introduced `auto_shrink` for automatic resource scaling in dynamic layout adjustments;
+    - Renamed `unsafe_request_jump_render_list` to `try_request_jump_render_list`;
+    - `Switch` components now support tag inheritance for background and text elements;
+    - Implemented visibility control for `Switch` components;
+    - Addressed `Switch` press detection logic - now requires mouse button down/up sequence on component;
+    - `HintText` now respects opacity threshold detection to prevent activation when fully transparent;
+    - Reduced mouse interaction area for `ResourcePanel`;
+    - `ResourcePanel` now automatically brings itself to frontmost layer upon click;
+    - Fixed several known issues.
 
 ---
 

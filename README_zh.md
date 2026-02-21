@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.8.1-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.9.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -27,12 +27,23 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.8.1`。
-  - 本更新修复了一些已知问题。
-    - 修复了`Text`的布局错乱的问题；
-    - 修复了`Text`文本留空时仍会出现`...`的问题；
-    - 修复了`Switch`创建时自动触发提示文本的问题；
-    - 将部分方法的可变引用更改为不可变引用；
+- 目前的最新版本为`v2.9.0 科学资源板`。
+  - 本更新为`ResourcePanel`扩展了大量实用功能，并修复了一些问题。
+    - `AutoFit`现在可以额外预留滚动空间；
+    - 添加了`PanelStorage`，用于存储`ResourcePanel`内部资源的一些信息；
+    - 移除了`custom_layout`和`overall_layout`，现在只能通过`layout`设定全局排版方式；
+    - 支持`ResourcePanel`隐藏资源；
+    - 现在滚动方向可以通过`reverse_scroll_direction`来反转，且同一时间只能朝一个方向滚动；
+    - 修复了滚动条显示错误的问题；
+    - 可以通过`auto_shrink`来自动控制资源缩放，以进行动态排版；
+    - 将`unsafe_request_jump_render_list`重命名为`try_request_jump_render_list`；
+    - 现在`Switch`可以让其背景和文本继承它的标签了；
+    - `Switch`可以隐藏了；
+    - 修复了`Switch`点按判定逻辑问题，现在需要在`Switch`上按下鼠标按键并松开才能触发；
+    - 现在`HintText`不会在完全透明后被调用；
+    - 将`ResourcePanel`的鼠标缩放判定区域减小了；
+    - 现在`ResourcePanel`被点击后会自动置顶；
+    - 修复了一些已知问题。
 
 ---
 
@@ -87,7 +98,7 @@
 
 ## 许可证
 
-[MIT](./LICENSE-MIT) © 2025 ChepleBob
+[MIT](./LICENSE-MIT) © 2026 ChepleBob
 
 ## 尾声
 
