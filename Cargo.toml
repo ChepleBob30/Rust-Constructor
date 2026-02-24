@@ -1,9 +1,9 @@
 [package]
 name = "rust-constructor"
-version = "2.9.0"
+version = "2.10.0"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
-description = "A cross-platform GUI framework built on egui, the simplest way to develop GUI projects in Rust."
+description = "A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects with `Rust`."
 license = "MIT"
 readme = "README.md"
 keywords = ["develop", "gui"]
@@ -19,4 +19,4 @@ path = "src/lib.rs"
 egui = "0.33.3"
 eframe = "0.33.3"
 image = "0.25.9"
-chrono = "0.4.43"
+chrono = "0.4.44"

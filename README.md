@@ -2,21 +2,19 @@
 
 ## A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects with `Rust`
 
-[![Author: ChepleBob](https://img.shields.io/badge/author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
-[![Language: Rust](https://img.shields.io/badge/language-Rust-5F4C49)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-v2.9.0-421463)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
+[![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-v2.10.0-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
-English | [简体中文](./README_zh.md)
+[English](./README.md) | 简体中文
 
 ---
-
-`Rust Constructor` is an open-source project, but it has no direct relationship with the `egui` development team!
 
 ## Table of Contents
 
 - [Version Update Information](#version-update-information)
-- [Introduction](#introduction)
+- [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Purpose of Creating Rust Constructor](#purpose-of-creating-rust-constructor)
 - [FAQ](#faq)
@@ -27,44 +25,65 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- Current latest version is `v2.9.0 Scientific Resource Panel`.
-  - This update expands `ResourcePanel` with extensive practical features and addresses several issues.
-    - `AutoFit` now supports allocating additional scroll margin;
-    - Added `PanelStorage` to store internal resource metadata in `ResourcePanel`;
-    - Deprecated `custom_layout` and `overall_layout` - unified layout configuration via `layout` setter;
-    - Implemented dynamic resource hiding capability in `ResourcePanel`;
-    - Scroll direction reversal via `reverse_scroll_direction` now supports axis-specific control with single-direction enforcement;
-    - Fixed scrollbar visibility logic inconsistencies;
-    - Introduced `auto_shrink` for automatic resource scaling in dynamic layout adjustments;
-    - Renamed `unsafe_request_jump_render_list` to `try_request_jump_render_list`;
-    - `Switch` components now support tag inheritance for background and text elements;
-    - Implemented visibility control for `Switch` components;
-    - Addressed `Switch` press detection logic - now requires mouse button down/up sequence on component;
-    - `HintText` now respects opacity threshold detection to prevent activation when fully transparent;
-    - Reduced mouse interaction area for `ResourcePanel`;
-    - `ResourcePanel` now automatically brings itself to frontmost layer upon click;
-    - Fixed several known issues.
+- The current latest version is `v2.10.0 New Era`.
+  - This update comprehensively overhauls project comments and structure, ushering Rust Constructor into a new era.
+    - Completely revamped comments;
+    - Modularized the code;
+    - Now `Switch` tooltip text will attempt to render one layer above the `Switch`;
+    - Removed `ImageTexture`;
+    - Improved the method for `Image` to read textures, now you can choose to load images from file paths or directly receive pre-loaded textures;
+    - Modified parameters of some methods;
+    - Changed the automatic naming rule of `discern_type`, it no longer includes prefixes like `rust_constructor::`;
+    - Replaced all backslash double quotes in `RustConstructorError` descriptions with single quotes to avoid escaping issues when printing;
+    - Fixed some known issues.
+  - This version will be the last medium-sized update for `Rust Constructor` in the near future, with subsequent updates being minor ones.
 
 ---
 
-## Introduction
+## Overview
 
-- `Rust Constructor` is a Rust graphical development library built on egui, including commonly used functions such as timers, resource storage, and error handling.
-- `Rust Constructor` released its first version in `2025.2`, and today's `Rust Constructor` has undergone earth-shaking changes compared to that time.
+- `Rust Constructor` is a comprehensive GUI framework that leverages the powerful features of `egui` to provide a simple and intuitive tool for building cross-platform applications.
 
 ---
 
 ## Quick Start
 
-- To introduce `Rust Constructor`, please add `rust_constructor = "x.y.z"` (please replace xyz according to your needs) to `toml`.
-- If you want to start `App` and perform some simple operations, it is recommended to refer to the [official documentation of egui](https://github.com/emilk/egui).
-- You can refer to the official tutorial of `Rust Constructor` [Rust Constructor Guide](https://github.com/ChepleBob30/Rust-Constructor-Guide).
+- To introduce `Rust Constructor`, please add `rust_constructor = "x.y.z"` (please replace xyz as needed) to your `toml`.
+- If you want to launch an `App` and perform some simple operations, it is recommended to refer to the [official documentation of egui](https://github.com/emilk/egui).
+- You can refer to the official tutorial of `Rust Constructor` (not necessarily up-to-date) [Rust Constructor Guide](https://github.com/ChepleBob30/Rust-Constructor-Guide).
+- Here is a simple example:
+
+```rust
+pub struct RcApp {
+    pub inner: rust_constructor::app::App,
+}
+
+impl eframe::App for RcApp {
+    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.label("Hello world");
+        });
+    }
+}
+
+
+eframe::run_native(
+    "Example App",
+    eframe::NativeOptions::default(),
+    Box::new(|_| {
+        Ok(Box::new(RcApp {
+            inner: rust_constructor::app::App::default(),
+        }))
+    }),
+)
+.unwrap();
+```
 
 ---
 
 ## Purpose of Creating Rust Constructor
 
-We encountered some problems that `egui` could not solve during the development of [Targeted Vector](https://github.com/ChepleBob30/Targeted-Vector), so we expanded many tools. In order to allow more people to develop conveniently, we created `Rust Constructor`.
+- In actual development, we often need to consider layout and resource presentation under different screen sizes, but most of `egui`'s built-in components are only suitable for quick development without fine-tuning, which does not meet my needs. Therefore, I developed `Rust Constructor`.
 
 ---
 
@@ -72,33 +91,49 @@ We encountered some problems that `egui` could not solve during the development 
 
 - Q1: Which platforms does `Rust Constructor` support?
 
-- A1: `macOS` and `Windows` have been confirmed to be fully supported, and other platforms depend on `egui` support.
+- A1: `macOS` and `Windows` have been confirmed to be fully supported, other platforms depend on `egui`'s support.
 
-- Q2: What is the difference between `Rust Constructor V2` and `V1`?
+- Q2: Why is there only `V2` of `Rust Constructor` on `crates.io`?
 
-- A2: The original architecture was modified to conform to the structure of the library `crate`, published on [crates.io](https://crates.io/), and added an official guide.
+- A2: `Rust Constructor V0` and `Rust Constructor V1` were essentially bloated projects with many redundant functions and meaningless code, so they were never released.
 
-- Q3: Why do I get an error when calling a resource?
+- Q3: What is the relationship between `Rust Constructor` and `egui`?
 
-- A3: Please ensure that you have added the resource through the `add` method and there are no spelling errors.
+- A3: `Rust Constructor` is developed based on `egui`, but there is no relationship between the developers of both sides.
 
-- Q4: How to modify resources?
+- Q4: What should I do if I encounter new resources that I don't know how to handle?
 
-- A4: Take out the resource through `get_resource_mut`.
+- A4: Please first add it using `add_resource` or `quick_place`, then browse the source code to find methods related to that resource and try to use them.
 
-- Q5: What should I do if I encounter unknown error prompts?
+- Q5: Does having `Rust Constructor` mean I can completely abandon `egui`?
 
-- A5: Prioritize checking the `RustConstructorError` definition in the `Rust Constructor` source code, find the problem you triggered and correct it.
+- A5: Quite the opposite. During debugging, the clumsiness of `Rust Constructor` precisely needs `egui`'s components to compensate.
 
-- Q6: Why is there only `V2` of `Rust Constructor` on `crates.io`?
+- Q6: What is `discern_type`?
 
-- A6: `Rust Constructor V0` and `Rust Constructor V1` are essentially bloated projects with many redundant functions and meaningless code, so they were not released.
+- A6: `discern_type` is a string used to mark resource types, which is automatically created when adding resources, with the name the same as the resource name you used.
+
+- Q7: Can I develop without using `Rust Constructor`'s components?
+
+- A7: Of course you can. However, `Rust Constructor`'s advanced front-end resources do provide some practical functions that may not be replaceable.
+
+- Q8: How to view the official documentation of `Rust Constructor`?
+
+- A8: What you are seeing now is the core content of the documentation. If you still have questions, please check [`Rust Constructor Guide`](https://github.com/ChepleBob30/Rust-Constructor-Guide). This is the official tutorial of `Rust Constructor`, but it may not be up-to-date.
+
+- Q9: Under what form is `Rust Constructor` open-sourced? How to contribute?
+
+- A9: The source code of `Rust Constructor` is open-sourced under the `MIT` license. Due to personal reasons, I do not recommend contributing to this project. If you have any ideas, please fork this project and maintain it yourself.
+
+- Q10: I still have unresolved issues, what should I do?
+
+- A10: Please raise an [`issue`](https://github.com/ChepleBob30/Rust-Constructor/issues) in this project repository, and I will try my best to solve all problems.
 
 ---
 
 ## License
 
-[MIT](./LICENSE-MIT) © 2025 ChepleBob
+[MIT](./LICENSE-MIT) © 2026 ChepleBob
 
 ## Epilogue
 
