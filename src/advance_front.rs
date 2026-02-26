@@ -263,7 +263,22 @@ pub enum PanelLocation {
     /// Relative positioning using grid-based coordinates.
     ///
     /// 依照网格式定位方法进行定位（相对定位）。
-    Relative([[u32; 2]; 2]),
+    Relative([[f32; 2]; 2]),
+}
+
+/// Used for customizing the layout of resources.
+///
+/// 用于自定义资源排版方式。
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum CustomPanelLayout {
+    /// Locate resources by type.
+    ///
+    /// 通过类型定位资源。
+    Type(String, PanelLayout),
+    /// Locate resources through ID.
+    ///
+    /// 通过ID定位资源。
+    Id(RustConstructorId, PanelLayout),
 }
 
 /// Storage structure for panel resource metadata.
@@ -290,11 +305,6 @@ pub struct PanelStorage {
     ///
     /// 控制资源是否可见。
     pub hidden: bool,
-
-    /// Original size of the resource before any panel adjustments.
-    ///
-    /// 存储资源原始尺寸（面板调整前的尺寸）。
-    pub origin_size: [f32; 2],
 }
 
 /// Resource panel for organizing and managing UI elements with scrolling capabilities.
@@ -350,7 +360,12 @@ pub struct ResourcePanel {
     /// Layout config for resources within the panel.
     ///
     /// 面板内资源的布局配置。
-    pub layout: PanelLayout,
+    pub overall_layout: PanelLayout,
+
+    /// Custom layout config of specific resources within the panel.
+    ///
+    /// 面板内特定资源的自定义布局配置。
+    pub custom_layout: Vec<CustomPanelLayout>,
 
     /// Whether the panel is visible.
     ///
@@ -362,10 +377,14 @@ pub struct ResourcePanel {
     /// 反转滚动方向：[horizontal, vertical]。
     pub reverse_scroll_direction: [bool; 2],
 
-    /// Auto-shrink behavior: [horizontal, vertical].
+    /// Inner margin of the panel.
     ///
-    /// 自动缩放行为：[horizontal, vertical]。
-    pub auto_shrink: [bool; 2],
+    /// 面板内边距。
+    ///
+    /// Use this field to ensure that functions such as resizing can be used normally.
+    ///
+    /// 使用此字段以保证缩放等功能可以正常使用。
+    pub inner_margin: [f32; 4],
 
     /// Current scroll length: [horizontal, vertical].
     ///
@@ -452,13 +471,14 @@ impl Default for ResourcePanel {
                 [4_f32, 2_f32],
                 4_f32,
             ),
-            layout: (PanelLayout {
+            overall_layout: (PanelLayout {
                 panel_margin: PanelMargin::Vertical([0_f32, 0_f32, 0_f32, 0_f32], false),
                 panel_location: PanelLocation::Absolute([0_f32, 0_f32]),
             }),
+            custom_layout: Vec::new(),
             hidden: false,
             reverse_scroll_direction: [false, false],
-            auto_shrink: [true, false],
+            inner_margin: [6_f32, 6_f32, 6_f32, 6_f32],
             scroll_length: [0_f32, 0_f32],
             scroll_progress: [0_f32, 0_f32],
             last_frame_mouse_status: None,
@@ -533,8 +553,20 @@ impl ResourcePanel {
     }
 
     #[inline]
-    pub fn layout(mut self, layout: PanelLayout) -> Self {
-        self.layout = layout;
+    pub fn overall_layout(mut self, overall_layout: PanelLayout) -> Self {
+        self.overall_layout = overall_layout;
+        self
+    }
+
+    #[inline]
+    pub fn push_custom_layout(mut self, custom_layout: CustomPanelLayout) -> Self {
+        self.custom_layout.push(custom_layout);
+        self
+    }
+
+    #[inline]
+    pub fn custom_layout(mut self, custom_layout: &[CustomPanelLayout]) -> Self {
+        self.custom_layout = custom_layout.to_owned();
         self
     }
 
@@ -551,8 +583,8 @@ impl ResourcePanel {
     }
 
     #[inline]
-    pub fn auto_shrink(mut self, horizontal: bool, vertical: bool) -> Self {
-        self.auto_shrink = [horizontal, vertical];
+    pub fn inner_margin(mut self, top: f32, bottom: f32, left: f32, right: f32) -> Self {
+        self.inner_margin = [top, bottom, left, right];
         self
     }
 

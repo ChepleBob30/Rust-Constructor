@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.10.0-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.10.1-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,18 +25,18 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.10.0 新时期`。
-  - 本更新全面翻新了项目注释和结构，让Rust Constructor迈入新时期。
-    - 全面翻新了注释；
-    - 进行模块化；
-    - 现在`Switch`的提示文本会尝试渲染在`Switch`上面一层；
-    - 移除了`ImageTexture`；
-    - 改进了`Image`读取纹理的方法，现在可以选择从文件路径读取图片或直接接收已加载的纹理；
-    - 修改了部分方法的参数；
-    - 修改了`discern_type`的自动命名规则，现在不再包含`rust_constructor::`一类前缀；
-    - 将`RustConstructorError`问题描述中的反斜杠双引号全部修改为了单引号，以避免在打印时无法转义；
+- 目前的最新版本为`v2.10.1 资源板改革`。
+  - 本更新大幅改进了`ResourcePanel`，并添加了一些实用字段。
+    - 更改了`update_render_layer`的加载逻辑，现在如果有`clip_rect`会自动进行匹配，仅保留渲染区域和显示区域的相交部分；
+    - 现在`resource_get_focus`可以设置是否检查目标资源是否包含鼠标指针；
+    - 添加了`inner_margin`字段，用于留出`ResourcePanel`页面空白以对`ResourcePanel`进行鼠标操作；
+    - 重新加回了`CustomPanelLayout`；
+    - 移除了`PanelStorage`的`origin_size`字段；
+    - 将`layout`字段替换为`overall_layout`和`custom_layout`；
+    - 移除了`auto_shrink`字段；
+    - 修复了`ResourcePanel`的网格定位在特定情况下会崩溃的问题；
+    - 改进了滚动条的计算方法；
     - 修复了一些已知问题。
-  - 此版本将是`Rust Constructor`近期最后一个中等更新，之后将以小更新为主。
 
 ---
 

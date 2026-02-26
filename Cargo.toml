@@ -1,6 +1,6 @@
 [package]
 name = "rust-constructor"
-version = "2.10.0"
+version = "2.10.1"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
 description = "A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects with `Rust`."

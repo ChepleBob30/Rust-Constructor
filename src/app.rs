@@ -6,8 +6,9 @@ use crate::{
     PositionSizeConfig, RenderConfig, RequestMethod, RequestType, RustConstructorError,
     RustConstructorId, RustConstructorResource, RustConstructorResourceBox, Timer, VerticalAlign,
     advance_front::{
-        Background, BackgroundType, ClickAim, PanelLocation, PanelMargin, PanelStorage,
-        ResourcePanel, ScrollBarDisplayMethod, ScrollLengthMethod, Switch, SwitchData,
+        Background, BackgroundType, ClickAim, CustomPanelLayout, PanelLocation, PanelMargin,
+        PanelStorage, ResourcePanel, ScrollBarDisplayMethod, ScrollLengthMethod, Switch,
+        SwitchData,
     },
     background::{Font, PageData, SplitTime, Variable},
     basic_front::{
@@ -691,7 +692,7 @@ impl App {
                                         discern_type: "Text".to_string(),
                                     })
                                     && let Some(mouse_pos) = fullscreen_detect_result.interact_pos()
-                                    && self.resource_get_focus(index, mouse_pos.into())
+                                    && self.resource_get_focus(index, mouse_pos.into(), false)
                                     && (detect_result.clicked() || detect_result.drag_started())
                                 {
                                     let cursor = cursor_at_pointer(mouse_pos.to_vec2());
@@ -957,7 +958,7 @@ impl App {
                                         })
                                         && let Some(mouse_pos) =
                                             ui.input(|i| i.pointer.interact_pos())
-                                        && self.resource_get_focus(index, mouse_pos.into())
+                                        && self.resource_get_focus(index, mouse_pos.into(), false)
                                     {
                                         if link_response.is_pointer_button_down_on()
                                             && !link_response.drag_started()
@@ -1504,7 +1505,7 @@ impl App {
     /// in the render list and updating their position, size, and rendering properties.
     ///
     /// 此方法通过处理渲染列表中的所有资源并更新它们的位置、尺寸和渲染属性来重新计算渲染层级。
-    pub fn update_render_layer(&mut self) {
+    pub fn update_render_layer(&mut self, ctx: &Context) {
         self.render_layer.clear();
         for info in &self.render_list {
             if let Some(index) = self.check_resource_exists(info) {
@@ -1540,15 +1541,44 @@ impl App {
                 if let Some(display_info) = basic_front_resource.display_display_info() {
                     self.render_layer.push((
                         info.clone(),
-                        [
-                            basic_front_resource.display_position(),
+                        if let Some(clip_rect) = basic_front_resource
+                            .display_basic_front_resource_config()
+                            .clip_rect
+                        {
+                            let [position, size] = self.position_size_processor(clip_rect, ctx);
+                            let [resource_rect, clip_rect] = [
+                                Rect::from_min_max(
+                                    basic_front_resource.display_position().into(),
+                                    [
+                                        basic_front_resource.display_position()[0]
+                                            + basic_front_resource.display_size()[0],
+                                        basic_front_resource.display_position()[1]
+                                            + basic_front_resource.display_size()[1],
+                                    ]
+                                    .into(),
+                                ),
+                                Rect::from_min_size(position.into(), size.into()),
+                            ];
+                            let min = resource_rect.min.max(clip_rect.min);
+                            let max = resource_rect.max.min(clip_rect.max);
+
+                            // 检查是否有交集
+                            if min.x < max.x && min.y < max.y {
+                                [min.into(), max.into()]
+                            } else {
+                                [[0_f32, 0_f32], [0_f32, 0_f32]]
+                            }
+                        } else {
                             [
-                                basic_front_resource.display_position()[0]
-                                    + basic_front_resource.display_size()[0],
-                                basic_front_resource.display_position()[1]
-                                    + basic_front_resource.display_size()[1],
-                            ],
-                        ],
+                                basic_front_resource.display_position(),
+                                [
+                                    basic_front_resource.display_position()[0]
+                                        + basic_front_resource.display_size()[0],
+                                    basic_front_resource.display_position()[1]
+                                        + basic_front_resource.display_size()[1],
+                                ],
+                            ]
+                        },
                         display_info.ignore_render_layer,
                     ));
                 };
@@ -1659,9 +1689,7 @@ impl App {
     ///
     /// 渲染列表中的资源索引，如果没有找到则为None
     pub fn get_render_layer_resource(&self, id: &RustConstructorId) -> Option<usize> {
-        self.render_layer
-            .iter()
-            .position(|x| x.0.name == id.name && x.0.discern_type == id.discern_type)
+        self.render_layer.iter().position(|x| &x.0 == id)
     }
 
     /// Check whether the resource has obtained the mouse focus.
@@ -1690,14 +1718,25 @@ impl App {
     /// # 返回值
     ///
     /// 如果资源未被阻挡，返回true，否则返回false。
-    pub fn resource_get_focus(&self, index: usize, mouse_pos: [f32; 2]) -> bool {
+    pub fn resource_get_focus(
+        &self,
+        index: usize,
+        mouse_pos: [f32; 2],
+        need_contains_mouse: bool,
+    ) -> bool {
         for i in index + 1..self.render_layer.len() {
             let point = self.render_layer[i].1;
-            if mouse_pos[0] > point[0][0]
-                && mouse_pos[1] > point[0][1]
-                && mouse_pos[0] < point[1][0]
-                && mouse_pos[1] < point[1][1]
+            let target_point = self.render_layer[index].1;
+            if mouse_pos[0] >= point[0][0]
+                && mouse_pos[1] >= point[0][1]
+                && mouse_pos[0] <= point[1][0]
+                && mouse_pos[1] <= point[1][1]
                 && !self.render_layer[i].2
+                || need_contains_mouse
+                    && !(mouse_pos[0] <= target_point[1][0]
+                        && mouse_pos[0] >= target_point[0][0]
+                        && mouse_pos[1] <= target_point[1][1]
+                        && mouse_pos[1] >= target_point[0][1])
             {
                 return false;
             };
@@ -2453,7 +2492,7 @@ impl App {
                         self.draw_resource_by_index(ui, ctx, i)?;
                     }
                     // 更新渲染列表。
-                    self.update_render_layer();
+                    self.update_render_layer(ctx);
                     // 更新资源活跃状态。
                     self.active_list.clear();
                     // 更新资源启用状态。
@@ -2571,10 +2610,6 @@ impl App {
                             discern_type: "Text".to_string(),
                         })?
                         .clone();
-                    let rect = Rect::from_min_size(
-                        background_resource.display_position().into(),
-                        background_resource.display_size().into(),
-                    );
                     switch.switched = false;
                     let animation_count =
                         1 + switch.enable_animation.iter().filter(|x| **x).count();
@@ -2587,84 +2622,81 @@ impl App {
                         discern_type: background_resource_type.to_string(),
                     }) && switch.enable
                         && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
-                        && self.resource_get_focus(index, mouse_pos.into())
+                        && self.resource_get_focus(index, mouse_pos.into(), true)
                         && let Some(display_info) = background_resource.display_display_info()
                         && !display_info.hidden
                     {
-                        // 判断是否在矩形内
-                        if rect.contains(mouse_pos) {
-                            if !switch.last_frame_hovered {
-                                self.reset_split_time(&format!("{}StartHoverTime", &id.name))?;
-                            } else if self.timer.total_time
-                                - self.get_split_time(&format!("{}StartHoverTime", &id.name))?[1]
-                                >= 2_f32
-                                || hint_text.alpha != 0
-                            {
-                                hint_text.alpha = 255;
-                                hint_text
-                                    .basic_front_resource_config
-                                    .position_size_config
-                                    .origin_position = [mouse_pos.x, mouse_pos.y];
-                            };
+                        if !switch.last_frame_hovered {
+                            self.reset_split_time(&format!("{}StartHoverTime", &id.name))?;
+                        } else if self.timer.total_time
+                            - self.get_split_time(&format!("{}StartHoverTime", &id.name))?[1]
+                            >= 2_f32
+                            || hint_text.alpha != 0
+                        {
+                            hint_text.alpha = 255;
                             hint_text
                                 .basic_front_resource_config
                                 .position_size_config
-                                .display_method
-                                .0 = if mouse_pos.x + hint_text.actual_size[0]
-                                <= ctx.available_rect().width()
-                            {
-                                HorizontalAlign::Left
-                            } else {
-                                HorizontalAlign::Right
+                                .origin_position = [mouse_pos.x, mouse_pos.y];
+                        };
+                        hint_text
+                            .basic_front_resource_config
+                            .position_size_config
+                            .display_method
+                            .0 = if mouse_pos.x + hint_text.actual_size[0]
+                            <= ctx.available_rect().width()
+                        {
+                            HorizontalAlign::Left
+                        } else {
+                            HorizontalAlign::Right
+                        };
+                        hint_text
+                            .basic_front_resource_config
+                            .position_size_config
+                            .display_method
+                            .1 = if mouse_pos.y + hint_text.actual_size[1]
+                            <= ctx.available_rect().height()
+                        {
+                            VerticalAlign::Top
+                        } else {
+                            VerticalAlign::Bottom
+                        };
+                        hovered = true;
+                        for (count, click_method) in switch.click_method.iter().enumerate() {
+                            if ui.input(|i| {
+                                switch.last_frame_clicked.is_none()
+                                    && i.pointer.button_pressed(click_method.click_method)
+                                    || switch.last_frame_clicked.is_some()
+                                        && i.pointer.button_down(click_method.click_method)
+                            }) {
+                                clicked = Some(count);
+                                break;
                             };
-                            hint_text
-                                .basic_front_resource_config
-                                .position_size_config
-                                .display_method
-                                .1 = if mouse_pos.y + hint_text.actual_size[1]
-                                <= ctx.available_rect().height()
-                            {
-                                VerticalAlign::Top
-                            } else {
-                                VerticalAlign::Bottom
-                            };
-                            hovered = true;
-                            for (count, click_method) in switch.click_method.iter().enumerate() {
-                                if ui.input(|i| {
-                                    switch.last_frame_clicked.is_none()
-                                        && i.pointer.button_pressed(click_method.click_method)
-                                        || switch.last_frame_clicked.is_some()
-                                            && i.pointer.button_down(click_method.click_method)
-                                }) {
-                                    clicked = Some(count);
-                                    break;
+                        }
+                        if let Some(clicked_index) = switch.last_frame_clicked
+                            && clicked.is_none()
+                        {
+                            switch.switched = true;
+                            if switch.click_method[clicked_index].action {
+                                if switch.state
+                                    < (switch.appearance.len() / animation_count - 1) as u32
+                                {
+                                    switch.state += 1;
+                                } else {
+                                    switch.state = 0;
                                 };
+                            };
+                        };
+                        appearance_count = if clicked.is_some() {
+                            match switch.enable_animation {
+                                [true, true] => 2,
+                                [true, false] | [false, true] => 1,
+                                [false, false] => 0,
                             }
-                            if let Some(clicked_index) = switch.last_frame_clicked
-                                && clicked.is_none()
-                            {
-                                switch.switched = true;
-                                if switch.click_method[clicked_index].action {
-                                    if switch.state
-                                        < (switch.appearance.len() / animation_count - 1) as u32
-                                    {
-                                        switch.state += 1;
-                                    } else {
-                                        switch.state = 0;
-                                    };
-                                };
-                            };
-                            appearance_count = if clicked.is_some() {
-                                match switch.enable_animation {
-                                    [true, true] => 2,
-                                    [true, false] | [false, true] => 1,
-                                    [false, false] => 0,
-                                }
-                            } else if switch.enable_animation[0] {
-                                1
-                            } else {
-                                0
-                            };
+                        } else if switch.enable_animation[0] {
+                            1
+                        } else {
+                            0
                         };
                     };
 
@@ -2837,6 +2869,8 @@ impl App {
                         position_size_config.y_location_grid = [0_f32, 0_f32];
                         position_size_config.x_size_grid = [0_f32, 0_f32];
                         position_size_config.y_size_grid = [0_f32, 0_f32];
+                        position_size_config.display_method =
+                            (HorizontalAlign::Left, VerticalAlign::Top);
                     };
                     if resource_panel.min_size[0] < 10_f32 {
                         resource_panel.min_size[0] = 10_f32;
@@ -2886,7 +2920,7 @@ impl App {
                                 BackgroundType::Image(_) => "Image",
                             }
                             .to_string(),
-                        }) && self.resource_get_focus(index, mouse_pos.into())
+                        }) && self.resource_get_focus(index, mouse_pos.into(), false)
                         {
                             if ui.input(|i| i.pointer.primary_pressed())
                                 && Rect::from_min_size(position.into(), size.into())
@@ -4002,9 +4036,6 @@ impl App {
                                     } else {
                                         false
                                     },
-                                    origin_size: basic_front_resource
-                                        .display_position_size_config()
-                                        .origin_size,
                                 });
                             };
                             let enable_scrolling = [
@@ -4034,20 +4065,46 @@ impl App {
                                         },
                                     ),
                             );
-                            match resource_panel.layout.panel_margin {
+                            let mut layout = resource_panel.overall_layout;
+                            for custom_layout in &resource_panel.custom_layout {
+                                match custom_layout {
+                                    CustomPanelLayout::Id(layout_id, panel_layout) => {
+                                        if rcr.id.cmp(layout_id) == Ordering::Equal {
+                                            layout = *panel_layout;
+                                            break;
+                                        };
+                                    }
+                                    CustomPanelLayout::Type(layout_type, panel_layout) => {
+                                        if *layout_type == rcr.id.discern_type {
+                                            layout = *panel_layout;
+                                        }
+                                    }
+                                };
+                            }
+                            match layout.panel_margin {
                                 PanelMargin::Vertical(
                                     [top, bottom, left, right],
                                     move_to_bottom,
                                 ) => {
                                     let mut modify_y = 0_f32;
                                     let [default_x_position, default_y_position] =
-                                        match resource_panel.layout.panel_location {
+                                        match layout.panel_location {
                                             PanelLocation::Absolute([x, y]) => {
                                                 [position[0] + x, position[1] + y]
                                             }
                                             PanelLocation::Relative([x, y]) => [
-                                                position[0] + (size[0] / x[1] as f32 * x[0] as f32),
-                                                position[1] + (size[1] / y[1] as f32 * y[0] as f32),
+                                                position[0]
+                                                    + if x[1] != 0_f32 {
+                                                        size[0] / x[1] * x[0]
+                                                    } else {
+                                                        0_f32
+                                                    },
+                                                position[1]
+                                                    + if y[1] != 0_f32 {
+                                                        size[1] / y[1] * y[0]
+                                                    } else {
+                                                        0_f32
+                                                    },
                                             ],
                                         };
                                     let default_x_position = match basic_front_resource
@@ -4143,106 +4200,17 @@ impl App {
                                                 + basic_front_resource.display_size()[1]
                                         }
                                     };
-                                    let default_storage = if let Some(resource_storage) =
-                                        resource_panel
-                                            .resource_storage
-                                            .iter()
-                                            .find(|x| x.id == rcr.id)
-                                    {
-                                        (true, resource_storage.origin_size)
-                                    } else {
-                                        (false, [0_f32, 0_f32])
-                                    };
                                     basic_front_resource.modify_position_size_config(
                                         basic_front_resource
                                             .display_position_size_config()
-                                            .origin_size(
-                                                if basic_front_resource.display_position()[0]
-                                                    < position[0] + size[0]
-                                                {
-                                                    if resource_panel.auto_shrink[0]
-                                                        && basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[0]
-                                                            > position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                    {
-                                                        position_size_config.origin_size[0]
-                                                            - (basic_front_resource
-                                                                .display_position()[0]
-                                                                - position[0])
-                                                            - right
-                                                    } else if default_storage.0 {
-                                                        if default_storage.1[0]
-                                                            > position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                        {
-                                                            position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                        } else {
-                                                            default_storage.1[0]
-                                                        }
-                                                    } else {
-                                                        basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[0]
-                                                    }
-                                                } else {
-                                                    0_f32
-                                                },
-                                                if basic_front_resource.display_position()[1]
-                                                    < position[1] + size[1]
-                                                {
-                                                    if resource_panel.auto_shrink[1]
-                                                        && basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[1]
-                                                            > position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                    {
-                                                        position_size_config.origin_size[1]
-                                                            - (basic_front_resource
-                                                                .display_position()[1]
-                                                                - position[1])
-                                                            - bottom
-                                                    } else if default_storage.0 {
-                                                        if default_storage.1[1]
-                                                            > position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                        {
-                                                            position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                        } else {
-                                                            default_storage.1[1]
-                                                        }
-                                                    } else {
-                                                        basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[1]
-                                                    }
-                                                } else {
-                                                    0_f32
-                                                },
-                                            )
-                                            .origin_position(real_x_position, real_y_position),
+                                            .origin_position(
+                                                real_x_position
+                                                    + left
+                                                    + resource_panel.inner_margin[2],
+                                                real_y_position
+                                                    + top
+                                                    + resource_panel.inner_margin[0],
+                                            ),
                                     );
                                     replace_resource_list.push((
                                         basic_front_resource.display_position_size_config(),
@@ -4267,13 +4235,23 @@ impl App {
                                 ) => {
                                     let mut modify_x = 0_f32;
                                     let [default_x_position, default_y_position] =
-                                        match resource_panel.layout.panel_location {
+                                        match layout.panel_location {
                                             PanelLocation::Absolute([x, y]) => {
                                                 [position[0] + x, position[1] + y]
                                             }
                                             PanelLocation::Relative([x, y]) => [
-                                                position[0] + (size[0] / x[1] as f32 * x[0] as f32),
-                                                position[1] + (size[1] / y[1] as f32 * y[0] as f32),
+                                                position[0]
+                                                    + if x[1] != 0_f32 {
+                                                        size[0] / x[1] * x[0]
+                                                    } else {
+                                                        0_f32
+                                                    },
+                                                position[1]
+                                                    + if y[1] != 0_f32 {
+                                                        size[1] / y[1] * y[0]
+                                                    } else {
+                                                        0_f32
+                                                    },
                                             ],
                                         };
                                     let default_x_position = match basic_front_resource
@@ -4369,106 +4347,17 @@ impl App {
                                                 + basic_front_resource.display_size()[1]
                                         }
                                     };
-                                    let default_storage = if let Some(resource_storage) =
-                                        resource_panel
-                                            .resource_storage
-                                            .iter()
-                                            .find(|x| x.id == rcr.id)
-                                    {
-                                        (true, resource_storage.origin_size)
-                                    } else {
-                                        (false, [0_f32, 0_f32])
-                                    };
                                     basic_front_resource.modify_position_size_config(
                                         basic_front_resource
                                             .display_position_size_config()
-                                            .origin_size(
-                                                if basic_front_resource.display_position()[0]
-                                                    < position[0] + size[0]
-                                                {
-                                                    if resource_panel.auto_shrink[0]
-                                                        && basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[0]
-                                                            > position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                    {
-                                                        position_size_config.origin_size[0]
-                                                            - (basic_front_resource
-                                                                .display_position()[0]
-                                                                - position[0])
-                                                            - right
-                                                    } else if default_storage.0 {
-                                                        if default_storage.1[0]
-                                                            > position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                        {
-                                                            position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                        } else {
-                                                            default_storage.1[0]
-                                                        }
-                                                    } else {
-                                                        basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[0]
-                                                    }
-                                                } else {
-                                                    0_f32
-                                                },
-                                                if basic_front_resource.display_position()[1]
-                                                    < position[1] + size[1]
-                                                {
-                                                    if resource_panel.auto_shrink[1]
-                                                        && basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[1]
-                                                            > position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                    {
-                                                        position_size_config.origin_size[1]
-                                                            - (basic_front_resource
-                                                                .display_position()[1]
-                                                                - position[1])
-                                                            - bottom
-                                                    } else if default_storage.0 {
-                                                        if default_storage.1[1]
-                                                            > position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                        {
-                                                            position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                        } else {
-                                                            default_storage.1[1]
-                                                        }
-                                                    } else {
-                                                        basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[1]
-                                                    }
-                                                } else {
-                                                    0_f32
-                                                },
-                                            )
-                                            .origin_position(real_x_position, real_y_position),
+                                            .origin_position(
+                                                real_x_position
+                                                    + left
+                                                    + resource_panel.inner_margin[2],
+                                                real_y_position
+                                                    + top
+                                                    + resource_panel.inner_margin[0],
+                                            ),
                                     );
                                     replace_resource_list.push((
                                         basic_front_resource.display_position_size_config(),
@@ -4489,117 +4378,35 @@ impl App {
                                 }
                                 PanelMargin::None([top, bottom, left, right], influence_layout) => {
                                     let [default_x_position, default_y_position] =
-                                        match resource_panel.layout.panel_location {
+                                        match layout.panel_location {
                                             PanelLocation::Absolute([x, y]) => {
                                                 [position[0] + x, position[1] + y]
                                             }
                                             PanelLocation::Relative([x, y]) => [
-                                                position[0] + (size[0] / x[1] as f32 * x[0] as f32),
-                                                position[1] + (size[1] / y[1] as f32 * y[0] as f32),
+                                                position[0]
+                                                    + if x[1] != 0_f32 {
+                                                        size[0] / x[1] * x[0]
+                                                    } else {
+                                                        0_f32
+                                                    },
+                                                position[1]
+                                                    + if y[1] != 0_f32 {
+                                                        size[1] / y[1] * y[0]
+                                                    } else {
+                                                        0_f32
+                                                    },
                                             ],
                                         };
-                                    let default_storage = if let Some(resource_storage) =
-                                        resource_panel
-                                            .resource_storage
-                                            .iter()
-                                            .find(|x| x.id == rcr.id)
-                                    {
-                                        (true, resource_storage.origin_size)
-                                    } else {
-                                        (false, [0_f32, 0_f32])
-                                    };
                                     basic_front_resource.modify_position_size_config(
                                         basic_front_resource
                                             .display_position_size_config()
-                                            .origin_size(
-                                                if basic_front_resource.display_position()[0]
-                                                    < position[0] + size[0]
-                                                {
-                                                    if resource_panel.auto_shrink[0]
-                                                        && basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[0]
-                                                            > position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                    {
-                                                        position_size_config.origin_size[0]
-                                                            - (basic_front_resource
-                                                                .display_position()[0]
-                                                                - position[0])
-                                                            - right
-                                                    } else if default_storage.0 {
-                                                        if default_storage.1[0]
-                                                            > position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                        {
-                                                            position_size_config.origin_size[0]
-                                                                - (basic_front_resource
-                                                                    .display_position()[0]
-                                                                    - position[0])
-                                                                - right
-                                                        } else {
-                                                            default_storage.1[0]
-                                                        }
-                                                    } else {
-                                                        basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[0]
-                                                    }
-                                                } else {
-                                                    0_f32
-                                                },
-                                                if basic_front_resource.display_position()[1]
-                                                    < position[1] + size[1]
-                                                {
-                                                    if resource_panel.auto_shrink[1]
-                                                        && basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[1]
-                                                            > position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                    {
-                                                        position_size_config.origin_size[1]
-                                                            - (basic_front_resource
-                                                                .display_position()[1]
-                                                                - position[1])
-                                                            - bottom
-                                                    } else if default_storage.0 {
-                                                        if default_storage.1[1]
-                                                            > position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                        {
-                                                            position_size_config.origin_size[1]
-                                                                - (basic_front_resource
-                                                                    .display_position()[1]
-                                                                    - position[1])
-                                                                - bottom
-                                                        } else {
-                                                            default_storage.1[1]
-                                                        }
-                                                    } else {
-                                                        basic_front_resource
-                                                            .display_position_size_config()
-                                                            .origin_size[1]
-                                                    }
-                                                } else {
-                                                    0_f32
-                                                },
-                                            )
                                             .origin_position(
-                                                default_x_position,
-                                                default_y_position,
+                                                default_x_position
+                                                    + left
+                                                    + resource_panel.inner_margin[2],
+                                                default_y_position
+                                                    + top
+                                                    + resource_panel.inner_margin[0],
                                             ),
                                     );
                                     replace_resource_list.push((
@@ -4656,8 +4463,23 @@ impl App {
                                 } else {
                                     custom_rect.display_info.ignore_render_layer
                                 };
-                                custom_rect.basic_front_resource_config.clip_rect =
-                                    Some(position_size_config);
+                                custom_rect.basic_front_resource_config.clip_rect = Some(
+                                    position_size_config
+                                        .origin_size(
+                                            position_size_config.origin_size[0]
+                                                - resource_panel.inner_margin[2]
+                                                - resource_panel.inner_margin[3],
+                                            position_size_config.origin_size[1]
+                                                - resource_panel.inner_margin[0]
+                                                - resource_panel.inner_margin[1],
+                                        )
+                                        .origin_position(
+                                            position_size_config.origin_position[0]
+                                                + resource_panel.inner_margin[2],
+                                            position_size_config.origin_position[1]
+                                                + resource_panel.inner_margin[0],
+                                        ),
+                                );
                                 custom_rect.display_info.hidden = if resource_panel.hidden {
                                     true
                                 } else if default_storage[0] {
@@ -4682,8 +4504,23 @@ impl App {
                                 } else {
                                     image.display_info.ignore_render_layer
                                 };
-                                image.basic_front_resource_config.clip_rect =
-                                    Some(position_size_config);
+                                image.basic_front_resource_config.clip_rect = Some(
+                                    position_size_config
+                                        .origin_size(
+                                            position_size_config.origin_size[0]
+                                                - resource_panel.inner_margin[2]
+                                                - resource_panel.inner_margin[3],
+                                            position_size_config.origin_size[1]
+                                                - resource_panel.inner_margin[0]
+                                                - resource_panel.inner_margin[1],
+                                        )
+                                        .origin_position(
+                                            position_size_config.origin_position[0]
+                                                + resource_panel.inner_margin[2],
+                                            position_size_config.origin_position[1]
+                                                + resource_panel.inner_margin[0],
+                                        ),
+                                );
                                 image.display_info.hidden = resource_panel.hidden;
                                 self.replace_resource(&name, image)?;
                             }
@@ -4703,8 +4540,23 @@ impl App {
                                     text.display_info.ignore_render_layer
                                 };
                                 text.auto_fit = [false, false];
-                                text.basic_front_resource_config.clip_rect =
-                                    Some(position_size_config);
+                                text.basic_front_resource_config.clip_rect = Some(
+                                    position_size_config
+                                        .origin_size(
+                                            position_size_config.origin_size[0]
+                                                - resource_panel.inner_margin[2]
+                                                - resource_panel.inner_margin[3],
+                                            position_size_config.origin_size[1]
+                                                - resource_panel.inner_margin[0]
+                                                - resource_panel.inner_margin[1],
+                                        )
+                                        .origin_position(
+                                            position_size_config.origin_position[0]
+                                                + resource_panel.inner_margin[2],
+                                            position_size_config.origin_position[1]
+                                                + resource_panel.inner_margin[0],
+                                        ),
+                                );
                                 text.display_info.hidden = resource_panel.hidden;
                                 self.replace_resource(&name, text)?;
                             }
@@ -4721,35 +4573,57 @@ impl App {
                             ctx,
                         )?;
                     }
+                    let mut resource_length = [None, None];
+                    for point in resource_point_list {
+                        resource_length = [
+                            if resource_length[0].is_none()
+                                || resource_length[0].is_some()
+                                    && point.1[0] > resource_length[0].unwrap()
+                                    && point.2[0]
+                            {
+                                Some(point.1[0])
+                            } else {
+                                resource_length[0]
+                            },
+                            if resource_length[1].is_none()
+                                || resource_length[1].is_some()
+                                    && point.1[1] > resource_length[1].unwrap()
+                                    && point.2[1]
+                            {
+                                Some(point.1[1])
+                            } else {
+                                resource_length[1]
+                            },
+                        ]
+                    }
                     if let Some(horizontal_scroll_length_method) =
                         resource_panel.scroll_length_method[0]
                     {
+                        let margin = match resource_panel.overall_layout.panel_margin {
+                            PanelMargin::Horizontal([_, _, left, right], _) => left + right,
+                            PanelMargin::Vertical([_, _, left, right], _) => left + right,
+                            PanelMargin::None([_, _, left, right], _) => left + right,
+                        };
                         resource_panel.scroll_length[0] = match horizontal_scroll_length_method {
                             ScrollLengthMethod::Fixed(fixed_length) => fixed_length,
                             ScrollLengthMethod::AutoFit(expand) => {
-                                let mut length = -background_resource.display_size()[0];
-                                match resource_panel.layout.panel_margin {
-                                    PanelMargin::Horizontal(_, _) => {
-                                        for storage in &resource_panel.resource_storage {
-                                            length += storage.origin_size[0];
-                                        }
+                                if let Some(max) = resource_length[0] {
+                                    let width = max - position[0];
+                                    if width - size[0]
+                                        + expand
+                                        + margin
+                                        + resource_panel.inner_margin[3]
+                                        + resource_panel.inner_margin[2]
+                                        > 0_f32
+                                    {
+                                        width - size[0]
+                                            + expand
+                                            + margin
+                                            + resource_panel.inner_margin[3]
+                                            + resource_panel.inner_margin[2]
+                                    } else {
+                                        0_f32
                                     }
-                                    PanelMargin::Vertical(_, _) | PanelMargin::None(_, _) => {
-                                        for storage in &resource_panel.resource_storage {
-                                            length = if storage.origin_size[0]
-                                                - background_resource.display_size()[0]
-                                                > length
-                                            {
-                                                storage.origin_size[0]
-                                                    - background_resource.display_size()[0]
-                                            } else {
-                                                length
-                                            };
-                                        }
-                                    }
-                                }
-                                if length >= 0_f32 {
-                                    length + expand.abs()
                                 } else {
                                     0_f32
                                 }
@@ -4762,32 +4636,31 @@ impl App {
                     if let Some(vertical_scroll_length_method) =
                         resource_panel.scroll_length_method[1]
                     {
+                        let margin = match resource_panel.overall_layout.panel_margin {
+                            PanelMargin::Horizontal([top, bottom, _, _], _) => top + bottom,
+                            PanelMargin::Vertical([top, bottom, _, _], _) => top + bottom,
+                            PanelMargin::None([top, bottom, _, _], _) => top + bottom,
+                        };
                         resource_panel.scroll_length[1] = match vertical_scroll_length_method {
                             ScrollLengthMethod::Fixed(fixed_length) => fixed_length,
                             ScrollLengthMethod::AutoFit(expand) => {
-                                let mut length = -background_resource.display_size()[1];
-                                match resource_panel.layout.panel_margin {
-                                    PanelMargin::Vertical(_, _) => {
-                                        for storage in &resource_panel.resource_storage {
-                                            length += storage.origin_size[1];
-                                        }
+                                if let Some(max) = resource_length[1] {
+                                    let height = max - position[1];
+                                    if height - size[1]
+                                        + expand
+                                        + margin
+                                        + resource_panel.inner_margin[1]
+                                        + resource_panel.inner_margin[0]
+                                        > 0_f32
+                                    {
+                                        height - size[1]
+                                            + expand
+                                            + margin
+                                            + resource_panel.inner_margin[1]
+                                            + resource_panel.inner_margin[0]
+                                    } else {
+                                        0_f32
                                     }
-                                    PanelMargin::Horizontal(_, _) | PanelMargin::None(_, _) => {
-                                        for storage in &resource_panel.resource_storage {
-                                            length = if storage.origin_size[1]
-                                                - background_resource.display_size()[1]
-                                                > length
-                                            {
-                                                storage.origin_size[1]
-                                                    - background_resource.display_size()[1]
-                                            } else {
-                                                length
-                                            };
-                                        }
-                                    }
-                                }
-                                if length >= 0_f32 {
-                                    length + expand.abs()
                                 } else {
                                     0_f32
                                 }
