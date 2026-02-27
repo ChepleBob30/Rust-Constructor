@@ -632,11 +632,11 @@ pub enum RequestType {
     Up(usize),
 }
 
-/// Methods for displaying active list information.
+/// Methods for displaying list information.
 ///
-/// 用于显示活动列表信息的方法。
+/// 用于显示列表信息的方法。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum ActiveListInfoMethod {
+pub enum ListInfoMethod {
     /// Detailed display including resource and ID (with optional formatting).
     ///
     /// 详细显示，包括资源和ID（可选格式）。

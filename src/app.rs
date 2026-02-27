@@ -2,7 +2,7 @@
 //!
 //! 程序主体，包含所有GUI资源和状态管理。
 use crate::{
-    ActiveListInfoMethod, BasicFrontResource, BorderKind, DisplayInfo, HorizontalAlign,
+    BasicFrontResource, BorderKind, DisplayInfo, HorizontalAlign, ListInfoMethod,
     PositionSizeConfig, RenderConfig, RequestMethod, RequestType, RustConstructorError,
     RustConstructorId, RustConstructorResource, RustConstructorResourceBox, Timer, VerticalAlign,
     advance_front::{
@@ -10,19 +10,19 @@ use crate::{
         PanelStorage, ResourcePanel, ScrollBarDisplayMethod, ScrollLengthMethod, Switch,
         SwitchData,
     },
-    background::{Font, PageData, SplitTime, Variable},
+    background::{Font, PageData, SplitTime, Variable, WrapDefinitions},
     basic_front::{
         CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod, Text,
     },
 };
-use eframe::{
-    emath::Rect,
-    epaint::{Stroke, textures::TextureOptions},
-};
-use egui::{
+use eframe::egui::{
     Color32, ColorImage, Context, CornerRadius, CursorIcon, FontData, FontDefinitions, FontFamily,
     FontId, Galley, Id, ImageSource, Key, OpenUrl, Pos2, Sense, StrokeKind, Ui, Vec2,
     text::CCursor,
+};
+use eframe::{
+    emath::Rect,
+    epaint::{Stroke, textures::TextureOptions},
 };
 use std::{
     any::type_name_of_val,
@@ -319,7 +319,7 @@ impl App {
                                 );
 
                                 // 直接绘制图片
-                                egui::Image::new(ImageSource::Texture((&texture.0).into()))
+                                eframe::egui::Image::new(ImageSource::Texture((&texture.0).into()))
                                     .tint(Color32::from_rgba_unmultiplied(
                                         image.overlay_color[0],
                                         image.overlay_color[1],
@@ -880,11 +880,11 @@ impl App {
                                     );
                                     vec![ui.interact(
                                         link_rect,
-                                        egui::Id::new(format!(
+                                        Id::new(format!(
                                             "link_{}_{}_{}",
                                             render_resource.name, start, end
                                         )),
-                                        egui::Sense::click(),
+                                        Sense::click(),
                                     )]
                                 } else {
                                     // 多行超链接
@@ -1198,6 +1198,53 @@ impl App {
         }
     }
 
+    /// Generate information for Rust Constructor resources.
+    ///
+    /// 生成Rust Constructor资源的信息。
+    ///
+    /// This method returns a formatted string containing details about all resources.
+    /// The level of detail depends on the specified method.
+    ///
+    /// 此方法返回一个格式化字符串，包含所有资源的详细信息。
+    /// 详细程度取决于指定的方法。
+    ///
+    /// # Arguments
+    ///
+    /// * `method` - Determines the level of detail in the output
+    ///
+    /// # Returns
+    ///
+    /// A formatted string with resource information.
+    ///
+    /// # 参数
+    ///
+    /// * `method` - 决定输出信息的详细程度
+    ///
+    /// # 返回值
+    ///
+    /// 包含资源信息的格式化字符串。
+    pub fn rust_constructor_resource_info(&self, method: ListInfoMethod) -> String {
+        let mut text = String::from("Rust Constructor Resource Info:\n");
+        for info in &self.rust_constructor_resource {
+            if let ListInfoMethod::Detailed(format) = method {
+                text += &if format {
+                    format!(
+                        "\nName: {}\nType: {}\nDetail: {:#?}\n",
+                        info.id.name, info.id.discern_type, info.content,
+                    )
+                } else {
+                    format!(
+                        "\nName: {}\nType: {}\nDetail: {:?}\n",
+                        info.id.name, info.id.discern_type, info.content,
+                    )
+                };
+            } else {
+                text += &format!("\nName: {}\nType: {}\n", info.id.name, info.id.discern_type);
+            };
+        }
+        text
+    }
+
     /// Generates information about currently active resources.
     ///
     /// 生成当前活跃资源的信息。
@@ -1223,10 +1270,10 @@ impl App {
     /// # 返回值
     ///
     /// 包含资源信息的格式化字符串。
-    pub fn active_list_info(&self, method: ActiveListInfoMethod) -> String {
+    pub fn active_list_info(&self, method: ListInfoMethod) -> String {
         let mut text = String::from("Resource Active Info:\n");
         for info in &self.active_list {
-            if let ActiveListInfoMethod::Detailed(format) = method {
+            if let ListInfoMethod::Detailed(format) = method {
                 if let Some(index) = self.check_resource_exists(info) {
                     text += &if format {
                         format!(
@@ -1249,21 +1296,21 @@ impl App {
 
     /// Generates information about the current rendering layers.
     ///
+    /// 生成当前渲染层级的信息。
+    ///
     /// This method returns a formatted string containing details about the rendering
     /// layer stack, including resource positions and rendering behavior.
-    ///
-    /// # Returns
-    ///
-    /// A formatted string with rendering layer information
-    ///
-    /// 生成当前渲染层级的信息。
     ///
     /// 此方法返回一个格式化字符串，包含渲染层级堆栈的详细信息，
     /// 包括资源位置和渲染行为。
     ///
+    /// # Returns
+    ///
+    /// A formatted string with rendering layer information.
+    ///
     /// # 返回值
     ///
-    /// 包含渲染层级信息的格式化字符串
+    /// 包含渲染层级信息的格式化字符串。
     pub fn render_layer_info(&self) -> String {
         let mut text = String::from("Render Layer Info:\n");
         for (
@@ -1867,7 +1914,9 @@ impl App {
                             .or_default()
                             .insert(0, name.to_owned());
 
-                        font.font_definitions = fonts;
+                        font.font_definitions = WrapDefinitions {
+                            font_definitions: fonts,
+                        };
                     } else {
                         return Err(RustConstructorError {
                             error_id: "FontLoadFailed".to_string(),
@@ -5096,7 +5145,7 @@ impl App {
     /// # 返回值
     ///
     /// 如果字体存在则返回 `Ok(FontDefinitions)`，否则返回 `Err(RustConstructorError)`。
-    pub fn get_font(&self, name: &str) -> Result<FontDefinitions, RustConstructorError> {
+    pub fn get_font(&self, name: &str) -> Result<WrapDefinitions, RustConstructorError> {
         let font = self.get_resource::<Font>(&RustConstructorId {
             name: name.to_string(),
             discern_type: "Font".to_string(),
@@ -5137,7 +5186,7 @@ impl App {
         }
         for i in &fonts {
             // 从 font_def 中提取对应字体的 Arc<FontData>
-            if let Some(font_data) = i.1.font_data.get(&i.0) {
+            if let Some(font_data) = i.1.font_definitions.font_data.get(&i.0) {
                 font_definitions_amount
                     .font_data
                     .insert(i.0.clone(), Arc::clone(font_data));

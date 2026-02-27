@@ -5,7 +5,7 @@ use crate::{
     BasicFrontResource, BasicFrontResourceConfig, BorderKind, DisplayInfo, PositionSizeConfig,
     RustConstructorResource,
 };
-use egui::TextureHandle;
+use eframe::egui::TextureHandle;
 use std::{
     any::Any,
     fmt::{Debug, Formatter},

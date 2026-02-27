@@ -5,7 +5,7 @@ use crate::{
     DisplayInfo, RustConstructorId, RustConstructorResource,
     basic_front::{CustomRectConfig, ImageConfig, TextConfig},
 };
-use egui::PointerButton;
+use eframe::egui::PointerButton;
 use std::any::Any;
 
 /// Control the basic front resource type for Background selection.

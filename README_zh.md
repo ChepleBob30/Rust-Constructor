@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.10.1-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.10.2-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,17 +25,12 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.10.1 资源板改革`。
-  - 本更新大幅改进了`ResourcePanel`，并添加了一些实用字段。
-    - 更改了`update_render_layer`的加载逻辑，现在如果有`clip_rect`会自动进行匹配，仅保留渲染区域和显示区域的相交部分；
-    - 现在`resource_get_focus`可以设置是否检查目标资源是否包含鼠标指针；
-    - 添加了`inner_margin`字段，用于留出`ResourcePanel`页面空白以对`ResourcePanel`进行鼠标操作；
-    - 重新加回了`CustomPanelLayout`；
-    - 移除了`PanelStorage`的`origin_size`字段；
-    - 将`layout`字段替换为`overall_layout`和`custom_layout`；
-    - 移除了`auto_shrink`字段；
-    - 修复了`ResourcePanel`的网格定位在特定情况下会崩溃的问题；
-    - 改进了滚动条的计算方法；
+- 目前的最新版本为`v2.10.2`。
+  - 本更新改善了调试体验。
+    - 添加`WrapDefinitions`，用于包裹`FontDefinitions`；
+    - `Font`存储`WrapDefinitions`而非`FontDefinitions`；
+    - 添加了`rust_constructor_resource_info`，用于打印`rust_constructor_resource`；
+    - 修复了尝试打印`Font`时会打印`FontDefinitions`导致卡死的问题；
     - 修复了一些已知问题。
 
 ---

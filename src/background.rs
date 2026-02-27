@@ -2,7 +2,7 @@
 //!
 //! 此文件包含后端资源，后端资源可以存储一些关键数据并在有需要时调用。
 use crate::{DisplayInfo, RustConstructorResource};
-use egui::FontDefinitions;
+use eframe::egui::FontDefinitions;
 use std::{any::Any, fmt::Debug};
 
 /// Storage Rust Constructor resource for page-specific data and state management.
@@ -183,6 +183,23 @@ impl<T> Variable<T> {
     }
 }
 
+/// A structure used to wrap font definitions.
+///
+/// 用于包裹字体定义的结构体。
+#[derive(Clone, Default, PartialEq)]
+pub struct WrapDefinitions {
+    /// Font definitions containing glyphs and styles.
+    ///
+    /// 包含字形和样式的字体定义。
+    pub font_definitions: FontDefinitions,
+}
+
+impl Debug for WrapDefinitions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad("WrapDefinitions { .. }")
+    }
+}
+
 /// Font resource for text rendering.
 ///
 /// 用于文本渲染的字体资源。
@@ -191,7 +208,7 @@ pub struct Font {
     /// Font definitions containing glyphs and styles.
     ///
     /// 包含字形和样式的字体定义。
-    pub font_definitions: FontDefinitions,
+    pub font_definitions: WrapDefinitions,
 
     /// Path to the font file.
     ///

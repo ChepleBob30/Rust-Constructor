@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.10.1-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.10.2-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,17 +25,12 @@
 
 ## Version Update Information
 
-- The current latest version is `v2.10.1 ResourcePanel Reform`.
-  - This update significantly improves the `ResourcePanel` and adds some practical fields.
-    - Changed the loading logic of `update_render_layer`, now it automatically matches if there is a `clip_rect`, only keeping the intersection of the rendering area and display area;
-    - Now `resource_get_focus` can set whether to check if the target resource contains the mouse pointer;
-    - Added the `inner_margin` field to leave blank space on the `ResourcePanel` page for mouse operations on the `ResourcePanel`;
-    - Re-added `CustomPanelLayout`;
-    - Removed the `origin_size` field from `PanelStorage`;
-    - Replaced the `layout` field with `overall_layout` and `custom_layout`;
-    - Removed the `auto_shrink` field;
-    - Fixed an issue where the grid positioning of `ResourcePanel` would crash under certain conditions;
-    - Improved the calculation method of scrollbars;
+- The current latest version is `v2.10.2`.
+  - This update improves the debugging experience.
+    - Added `WrapDefinitions` to wrap `FontDefinitions`;
+    - `Font` now stores `WrapDefinitions` instead of `FontDefinitions`;
+    - Added `rust_constructor_resource_info` for printing `rust_constructor_resource`;
+    - Fixed an issue where attempting to print `Font` would cause a freeze due to printing `FontDefinitions`;
     - Fixed some known issues.
 
 ---
