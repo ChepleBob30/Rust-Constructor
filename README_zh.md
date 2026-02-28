@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.10.4-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.10.5-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,10 +25,7 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.10.4`。
-  - 本更新强化了`CustomRect`。
-    - 修复了`CustomRect`覆盖层显示错误的问题；
-    - 修复了一些已知问题。
+- 目前的最新版本为`v2.10.5`。
 
 ---
 

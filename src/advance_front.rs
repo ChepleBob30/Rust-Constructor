@@ -842,6 +842,12 @@ impl Switch {
     }
 
     #[inline]
+    pub fn state(mut self, state: u32) -> Self {
+        self.state = state;
+        self
+    }
+
+    #[inline]
     pub fn use_switch_tags(mut self, use_switch_tags: bool) -> Self {
         self.use_switch_tags = use_switch_tags;
         self
