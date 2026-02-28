@@ -64,7 +64,7 @@ pub struct CustomRectConfig {
     /// Opacity of the fill color overlay (0-255).
     ///
     /// 矩形的填充颜色覆盖层不透明度（0-255）。
-    pub overlay_alpha: Option<u8>,
+    pub overlay_alpha: Option<Option<u8>>,
 
     /// Width of the border.
     ///
@@ -89,7 +89,7 @@ pub struct CustomRectConfig {
     /// Opacity of the border color overlay (0-255).
     ///
     /// 边框的颜色覆盖层不透明度（0-255）。
-    pub overlay_border_alpha: Option<u8>,
+    pub overlay_border_alpha: Option<Option<u8>>,
 
     /// Placement of the border relative to the rectangle's bounds.
     ///
@@ -178,7 +178,7 @@ impl CustomRectConfig {
     }
 
     #[inline]
-    pub fn overlay_alpha(mut self, overlay_alpha: Option<u8>) -> Self {
+    pub fn overlay_alpha(mut self, overlay_alpha: Option<Option<u8>>) -> Self {
         self.overlay_alpha = overlay_alpha;
         self
     }
@@ -208,7 +208,7 @@ impl CustomRectConfig {
     }
 
     #[inline]
-    pub fn overlay_border_alpha(mut self, overlay_border_alpha: Option<u8>) -> Self {
+    pub fn overlay_border_alpha(mut self, overlay_border_alpha: Option<Option<u8>>) -> Self {
         self.overlay_border_alpha = overlay_border_alpha;
         self
     }
@@ -274,7 +274,7 @@ pub struct CustomRect {
     /// Opacity of the fill color overlay (0-255).
     ///
     /// 矩形的填充颜色覆盖层不透明度（0-255）。
-    pub overlay_alpha: u8,
+    pub overlay_alpha: Option<u8>,
 
     /// Width of the border.
     ///
@@ -299,7 +299,7 @@ pub struct CustomRect {
     /// Opacity of the border color overlay (0-255).
     ///
     /// 边框的颜色覆盖层不透明度（0-255）。
-    pub overlay_border_alpha: u8,
+    pub overlay_border_alpha: Option<u8>,
 
     /// Placement of the border relative to the rectangle's bounds.
     ///
@@ -395,12 +395,12 @@ impl Default for CustomRect {
             color: [255, 255, 255],
             alpha: 255,
             overlay_border_color: [255, 255, 255],
-            overlay_alpha: 255,
+            overlay_alpha: None,
             border_width: 2_f32,
             border_color: [0, 0, 0],
             border_alpha: 255,
             overlay_color: [255, 255, 255],
-            overlay_border_alpha: 255,
+            overlay_border_alpha: None,
             border_kind: BorderKind::default(),
             tags: Vec::new(),
         }
@@ -506,7 +506,7 @@ impl CustomRect {
     }
 
     #[inline]
-    pub fn overlay_alpha(mut self, overlay_alpha: u8) -> Self {
+    pub fn overlay_alpha(mut self, overlay_alpha: Option<u8>) -> Self {
         self.overlay_alpha = overlay_alpha;
         self
     }
@@ -536,7 +536,7 @@ impl CustomRect {
     }
 
     #[inline]
-    pub fn overlay_border_alpha(mut self, overlay_border_alpha: u8) -> Self {
+    pub fn overlay_border_alpha(mut self, overlay_border_alpha: Option<u8>) -> Self {
         self.overlay_border_alpha = overlay_border_alpha;
         self
     }

@@ -1149,20 +1149,62 @@ impl App {
                                     ),
                                 ),
                                 custom_rect.rounding,
-                                Color32::from_rgba_unmultiplied(
-                                    custom_rect.color[0],
-                                    custom_rect.color[1],
-                                    custom_rect.color[2],
-                                    custom_rect.alpha,
-                                ),
+                                if let Some(overlay_alpha) = custom_rect.overlay_alpha {
+                                    Color32::from_rgba_unmultiplied(
+                                        (custom_rect.color[0] as f32
+                                            * custom_rect.overlay_color[0] as f32
+                                            / 255_f32)
+                                            as u8,
+                                        (custom_rect.color[1] as f32
+                                            * custom_rect.overlay_color[1] as f32
+                                            / 255_f32)
+                                            as u8,
+                                        (custom_rect.color[2] as f32
+                                            * custom_rect.overlay_color[2] as f32
+                                            / 255_f32)
+                                            as u8,
+                                        (custom_rect.alpha as f32 * overlay_alpha as f32 / 255_f32)
+                                            as u8,
+                                    )
+                                } else {
+                                    Color32::from_rgba_unmultiplied(
+                                        custom_rect.color[0],
+                                        custom_rect.color[1],
+                                        custom_rect.color[2],
+                                        custom_rect.alpha,
+                                    )
+                                },
                                 Stroke {
                                     width: custom_rect.border_width,
-                                    color: Color32::from_rgba_unmultiplied(
-                                        custom_rect.border_color[0],
-                                        custom_rect.border_color[1],
-                                        custom_rect.border_color[2],
-                                        custom_rect.border_alpha,
-                                    ),
+                                    color: if let Some(overlay_border_alpha) =
+                                        custom_rect.overlay_border_alpha
+                                    {
+                                        Color32::from_rgba_unmultiplied(
+                                            (custom_rect.border_color[0] as f32
+                                                * custom_rect.overlay_border_color[0] as f32
+                                                / 255_f32)
+                                                as u8,
+                                            (custom_rect.border_color[1] as f32
+                                                * custom_rect.overlay_border_color[1] as f32
+                                                / 255_f32)
+                                                as u8,
+                                            (custom_rect.border_color[2] as f32
+                                                * custom_rect.overlay_border_color[2] as f32
+                                                / 255_f32)
+                                                as u8,
+                                            (custom_rect.border_alpha as f32
+                                                * overlay_border_alpha as f32
+                                                / 255_f32)
+                                                as u8,
+                                        )
+                                    } else {
+                                        Color32::from_rgba_unmultiplied(
+                                            custom_rect.border_color[0],
+                                            custom_rect.border_color[1],
+                                            custom_rect.border_color[2],
+                                            custom_rect.border_alpha,
+                                        )
+                                    },
                                 },
                                 match custom_rect.border_kind {
                                     BorderKind::Inside => StrokeKind::Inside,
@@ -1170,47 +1212,6 @@ impl App {
                                     BorderKind::Outside => StrokeKind::Outside,
                                 },
                             );
-                            if custom_rect.overlay_alpha != 0
-                                || custom_rect.overlay_border_alpha != 0
-                                    && custom_rect.border_width > 0_f32
-                            {
-                                ui.painter().rect(
-                                    Rect::from_min_max(
-                                        Pos2::new(custom_rect.position[0], custom_rect.position[1]),
-                                        Pos2::new(
-                                            custom_rect.position[0] + custom_rect.size[0],
-                                            custom_rect.position[1] + custom_rect.size[1],
-                                        ),
-                                    ),
-                                    custom_rect.rounding,
-                                    Color32::from_rgba_unmultiplied(
-                                        custom_rect.overlay_color[0],
-                                        custom_rect.overlay_color[1],
-                                        custom_rect.overlay_color[2],
-                                        (custom_rect.overlay_alpha as f32
-                                            * custom_rect.alpha as f32
-                                            / 255_f32)
-                                            as u8,
-                                    ),
-                                    Stroke {
-                                        width: custom_rect.border_width,
-                                        color: Color32::from_rgba_unmultiplied(
-                                            custom_rect.overlay_border_color[0],
-                                            custom_rect.overlay_border_color[1],
-                                            custom_rect.overlay_border_color[2],
-                                            (custom_rect.overlay_border_alpha as f32
-                                                * custom_rect.alpha as f32
-                                                / 255_f32)
-                                                as u8,
-                                        ),
-                                    },
-                                    match custom_rect.border_kind {
-                                        BorderKind::Inside => StrokeKind::Inside,
-                                        BorderKind::Middle => StrokeKind::Middle,
-                                        BorderKind::Outside => StrokeKind::Outside,
-                                    },
-                                );
-                            };
                             if custom_rect.basic_front_resource_config.clip_rect.is_some() {
                                 ui.set_clip_rect(Rect::from_min_size(
                                     [0_f32, 0_f32].into(),

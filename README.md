@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.10.3-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.10.4-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,10 +25,9 @@
 
 ## Version Update Information
 
-- The current latest version is `v2.10.3`.
+- The current latest version is `v2.10.4`.
   - This update enhanced `CustomRect` functionality:
-    - Added `overlay_color`, `overlay_alpha`, `overlay_border_color`, and `overlay_border_alpha` fields to support overlay rendering in `CustomRect`;
-    - Fixed border opacity rendering inconsistency in `CustomRect`;
+    - Fixed the issue where the `CustomRect` overlay displayed incorrectly;
     - Addressed several known issues.
 
 ---
