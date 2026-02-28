@@ -56,6 +56,16 @@ pub struct CustomRectConfig {
     /// 矩形的不透明度（0-255）。
     pub alpha: Option<u8>,
 
+    /// Fill color overlay of the rectangle as [R, G, B].
+    ///
+    /// 矩形的填充颜色覆盖层，格式为[R, G, B]。
+    pub overlay_color: Option<[u8; 3]>,
+
+    /// Opacity of the fill color overlay (0-255).
+    ///
+    /// 矩形的填充颜色覆盖层不透明度（0-255）。
+    pub overlay_alpha: Option<u8>,
+
     /// Width of the border.
     ///
     /// 边框宽度。
@@ -70,6 +80,16 @@ pub struct CustomRectConfig {
     ///
     /// 边框的不透明度（0-255）。
     pub border_alpha: Option<u8>,
+
+    /// Color overlay of the border as [R, G, B].
+    ///
+    /// 边框的颜色覆盖层，格式为[R, G, B]。
+    pub overlay_border_color: Option<[u8; 3]>,
+
+    /// Opacity of the border color overlay (0-255).
+    ///
+    /// 边框的颜色覆盖层不透明度（0-255）。
+    pub overlay_border_alpha: Option<u8>,
 
     /// Placement of the border relative to the rectangle's bounds.
     ///
@@ -94,9 +114,13 @@ impl CustomRectConfig {
             rounding: Some(custom_rect.rounding),
             color: Some(custom_rect.color),
             alpha: Some(custom_rect.alpha),
+            overlay_color: Some(custom_rect.overlay_color),
+            overlay_alpha: Some(custom_rect.overlay_alpha),
             border_width: Some(custom_rect.border_width),
             border_color: Some(custom_rect.border_color),
             border_alpha: Some(custom_rect.border_alpha),
+            overlay_border_color: Some(custom_rect.overlay_border_color),
+            overlay_border_alpha: Some(custom_rect.overlay_border_alpha),
             border_kind: Some(custom_rect.border_kind),
             tags: Some(custom_rect.tags.clone()),
         }
@@ -148,6 +172,18 @@ impl CustomRectConfig {
     }
 
     #[inline]
+    pub fn overlay_color(mut self, overlay_color: Option<[u8; 3]>) -> Self {
+        self.overlay_color = overlay_color;
+        self
+    }
+
+    #[inline]
+    pub fn overlay_alpha(mut self, overlay_alpha: Option<u8>) -> Self {
+        self.overlay_alpha = overlay_alpha;
+        self
+    }
+
+    #[inline]
     pub fn border_width(mut self, border_width: Option<f32>) -> Self {
         self.border_width = border_width;
         self
@@ -162,6 +198,18 @@ impl CustomRectConfig {
     #[inline]
     pub fn border_alpha(mut self, border_alpha: Option<u8>) -> Self {
         self.border_alpha = border_alpha;
+        self
+    }
+
+    #[inline]
+    pub fn overlay_border_color(mut self, overlay_border_color: Option<[u8; 3]>) -> Self {
+        self.overlay_border_color = overlay_border_color;
+        self
+    }
+
+    #[inline]
+    pub fn overlay_border_alpha(mut self, overlay_border_alpha: Option<u8>) -> Self {
+        self.overlay_border_alpha = overlay_border_alpha;
         self
     }
 
@@ -218,6 +266,16 @@ pub struct CustomRect {
     /// 矩形的不透明度（0-255）。
     pub alpha: u8,
 
+    /// Fill color overlay of the rectangle as [R, G, B].
+    ///
+    /// 矩形的填充颜色覆盖层，格式为[R, G, B]。
+    pub overlay_color: [u8; 3],
+
+    /// Opacity of the fill color overlay (0-255).
+    ///
+    /// 矩形的填充颜色覆盖层不透明度（0-255）。
+    pub overlay_alpha: u8,
+
     /// Width of the border.
     ///
     /// 边框宽度。
@@ -232,6 +290,16 @@ pub struct CustomRect {
     ///
     /// 边框的不透明度（0-255）。
     pub border_alpha: u8,
+
+    /// Color overlay of the border as [R, G, B].
+    ///
+    /// 边框的颜色覆盖层，格式为[R, G, B]。
+    pub overlay_border_color: [u8; 3],
+
+    /// Opacity of the border color overlay (0-255).
+    ///
+    /// 边框的颜色覆盖层不透明度（0-255）。
+    pub overlay_border_alpha: u8,
 
     /// Placement of the border relative to the rectangle's bounds.
     ///
@@ -326,9 +394,13 @@ impl Default for CustomRect {
             rounding: 2_f32,
             color: [255, 255, 255],
             alpha: 255,
+            overlay_border_color: [255, 255, 255],
+            overlay_alpha: 255,
             border_width: 2_f32,
             border_color: [0, 0, 0],
             border_alpha: 255,
+            overlay_color: [255, 255, 255],
+            overlay_border_alpha: 255,
             border_kind: BorderKind::default(),
             tags: Vec::new(),
         }
@@ -358,6 +430,12 @@ impl CustomRect {
         if let Some(alpha) = config.alpha {
             self.alpha = alpha;
         };
+        if let Some(overlay_color) = config.overlay_color {
+            self.overlay_color = overlay_color;
+        };
+        if let Some(overlay_alpha) = config.overlay_alpha {
+            self.overlay_alpha = overlay_alpha;
+        };
         if let Some(border_width) = config.border_width {
             self.border_width = border_width;
         };
@@ -366,6 +444,12 @@ impl CustomRect {
         };
         if let Some(border_alpha) = config.border_alpha {
             self.border_alpha = border_alpha;
+        };
+        if let Some(overlay_border_color) = config.overlay_border_color {
+            self.overlay_border_color = overlay_border_color;
+        };
+        if let Some(overlay_border_alpha) = config.overlay_border_alpha {
+            self.overlay_border_alpha = overlay_border_alpha;
         };
         if let Some(border_kind) = config.border_kind {
             self.border_kind = border_kind;
@@ -416,6 +500,18 @@ impl CustomRect {
     }
 
     #[inline]
+    pub fn overlay_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.overlay_color = [r, g, b];
+        self
+    }
+
+    #[inline]
+    pub fn overlay_alpha(mut self, overlay_alpha: u8) -> Self {
+        self.overlay_alpha = overlay_alpha;
+        self
+    }
+
+    #[inline]
     pub fn border_width(mut self, border_width: f32) -> Self {
         self.border_width = border_width;
         self
@@ -430,6 +526,18 @@ impl CustomRect {
     #[inline]
     pub fn border_alpha(mut self, border_alpha: u8) -> Self {
         self.border_alpha = border_alpha;
+        self
+    }
+
+    #[inline]
+    pub fn overlay_border_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.overlay_border_color = [r, g, b];
+        self
+    }
+
+    #[inline]
+    pub fn overlay_border_alpha(mut self, overlay_border_alpha: u8) -> Self {
+        self.overlay_border_alpha = overlay_border_alpha;
         self
     }
 
