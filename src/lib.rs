@@ -48,8 +48,9 @@ pub mod advance_front;
 pub mod app;
 pub mod background;
 pub mod basic_front;
+use eframe::egui::Context;
 use std::{
-    any::Any,
+    any::{Any, type_name, type_name_of_val},
     error::Error,
     fmt::{Debug, Display, Formatter},
     time::Instant,
@@ -611,9 +612,9 @@ pub enum RequestMethod {
     ///
     /// 按资源标识符请求。
     Id(RustConstructorId),
-    /// Request by resource reference.
+    /// Request by resource citer.
     ///
-    /// 通过资源引用请求。
+    /// 通过资源引用者请求。
     Citer(RustConstructorId),
 }
 
@@ -632,11 +633,11 @@ pub enum RequestType {
     Up(usize),
 }
 
-/// Methods for displaying list information.
+/// Methods for describing list information.
 ///
-/// 用于显示列表信息的方法。
+/// 用于描述列表信息的方法。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum ListInfoMethod {
+pub enum ListInfoDescribeMethod {
     /// Detailed display including resource and ID (with optional formatting).
     ///
     /// 详细显示，包括资源和ID（可选格式）。
@@ -646,4 +647,221 @@ pub enum ListInfoMethod {
     /// 简单显示，只显示资源ID。
     #[default]
     Simple,
+}
+
+/// Obtain the type name of the target resource.
+///
+/// 获取目标资源的类型名称。
+///
+/// # Arguments
+///
+/// * `target` - Target resource
+///
+/// # Returns
+///
+/// Returns the type name of the target resource.
+///
+/// # 参数
+///
+/// * `target` - 目标资源
+///
+/// # 返回值
+///
+/// 目标资源的类型名称。
+pub fn type_processor(target: &impl RustConstructorResource) -> String {
+    let result: Vec<_> = if let Some(list) = type_name_of_val(target).split_once("<") {
+        list.0
+    } else {
+        type_name_of_val(&target)
+    }
+    .split("::")
+    .collect();
+    result[result.len() - 1].to_string()
+}
+
+/// Gets a tag value from the specified tag list by name.
+///
+/// 从指定标签列表中根据名称获取标签值。
+///
+/// # Arguments
+///
+/// * `tag_name` - The name of the tag to retrieve
+/// * `target` - The list of tags to search through
+///
+/// # Returns
+///
+/// Returns `Some((index, value))` if the tag is found, or `None` if not found.
+///
+/// # 参数
+///
+/// * `tag_name` - 要检索的标签名称
+/// * `target` - 要搜索的标签列表
+///
+/// # 返回值
+///
+/// 如果找到标签则返回`Some((索引, 值))`，否则返回`None`。
+pub fn get_tag(tag_name: &str, target: &[[String; 2]]) -> Option<(usize, String)> {
+    target
+        .iter()
+        .position(|x| x[0] == tag_name)
+        .map(|index| (index, target[index][1].clone()))
+}
+
+/// Safely convert resource references to references of specific types of resources.
+///
+/// 安全地将资源引用转换为具体类型资源的引用。
+///
+/// When using the traversal method to retrieve resources, it should be combined with this method to obtain
+/// the reference of the specific type of resource.
+///
+/// 当采用遍历的方式取出资源时，应和此方法配合来获取具体类型的资源引用。
+///
+/// # Arguments
+///
+/// * `resource` - Reference to resources
+///
+/// # Returns
+///
+/// Return a reference to the specific type of resource on success; otherwise, return `Err(RustConstructorError)`.
+///
+/// # 参数
+///
+/// * `resource` - 资源的引用
+///
+/// # 返回值
+///
+/// 成功时返回具体类型资源的引用，否则返回`Err(RustConstructorError)`。
+pub fn downcast_resource<T: RustConstructorResource + 'static>(
+    resource: &dyn RustConstructorResource,
+) -> Result<&T, RustConstructorError> {
+    if let Some(resource) = resource.as_any().downcast_ref::<T>() {
+        Ok(resource)
+    } else {
+        Err(RustConstructorError {
+            error_id: "ResourceDowncastTypeMismatch".to_string(),
+            description: format!(
+                "Failed to downcast resource to type '{}'.",
+                type_name::<T>()
+            ),
+        })
+    }
+}
+
+/// Safely convert mutable references to resources to mutable references to resources of specific types.
+///
+/// 安全地将资源可变引用转换为具体类型资源的可变引用。
+///
+/// When using the traversal method to retrieve resources, it should be combined with this method to obtain
+/// the mutable reference of the specific type of resource.
+///
+/// 当采用遍历的方式取出资源时，应和此方法配合来获取具体类型的资源可变引用。
+///
+/// # Arguments
+///
+/// * `resource` - Mutable reference to resources
+///
+/// # Returns
+///
+/// Return a mutable reference to the specific type of resource on success; otherwise, return `Err(RustConstructorError)`.
+///
+/// # 参数
+///
+/// * `resource` - 资源的可变引用
+///
+/// # 返回值
+///
+/// 成功时返回具体类型资源的可变引用，否则返回`Err(RustConstructorError)`。
+pub fn downcast_resource_mut<T: RustConstructorResource + 'static>(
+    resource: &mut dyn RustConstructorResource,
+) -> Result<&mut T, RustConstructorError> {
+    if let Some(resource) = resource.as_any_mut().downcast_mut::<T>() {
+        Ok(resource)
+    } else {
+        Err(RustConstructorError {
+            error_id: "ResourceDowncastTypeMismatch".to_string(),
+            description: format!(
+                "Failed to downcast resource to type '{}'.",
+                type_name::<T>()
+            ),
+        })
+    }
+}
+
+/// Processes position and size calculations for resources.
+///
+/// 处理资源的最基本位置和尺寸计算。
+///
+/// This method handles the complex positioning logic including grid-based layout,
+/// alignment, and offset calculations for UI resources.
+///
+/// 此方法处理复杂的定位逻辑，包括基于网格的布局、对齐方式和UI资源的偏移计算。
+///
+/// # Arguments
+///
+/// * `position_size_config` - The configuration for position and size
+/// * `ctx` - The egui context for available space calculations
+///
+/// # Returns
+///
+/// Returns `[position, size]` as computed from the configuration
+///
+/// # 参数
+///
+/// * `position_size_config` - 位置和尺寸的配置
+/// * `ctx` - 用于可用空间计算的egui上下文
+///
+/// # 返回值
+///
+/// 返回根据配置计算出的 `[位置, 尺寸]`
+pub fn position_size_processor(
+    position_size_config: PositionSizeConfig,
+    ctx: &Context,
+) -> [[f32; 2]; 2] {
+    let mut position = [0_f32, 0_f32];
+    let mut size = [0_f32, 0_f32];
+    size[0] = match position_size_config.x_size_grid[0] {
+        0_f32 => position_size_config.origin_size[0],
+        _ => {
+            (ctx.available_rect().width() / position_size_config.x_size_grid[1]
+                * position_size_config.x_size_grid[0])
+                + position_size_config.origin_size[0]
+        }
+    };
+    size[1] = match position_size_config.y_size_grid[0] {
+        0_f32 => position_size_config.origin_size[1],
+        _ => {
+            (ctx.available_rect().height() / position_size_config.y_size_grid[1]
+                * position_size_config.y_size_grid[0])
+                + position_size_config.origin_size[1]
+        }
+    };
+    position[0] = match position_size_config.x_location_grid[1] {
+        0_f32 => position_size_config.origin_position[0],
+        _ => {
+            (ctx.available_rect().width() / position_size_config.x_location_grid[1]
+                * position_size_config.x_location_grid[0])
+                + position_size_config.origin_position[0]
+        }
+    };
+    position[1] = match position_size_config.y_location_grid[1] {
+        0_f32 => position_size_config.origin_position[1],
+        _ => {
+            (ctx.available_rect().height() / position_size_config.y_location_grid[1]
+                * position_size_config.y_location_grid[0])
+                + position_size_config.origin_position[1]
+        }
+    };
+    match position_size_config.display_method.0 {
+        HorizontalAlign::Left => {}
+        HorizontalAlign::Center => position[0] -= size[0] / 2.0,
+        HorizontalAlign::Right => position[0] -= size[0],
+    };
+    match position_size_config.display_method.1 {
+        VerticalAlign::Top => {}
+        VerticalAlign::Center => position[1] -= size[1] / 2.0,
+        VerticalAlign::Bottom => position[1] -= size[1],
+    };
+    position[0] += position_size_config.offset[0];
+    position[1] += position_size_config.offset[1];
+    [position, size]
 }

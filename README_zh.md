@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.10.5-DE0D0D)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.11.0-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,13 +25,43 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.10.5`。
+- 目前的最新版本为`v2.11.0 全面改进`。
+  - 本更新全面对资源进行改进，扩展了多项实用功能。
+  - **实用改动**
+    - `ResourcePanel`添加`raise_on_focus`字段，用于控制被点击后是否将窗口前置；
+    - `Switch`添加`radio_group`字段，用于制作单选开关组；
+    - 现在`Switch`的提示文本会尝试在最高层级渲染；
+    - `lib.rs`中添加`downcast_resource` `downcast_resource_mut`方法，用于安全地转换资源类型；
+    - `App`添加`loading_fonts` `loaded_fonts`字段，用于列出正在加载和已加载的字体；
+    - `App`中的`active_list`和`render_list`字段额外添加了一个`Option<RustConstructorId>`以支持显示引用者；
+    - 所有`info`类方法都扩展了`print`参数，用于控制是否打印信息；
+    - `display_render_layer`添加`hover_config`参数，用于在鼠标悬停时高亮显示资源；
+    - `resource_get_focus`添加`ignore_render_layer`参数，用于在获取焦点时忽略指定范围的渲染层；
+    - 添加`get_basic_front_resource` `get_basic_front_resource_mut`方法，用于获取基本前端资源；
+    - `ResourcePanel`在被拖拽时会更换鼠标指针外观；
+    - 新增`panel_layout_group`标签，用于指定哪些资源互相无视排版；
+    - 新增`try_register_all_fonts`方法，用于尝试注册所有字体；
+    - 改进了部分代码。
+  - **破坏性改动**
+    - 将`Switch`和`SwitchData`的`state`修改为了`usize`类型；
+    - 移除了`Font`资源；
+    - 将`type_processor` `get_tag` `position_size_processor`移动到`lib.rs`中；
+    - 将`ListInfoMethod`重命名为`ListInfoDescribeMethod`；
+    - `update_render_layer`现在包含返回值`Result<(), RustConstructorError>`；
+    - 现在`register_all_fonts`需要给出字体文件路径并加载，且包含返回值`Result<(), RustConstructorError>`；
+    - 对部分内容进行了修改。
+  - **漏洞修复**
+    - 修复了`resource_get_focus`在检测最高层级资源时不会检查鼠标位置的问题；
+    - 修复了`ResourcePanel`点击面板内资源无法前置窗口的问题；
+    - 修复了鼠标滚动会导致所有`ResourcePanel`的内部资源全部忽略渲染层的问题；
+    - 修复了一些已知问题。
 
 ---
 
 ## 概述
 
 - `Rust Constructor`是一个功能全面的GUI框架，它利用了`egui`的强大功能，为构建跨平台应用程序提供了一个简单直观的工具。
+- `Rust Constructor`当然不是完美的，目前它还存在编写逻辑糟糕，使用方法混乱等问题，我会尽力解决这些问题。
 
 ---
 

@@ -2,7 +2,6 @@
 //!
 //! 此文件包含后端资源，后端资源可以存储一些关键数据并在有需要时调用。
 use crate::{DisplayInfo, RustConstructorResource};
-use eframe::egui::FontDefinitions;
 use std::{any::Any, fmt::Debug};
 
 /// Storage Rust Constructor resource for page-specific data and state management.
@@ -164,100 +163,6 @@ impl<T> Variable<T> {
     #[inline]
     pub fn value(mut self, value: Option<T>) -> Self {
         self.value = value;
-        self
-    }
-
-    #[inline]
-    pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
-        if replace {
-            self.tags = tags.to_owned();
-        } else {
-            for tag in tags {
-                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
-                    self.tags.remove(index);
-                };
-            }
-            self.tags.extend(tags.iter().cloned());
-        };
-        self
-    }
-}
-
-/// A structure used to wrap font definitions.
-///
-/// 用于包裹字体定义的结构体。
-#[derive(Clone, Default, PartialEq)]
-pub struct WrapDefinitions {
-    /// Font definitions containing glyphs and styles.
-    ///
-    /// 包含字形和样式的字体定义。
-    pub font_definitions: FontDefinitions,
-}
-
-impl Debug for WrapDefinitions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.pad("WrapDefinitions { .. }")
-    }
-}
-
-/// Font resource for text rendering.
-///
-/// 用于文本渲染的字体资源。
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Font {
-    /// Font definitions containing glyphs and styles.
-    ///
-    /// 包含字形和样式的字体定义。
-    pub font_definitions: WrapDefinitions,
-
-    /// Path to the font file.
-    ///
-    /// 字体文件路径。
-    pub path: String,
-
-    /// Key-value pairs for categorization and metadata.
-    ///
-    /// 用于分类和元数据的键值对标签。
-    pub tags: Vec<[String; 2]>,
-}
-
-impl RustConstructorResource for Font {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        None
-    }
-
-    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
-
-    fn display_tags(&self) -> Vec<[String; 2]> {
-        self.tags.clone()
-    }
-
-    fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool) {
-        if replace {
-            self.tags = tags.to_owned();
-        } else {
-            for tag in tags {
-                if let Some(index) = self.tags.iter().position(|x| x[0] == tag[0]) {
-                    self.tags.remove(index);
-                };
-            }
-            self.tags.extend(tags.iter().cloned());
-        };
-    }
-}
-
-impl Font {
-    #[inline]
-    pub fn path(mut self, path: &str) -> Self {
-        self.path = path.to_string();
         self
     }
 

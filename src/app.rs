@@ -2,7 +2,7 @@
 //!
 //! 程序主体，包含所有GUI资源和状态管理。
 use crate::{
-    BasicFrontResource, BorderKind, DisplayInfo, HorizontalAlign, ListInfoMethod,
+    BasicFrontResource, BorderKind, DisplayInfo, HorizontalAlign, ListInfoDescribeMethod,
     PositionSizeConfig, RenderConfig, RequestMethod, RequestType, RustConstructorError,
     RustConstructorId, RustConstructorResource, RustConstructorResourceBox, Timer, VerticalAlign,
     advance_front::{
@@ -10,22 +10,22 @@ use crate::{
         PanelStorage, ResourcePanel, ScrollBarDisplayMethod, ScrollLengthMethod, Switch,
         SwitchData,
     },
-    background::{Font, PageData, SplitTime, Variable, WrapDefinitions},
+    background::{PageData, SplitTime, Variable},
     basic_front::{
         CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod, Text,
     },
-};
-use eframe::egui::{
-    Color32, ColorImage, Context, CornerRadius, CursorIcon, FontData, FontDefinitions, FontFamily,
-    FontId, Galley, Id, ImageSource, Key, OpenUrl, Pos2, Sense, StrokeKind, Ui, Vec2,
-    text::CCursor,
+    downcast_resource, downcast_resource_mut, get_tag, position_size_processor, type_processor,
 };
 use eframe::{
+    egui::{
+        Color32, ColorImage, Context, CornerRadius, CursorIcon, FontData, FontDefinitions,
+        FontFamily, FontId, Galley, Id, ImageSource, Key, OpenUrl, Pos2, Sense, StrokeKind, Ui,
+        Vec2, text::CCursor,
+    },
     emath::Rect,
     epaint::{Stroke, textures::TextureOptions},
 };
 use std::{
-    any::type_name_of_val,
     char,
     cmp::Ordering,
     fmt::Debug,
@@ -87,12 +87,22 @@ pub struct App {
     /// List of currently active resources.
     ///
     /// 当前活动的资源列表。
-    pub active_list: Vec<RustConstructorId>,
+    pub active_list: Vec<(RustConstructorId, Option<RustConstructorId>)>,
 
     /// Queue of resources to be rendered in the current frame.
     ///
     /// 要在当前帧中呈现的资源队列。
-    pub render_list: Vec<RustConstructorId>,
+    pub render_list: Vec<(RustConstructorId, Option<RustConstructorId>)>,
+
+    /// List the loaded fonts.
+    ///
+    /// 列出已加载的字体。
+    pub loaded_fonts: Vec<[String; 2]>,
+
+    /// List the fonts that are currently loading.
+    ///
+    /// 列出正在加载的字体。
+    pub loading_fonts: Vec<[String; 2]>,
 }
 
 impl Default for App {
@@ -112,6 +122,8 @@ impl Default for App {
             render_layer: Vec::new(),
             active_list: Vec::new(),
             render_list: Vec::new(),
+            loaded_fonts: Vec::new(),
+            loading_fonts: Vec::new(),
         }
     }
 }
@@ -127,64 +139,6 @@ impl App {
     pub fn current_page(mut self, current_page: &str) -> Self {
         self.current_page = current_page.to_string();
         self
-    }
-
-    /// Obtain the type name of the target resource.
-    ///
-    /// 获取目标资源的类型名称。
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - Target resource
-    ///
-    /// # Returns
-    ///
-    /// Returns the type name of the target resource.
-    ///
-    /// # 参数
-    ///
-    /// * `target` - 目标资源
-    ///
-    /// # 返回
-    ///
-    /// 目标资源的类型名称。
-    pub fn type_processor(&self, target: &impl RustConstructorResource) -> String {
-        let result: Vec<_> = if let Some(list) = type_name_of_val(target).split_once("<") {
-            list.0
-        } else {
-            type_name_of_val(&target)
-        }
-        .split("::")
-        .collect();
-        result[result.len() - 1].to_string()
-    }
-
-    /// Gets a tag value from the specified tag list by name.
-    ///
-    /// 从指定标签列表中根据名称获取标签值。
-    ///
-    /// # Arguments
-    ///
-    /// * `tag_name` - The name of the tag to retrieve
-    /// * `target` - The list of tags to search through
-    ///
-    /// # Returns
-    ///
-    /// Returns `Some((index, value))` if the tag is found, or `None` if not found.
-    ///
-    /// # 参数
-    ///
-    /// * `tag_name` - 要检索的标签名称
-    /// * `target` - 要搜索的标签列表
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到标签则返回`Some((索引, 值))`，否则返回`None`。
-    pub fn get_tag(&self, tag_name: &str, target: &[[String; 2]]) -> Option<(usize, String)> {
-        target
-            .iter()
-            .position(|x| x[0] == tag_name)
-            .map(|index| (index, target[index][1].clone()))
     }
 
     /// Draws all resources in the rendering queue at once, discarding all return values.
@@ -207,8 +161,7 @@ impl App {
     /// * `ctx` - 渲染上下文
     pub fn draw_resources(&mut self, ui: &mut Ui, ctx: &Context) {
         for i in 0..self.render_list.len() {
-            #[allow(warnings)]
-            self.draw_resource_by_index(ui, ctx, i);
+            let _ = self.draw_resource_by_index(ui, ctx, i);
         }
     }
 
@@ -253,10 +206,10 @@ impl App {
         index: usize,
     ) -> Result<(), RustConstructorError> {
         if let Some(render_resource) = self.render_list.clone().get(index) {
-            match &*render_resource.discern_type {
+            match &*render_resource.0.discern_type {
                 "Image" => {
                     let image = self.get_resource::<Image>(&RustConstructorId {
-                        name: render_resource.name.clone(),
+                        name: render_resource.0.name.clone(),
                         discern_type: "Image".to_string(),
                     })?;
                     if image.display_info.enable {
@@ -283,7 +236,7 @@ impl App {
                                             &raw_data,
                                         );
                                         let loaded_image_texture = ctx.load_texture(
-                                            &render_resource.name,
+                                            &render_resource.0.name,
                                             color_image,
                                             TextureOptions::LINEAR,
                                         );
@@ -303,13 +256,13 @@ impl App {
                                 image.texture = Some(texture.clone());
                             }
                         };
-                        [image.position, image.size] = self.position_size_processor(
+                        [image.position, image.size] = position_size_processor(
                             image.basic_front_resource_config.position_size_config,
                             ctx,
                         );
                         if !image.display_info.hidden {
                             if let Some(clip_rect) = image.basic_front_resource_config.clip_rect {
-                                let [min, size] = self.position_size_processor(clip_rect, ctx);
+                                let [min, size] = position_size_processor(clip_rect, ctx);
                                 ui.set_clip_rect(Rect::from_min_size(min.into(), size.into()));
                             };
                             if let Some(texture) = &image.texture {
@@ -359,17 +312,17 @@ impl App {
                             }
                             ImageLoadMethod::ByTexture(_) => {}
                         };
-                        self.replace_resource(&render_resource.name, image)?;
+                        self.replace_resource(&render_resource.0.name, image)?;
                     };
                 }
                 "Text" => {
                     let text = self.get_resource::<Text>(&RustConstructorId {
-                        name: render_resource.name.clone(),
+                        name: render_resource.0.name.clone(),
                         discern_type: "Text".to_string(),
                     })?;
                     if text.display_info.enable {
                         let mut text = text.clone();
-                        [_, text.truncate_size] = self.position_size_processor(
+                        [_, text.truncate_size] = position_size_processor(
                             text.basic_front_resource_config.position_size_config,
                             ctx,
                         );
@@ -423,19 +376,13 @@ impl App {
                             f.layout(
                                 display_content.to_string(),
                                 if !text.font.is_empty() {
-                                    if self
-                                        .check_resource_exists(&RustConstructorId {
-                                            name: text.font.clone(),
-                                            discern_type: "Font".to_string(),
-                                        })
-                                        .is_none()
-                                    {
-                                        FontId::proportional(text.font_size)
-                                    } else {
+                                    if self.loaded_fonts.iter().any(|x| x[0] == text.font) {
                                         FontId::new(
                                             text.font_size,
                                             FontFamily::Name(text.font.clone().into()),
                                         )
+                                    } else {
+                                        FontId::proportional(text.font_size)
                                     }
                                 } else {
                                     FontId::proportional(text.font_size)
@@ -462,7 +409,7 @@ impl App {
                             },
                         ];
                         text.actual_size = [galley.size().x, galley.size().y];
-                        [text.position, _] = self.position_size_processor(
+                        [text.position, _] = position_size_processor(
                             text.basic_front_resource_config
                                 .position_size_config
                                 .x_size_grid(0_f32, 0_f32)
@@ -535,7 +482,7 @@ impl App {
                             );
 
                             if let Some(clip_rect) = text.basic_front_resource_config.clip_rect {
-                                let [min, size] = self.position_size_processor(clip_rect, ctx);
+                                let [min, size] = position_size_processor(clip_rect, ctx);
                                 ui.set_clip_rect(Rect::from_min_size(min.into(), size.into()));
                             };
 
@@ -674,7 +621,7 @@ impl App {
                                 );
                                 let detect_result = ui.interact(
                                     rect,
-                                    Id::new(&render_resource.name),
+                                    Id::new(&render_resource.0.name),
                                     Sense::click_and_drag(),
                                 );
 
@@ -687,11 +634,16 @@ impl App {
 
                                 if let Some(index) =
                                     self.get_render_layer_resource(&RustConstructorId {
-                                        name: render_resource.name.clone(),
+                                        name: render_resource.0.name.clone(),
                                         discern_type: "Text".to_string(),
                                     })
                                     && let Some(mouse_pos) = fullscreen_detect_result.interact_pos()
-                                    && self.resource_get_focus(index, mouse_pos.into(), false)
+                                    && self.resource_get_focus(
+                                        index,
+                                        mouse_pos.into(),
+                                        false,
+                                        vec![],
+                                    )
                                     && (detect_result.clicked() || detect_result.drag_started())
                                 {
                                     let cursor = cursor_at_pointer(mouse_pos.to_vec2());
@@ -881,7 +833,7 @@ impl App {
                                         link_rect,
                                         Id::new(format!(
                                             "link_{}_{}_{}",
-                                            render_resource.name, start, end
+                                            render_resource.0.name, start, end
                                         )),
                                         Sense::click(),
                                     )]
@@ -938,7 +890,7 @@ impl App {
                                                 link_rect,
                                                 Id::new(format!(
                                                     "link_{}_{}_{}_row_{}",
-                                                    render_resource.name, start, end, row
+                                                    render_resource.0.name, start, end, row
                                                 )),
                                                 Sense::click(),
                                             ));
@@ -952,12 +904,17 @@ impl App {
                                 for link_response in &link_responses {
                                     if let Some(index) =
                                         self.get_render_layer_resource(&RustConstructorId {
-                                            name: render_resource.name.clone(),
+                                            name: render_resource.0.name.clone(),
                                             discern_type: "Text".to_string(),
                                         })
                                         && let Some(mouse_pos) =
                                             ui.input(|i| i.pointer.interact_pos())
-                                        && self.resource_get_focus(index, mouse_pos.into(), false)
+                                        && self.resource_get_focus(
+                                            index,
+                                            mouse_pos.into(),
+                                            false,
+                                            vec![],
+                                        )
                                     {
                                         if link_response.is_pointer_button_down_on()
                                             && !link_response.drag_started()
@@ -1119,17 +1076,17 @@ impl App {
                             text.selection = None;
                         };
                         text.last_frame_content = display_content;
-                        self.replace_resource(&render_resource.name, text)?;
+                        self.replace_resource(&render_resource.0.name, text)?;
                     };
                 }
                 "CustomRect" => {
                     let custom_rect = self.get_resource::<CustomRect>(&RustConstructorId {
-                        name: render_resource.name.clone(),
+                        name: render_resource.0.name.clone(),
                         discern_type: "CustomRect".to_string(),
                     })?;
                     if custom_rect.display_info.enable {
                         let mut custom_rect = custom_rect.clone();
-                        [custom_rect.position, custom_rect.size] = self.position_size_processor(
+                        [custom_rect.position, custom_rect.size] = position_size_processor(
                             custom_rect.basic_front_resource_config.position_size_config,
                             ctx,
                         );
@@ -1137,7 +1094,7 @@ impl App {
                             if let Some(clip_rect) =
                                 custom_rect.basic_front_resource_config.clip_rect
                             {
-                                let [min, size] = self.position_size_processor(clip_rect, ctx);
+                                let [min, size] = position_size_processor(clip_rect, ctx);
                                 ui.set_clip_rect(Rect::from_min_size(min.into(), size.into()));
                             };
                             ui.painter().rect(
@@ -1220,7 +1177,7 @@ impl App {
                                 ));
                             };
                         };
-                        self.replace_resource(&render_resource.name, custom_rect)?;
+                        self.replace_resource(&render_resource.0.name, custom_rect)?;
                     };
                 }
                 _ => {
@@ -1251,7 +1208,8 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `method` - Determines the level of detail in the output
+    /// * `describe` - Determines the level of detail in the output
+    /// * `print` - Determines whether to print
     ///
     /// # Returns
     ///
@@ -1259,15 +1217,21 @@ impl App {
     ///
     /// # 参数
     ///
-    /// * `method` - 决定输出信息的详细程度
+    /// * `describe` - 决定输出信息的详细程度
+    /// * `print` - 决定是否打印
     ///
     /// # 返回值
     ///
     /// 包含资源信息的格式化字符串。
-    pub fn rust_constructor_resource_info(&self, method: ListInfoMethod) -> String {
-        let mut text = String::from("Rust Constructor Resource Info:\n");
+    pub fn rust_constructor_resource_info(
+        &self,
+        describe: ListInfoDescribeMethod,
+        print: bool,
+    ) -> String {
+        let mut text =
+            String::from("————————————————————————————————————\nRust Constructor Resource Info:\n");
         for info in &self.rust_constructor_resource {
-            if let ListInfoMethod::Detailed(format) = method {
+            if let ListInfoDescribeMethod::Detailed(format) = describe {
                 text += &if format {
                     format!(
                         "\nName: {}\nType: {}\nDetail: {:#?}\n",
@@ -1280,9 +1244,12 @@ impl App {
                     )
                 };
             } else {
-                text += &format!("\nName: {}\nType: {}\n", info.id.name, info.id.discern_type);
+                text += &format!("\nName: {}\nType: {}\n", info.id.name, info.id.discern_type,)
             };
         }
+        if print {
+            println!("{text}");
+        };
         text
     }
 
@@ -1298,7 +1265,8 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `method` - Determines the level of detail in the output
+    /// * `describe` - Determines the level of detail in the output
+    /// * `print` - Determines whether to print
     ///
     /// # Returns
     ///
@@ -1306,32 +1274,46 @@ impl App {
     ///
     /// # 参数
     ///
-    /// * `method` - 决定输出信息的详细程度
+    /// * `describe` - 决定输出信息的详细程度
+    /// * `print` - 决定是否打印
     ///
     /// # 返回值
     ///
     /// 包含资源信息的格式化字符串。
-    pub fn active_list_info(&self, method: ListInfoMethod) -> String {
-        let mut text = String::from("Resource Active Info:\n");
+    pub fn active_list_info(&self, describe: ListInfoDescribeMethod, print: bool) -> String {
+        let mut text =
+            String::from("————————————————————————————————————\nResource Active Info:\n");
         for info in &self.active_list {
-            if let ListInfoMethod::Detailed(format) = method {
-                if let Some(index) = self.check_resource_exists(info) {
+            if let ListInfoDescribeMethod::Detailed(format) = describe {
+                if let Some(index) = self.check_resource_exists(&info.0) {
                     text += &if format {
                         format!(
-                            "\nName: {}\nType: {}\nDetail: {:#?}\n",
-                            info.name, info.discern_type, self.rust_constructor_resource[index],
+                            "\nName: {}\nType: {}\nCiter: {:?}\nDetail: {:#?}\n",
+                            info.0.name,
+                            info.0.discern_type,
+                            info.1,
+                            self.rust_constructor_resource[index],
                         )
                     } else {
                         format!(
-                            "\nName: {}\nType: {}\nDetail: {:?}\n",
-                            info.name, info.discern_type, self.rust_constructor_resource[index],
+                            "\nName: {}\nType: {}\nCiter: {:?}\nDetail: {:?}\n",
+                            info.0.name,
+                            info.0.discern_type,
+                            info.1,
+                            self.rust_constructor_resource[index],
                         )
                     };
                 };
             } else {
-                text += &format!("\nName: {}\nType: {}\n", info.name, info.discern_type);
+                text += &format!(
+                    "\nName: {}\nType: {}\nCiter: {:?}\n",
+                    info.0.name, info.0.discern_type, info.1
+                );
             };
         }
+        if print {
+            println!("{text}");
+        };
         text
     }
 
@@ -1345,15 +1327,23 @@ impl App {
     /// 此方法返回一个格式化字符串，包含渲染层级堆栈的详细信息，
     /// 包括资源位置和渲染行为。
     ///
+    /// # Arguments
+    ///
+    /// * `print` - Determines whether to print
+    ///
     /// # Returns
     ///
     /// A formatted string with rendering layer information.
     ///
+    /// # 参数
+    ///
+    /// * `print` - 决定是否打印
+    ///
     /// # 返回值
     ///
     /// 包含渲染层级信息的格式化字符串。
-    pub fn render_layer_info(&self) -> String {
-        let mut text = String::from("Render Layer Info:\n");
+    pub fn render_layer_info(&self, print: bool) -> String {
+        let mut text = String::from("————————————————————————————————————\nRender Layer Info:\n");
         for (
             RustConstructorId { name, discern_type },
             [min_position, max_position],
@@ -1363,8 +1353,11 @@ impl App {
             text += &format!(
                 "\nName: {}\nType: {}\nMin Position: {:?}\nMax Position: {:?}\nIgnore Render Layer: {}\n",
                 name, discern_type, min_position, max_position, ignore_render_layer
-            );
+            )
         }
+        if print {
+            println!("{text}");
+        };
         text
     }
 
@@ -1377,18 +1370,32 @@ impl App {
     ///
     /// 此方法返回一个格式化字符串，列出渲染队列中的所有资源及其名称和类型。
     ///
+    /// # Arguments
+    ///
+    /// * `print` - Determines whether to print
+    ///
     /// # Returns
     ///
     /// A formatted string with render queue information.
     ///
+    /// # 参数
+    ///
+    /// * `print` - 决定是否打印
+    ///
     /// # 返回值
     ///
     /// 包含渲染队列信息的格式化字符串。
-    pub fn render_list_info(&self) -> String {
-        let mut text = String::from("Render List Info:\n");
-        for RustConstructorId { name, discern_type } in &self.render_list {
-            text += &format!("\nName: {}\nType: {}\n", name, discern_type);
+    pub fn render_list_info(&self, print: bool) -> String {
+        let mut text = String::from("————————————————————————————————————\nRender List Info:\n");
+        for (RustConstructorId { name, discern_type }, citer) in &self.render_list {
+            text += &format!(
+                "\nName: {}\nType: {}\nCiter: {:?}\n",
+                name, discern_type, citer
+            )
         }
+        if print {
+            println!("{text}");
+        };
         text
     }
 
@@ -1403,11 +1410,11 @@ impl App {
     pub fn update_render_list(&mut self) {
         if self.render_list.is_empty() {
             for info in &self.active_list {
-                if self.basic_front_resource_list.contains(&info.discern_type) {
-                    self.render_list.push(RustConstructorId {
-                        name: info.name.clone(),
-                        discern_type: info.discern_type.clone(),
-                    });
+                if self
+                    .basic_front_resource_list
+                    .contains(&info.0.discern_type)
+                {
+                    self.render_list.push(info.clone());
                 };
             }
         } else {
@@ -1421,15 +1428,12 @@ impl App {
             }
             let mut insert_index = 0;
             for info in &self.active_list {
-                if self.basic_front_resource_list.contains(&info.discern_type) {
+                if self
+                    .basic_front_resource_list
+                    .contains(&info.0.discern_type)
+                {
                     if !self.render_list.contains(info) {
-                        self.render_list.insert(
-                            insert_index,
-                            RustConstructorId {
-                                name: info.name.clone(),
-                                discern_type: info.discern_type.clone(),
-                            },
-                        );
+                        self.render_list.insert(insert_index, info.clone());
                         insert_index += 1;
                     } else if self.render_list[insert_index].cmp(info) == Ordering::Equal {
                         insert_index += 1;
@@ -1462,8 +1466,7 @@ impl App {
         requester: RequestMethod,
         request_type: RequestType,
     ) {
-        #[allow(warnings)]
-        self.request_jump_render_list(requester, request_type);
+        let _ = self.request_jump_render_list(requester, request_type);
     }
 
     /// Moves a resource to the front of the render queue with error handling.
@@ -1500,7 +1503,7 @@ impl App {
     ) -> Result<(), RustConstructorError> {
         match requester {
             RequestMethod::Id(id) => {
-                if let Some(index) = self.render_list.iter().position(|x| *x == id) {
+                if let Some(index) = self.render_list.iter().position(|x| x.0 == id) {
                     self.jump_render_list_processor(index, request_type)?;
                     Ok(())
                 } else {
@@ -1513,14 +1516,10 @@ impl App {
                     })
                 }
             }
-            RequestMethod::Citer(RustConstructorId { name, discern_type }) => {
+            RequestMethod::Citer(citer) => {
                 for (i, render_resource) in self.render_list.iter().enumerate() {
-                    let tags = self.get_box_resource(render_resource)?.display_tags();
-                    if let [Some(tag_name), Some(tag_type)] = [
-                        self.get_tag("citer_name", &tags),
-                        self.get_tag("citer_type", &tags),
-                    ] && tag_name.1 == name
-                        && tag_type.1 == discern_type
+                    if let Some(render_citer) = &render_resource.1
+                        && render_citer == &citer
                     {
                         self.jump_render_list_processor(i, request_type)?;
                         return Ok(());
@@ -1528,7 +1527,10 @@ impl App {
                 }
                 Err(RustConstructorError {
                     error_id: "RenderResourceNotFound".to_string(),
-                    description: format!("Render resource '{name}({discern_type})' not found.",),
+                    description: format!(
+                        "Render resource citer '{}({})' not found.",
+                        citer.name, citer.discern_type
+                    ),
                 })
             }
         }
@@ -1593,85 +1595,73 @@ impl App {
     /// in the render list and updating their position, size, and rendering properties.
     ///
     /// 此方法通过处理渲染列表中的所有资源并更新它们的位置、尺寸和渲染属性来重新计算渲染层级。
-    pub fn update_render_layer(&mut self, ctx: &Context) {
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The rendering context
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource
+    /// cannot be found.
+    ///
+    /// # 参数
+    ///
+    /// * `ctx` - 渲染上下文
+    ///
+    /// # 返回值
+    ///
+    /// 成功时返回`Ok(())`，如果资源无法找到则返回`Err(RustConstructorError)`。
+    pub fn update_render_layer(&mut self, ctx: &Context) -> Result<(), RustConstructorError> {
         self.render_layer.clear();
         for info in &self.render_list {
-            if let Some(index) = self.check_resource_exists(info) {
-                let basic_front_resource: Box<dyn BasicFrontResource> = match &*info.discern_type {
-                    "Image" => Box::new(
-                        self.rust_constructor_resource[index]
-                            .content
-                            .as_any()
-                            .downcast_ref::<Image>()
-                            .unwrap()
-                            .clone(),
-                    ),
-                    "Text" => Box::new(
-                        self.rust_constructor_resource[index]
-                            .content
-                            .as_any()
-                            .downcast_ref::<Text>()
-                            .unwrap()
-                            .clone(),
-                    ),
-                    "CustomRect" => Box::new(
-                        self.rust_constructor_resource[index]
-                            .content
-                            .as_any()
-                            .downcast_ref::<CustomRect>()
-                            .unwrap()
-                            .clone(),
-                    ),
-                    _ => {
-                        unreachable!()
-                    }
-                };
-                if let Some(display_info) = basic_front_resource.display_display_info() {
-                    self.render_layer.push((
-                        info.clone(),
-                        if let Some(clip_rect) = basic_front_resource
-                            .display_basic_front_resource_config()
-                            .clip_rect
-                        {
-                            let [position, size] = self.position_size_processor(clip_rect, ctx);
-                            let [resource_rect, clip_rect] = [
-                                Rect::from_min_max(
-                                    basic_front_resource.display_position().into(),
-                                    [
-                                        basic_front_resource.display_position()[0]
-                                            + basic_front_resource.display_size()[0],
-                                        basic_front_resource.display_position()[1]
-                                            + basic_front_resource.display_size()[1],
-                                    ]
-                                    .into(),
-                                ),
-                                Rect::from_min_size(position.into(), size.into()),
-                            ];
-                            let min = resource_rect.min.max(clip_rect.min);
-                            let max = resource_rect.max.min(clip_rect.max);
-
-                            // 检查是否有交集
-                            if min.x < max.x && min.y < max.y {
-                                [min.into(), max.into()]
-                            } else {
-                                [[0_f32, 0_f32], [0_f32, 0_f32]]
-                            }
-                        } else {
-                            [
-                                basic_front_resource.display_position(),
+            let basic_front_resource = self.get_basic_front_resource(&info.0)?;
+            if let Some(display_info) = basic_front_resource.display_display_info() {
+                self.render_layer.push((
+                    info.0.clone(),
+                    if let Some(clip_rect) = basic_front_resource
+                        .display_basic_front_resource_config()
+                        .clip_rect
+                    {
+                        let [position, size] = position_size_processor(clip_rect, ctx);
+                        let [resource_rect, clip_rect] = [
+                            Rect::from_min_max(
+                                basic_front_resource.display_position().into(),
                                 [
                                     basic_front_resource.display_position()[0]
                                         + basic_front_resource.display_size()[0],
                                     basic_front_resource.display_position()[1]
                                         + basic_front_resource.display_size()[1],
-                                ],
-                            ]
-                        },
-                        display_info.ignore_render_layer,
-                    ));
-                };
+                                ]
+                                .into(),
+                            ),
+                            Rect::from_min_size(position.into(), size.into()),
+                        ];
+                        let min = resource_rect.min.max(clip_rect.min);
+                        let max = resource_rect.max.min(clip_rect.max);
+
+                        // 检查是否有交集
+                        if min.x < max.x && min.y < max.y {
+                            [min.into(), max.into()]
+                        } else {
+                            [[0_f32, 0_f32], [0_f32, 0_f32]]
+                        }
+                    } else {
+                        [
+                            basic_front_resource.display_position(),
+                            [
+                                basic_front_resource.display_position()[0]
+                                    + basic_front_resource.display_size()[0],
+                                basic_front_resource.display_position()[1]
+                                    + basic_front_resource.display_size()[1],
+                            ],
+                        ]
+                    },
+                    display_info.ignore_render_layer,
+                ));
             };
         }
+        Ok(())
     }
 
     /// Draw the rendering layer.
@@ -1688,19 +1678,22 @@ impl App {
     /// * `ui` - The UI context for drawing
     /// * `render_config` - The config of the rendering layer area
     /// * `ignore_render` - The config of ignore the rendering layer area
+    /// * `hover_config` - The config of hover the rendering layer area
     ///
     /// # 参数
     ///
     /// * `ui` - 用于绘制的UI上下文
     /// * `render_config` - 渲染层区域的配置
     /// * `ignore_render_config` - 无视渲染层区域的配置
+    /// * `hover_config` - 鼠标悬停时的配置
     pub fn display_render_layer(
         &self,
         ui: &mut Ui,
         render_config: &RenderConfig,
         ignore_render_config: &RenderConfig,
+        hover_config: Option<&RenderConfig>,
     ) {
-        for (_, point, ignore_render_layer) in &self.render_layer {
+        for (i, (_, point, ignore_render_layer)) in self.render_layer.iter().enumerate() {
             match if *ignore_render_layer {
                 ignore_render_config
             } else {
@@ -1754,6 +1747,62 @@ impl App {
                     );
                 }
             };
+            if let Some(hover_config) = hover_config
+                && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
+                && self.resource_get_focus(i, mouse_pos.into(), true, vec![])
+            {
+                match hover_config {
+                    RenderConfig::Rect(
+                        corner_radius,
+                        fill_color,
+                        border_color,
+                        border_width,
+                        border_kind,
+                    ) => {
+                        let rect = Rect::from_min_max(point[0].into(), point[1].into());
+                        ui.painter().rect(
+                            rect,
+                            CornerRadius {
+                                nw: corner_radius[0],
+                                ne: corner_radius[1],
+                                sw: corner_radius[2],
+                                se: corner_radius[3],
+                            },
+                            Color32::from_rgba_unmultiplied(
+                                fill_color[0],
+                                fill_color[1],
+                                fill_color[2],
+                                fill_color[3],
+                            ),
+                            Stroke::new(
+                                *border_width,
+                                Color32::from_rgba_unmultiplied(
+                                    border_color[0],
+                                    border_color[1],
+                                    border_color[2],
+                                    border_color[3],
+                                ),
+                            ),
+                            match *border_kind {
+                                BorderKind::Inside => StrokeKind::Inside,
+                                BorderKind::Middle => StrokeKind::Middle,
+                                BorderKind::Outside => StrokeKind::Outside,
+                            },
+                        );
+                    }
+                    RenderConfig::Line(width, color) => {
+                        ui.painter().line_segment(
+                            [point[0].into(), point[1].into()],
+                            Stroke::new(
+                                *width,
+                                Color32::from_rgba_unmultiplied(
+                                    color[0], color[1], color[2], color[3],
+                                ),
+                            ),
+                        );
+                    }
+                };
+            };
         }
     }
 
@@ -1793,6 +1842,8 @@ impl App {
     ///
     /// * `index` - The index value of the rendering resource
     /// * `mouse_pos` - The position of the mouse
+    /// * `need_contains_mouse` - Is it necessary to include the mouse position
+    /// * `ignore_render_layer` - The range of indices to ignore in the render layer
     ///
     /// # Returns
     ///
@@ -1802,6 +1853,8 @@ impl App {
     ///
     /// * `index` - 渲染资源的索引值
     /// * `mouse_pos` - 鼠标的位置
+    /// * `need_contains_mouse` - 是否需要包含鼠标位置
+    /// * `ignore_render_layer` - 要忽略的渲染层索引范围
     ///
     /// # 返回值
     ///
@@ -1811,25 +1864,32 @@ impl App {
         index: usize,
         mouse_pos: [f32; 2],
         need_contains_mouse: bool,
+        ignore_render_layer: Vec<[usize; 2]>,
     ) -> bool {
+        let mut ignore_list = Vec::new();
+        for range in ignore_render_layer {
+            for i in 0..range[1] {
+                ignore_list.push(range[0] + i);
+            }
+        }
         for i in index + 1..self.render_layer.len() {
             let point = self.render_layer[i].1;
-            let target_point = self.render_layer[index].1;
             if mouse_pos[0] >= point[0][0]
                 && mouse_pos[1] >= point[0][1]
                 && mouse_pos[0] <= point[1][0]
                 && mouse_pos[1] <= point[1][1]
                 && !self.render_layer[i].2
-                || need_contains_mouse
-                    && !(mouse_pos[0] <= target_point[1][0]
-                        && mouse_pos[0] >= target_point[0][0]
-                        && mouse_pos[1] <= target_point[1][1]
-                        && mouse_pos[1] >= target_point[0][1])
+                && !ignore_list.contains(&i)
             {
                 return false;
             };
         }
-        true
+        let target_point = self.render_layer[index].1;
+        !need_contains_mouse
+            || mouse_pos[0] <= target_point[1][0]
+                && mouse_pos[0] >= target_point[0][0]
+                && mouse_pos[1] <= target_point[1][1]
+                && mouse_pos[1] >= target_point[0][1]
     }
 
     /// Mark active resources.
@@ -1861,15 +1921,21 @@ impl App {
         &mut self,
         id: &RustConstructorId,
     ) -> Result<(), RustConstructorError> {
-        if self.check_resource_exists(id).is_some() {
-            self.active_list.push(id.clone());
-            Ok(())
-        } else {
-            Err(RustConstructorError {
-                error_id: "ResourceNotFound".to_string(),
-                description: format!("Resource '{}({})' not found.", id.name, id.discern_type),
-            })
-        }
+        self.active_list.push((
+            id.clone(),
+            if let [Some(citer_name), Some(citer_type)] = [
+                get_tag("citer_name", &self.get_box_resource(id)?.display_tags()),
+                get_tag("citer_type", &self.get_box_resource(id)?.display_tags()),
+            ] {
+                Some(RustConstructorId {
+                    name: citer_name.1,
+                    discern_type: citer_type.1,
+                })
+            } else {
+                None
+            },
+        ));
+        Ok(())
     }
 
     /// Adds a new resource to the application with the specified name.
@@ -1905,7 +1971,7 @@ impl App {
         name: &str,
         mut resource: T,
     ) -> Result<(), RustConstructorError> {
-        let discern_type = &*self.type_processor(&resource);
+        let discern_type = &*type_processor(&resource);
         if self
             .check_resource_exists(&RustConstructorId {
                 name: name.to_string(),
@@ -1926,170 +1992,165 @@ impl App {
         };
         match discern_type {
             "SplitTime" => {
-                if let Some(split_time) = resource.as_any_mut().downcast_mut::<SplitTime>() {
-                    split_time.time = [self.timer.now_time, self.timer.total_time];
-                };
-            }
-            "Font" => {
-                if let Some(font) = resource.as_any_mut().downcast_mut::<Font>() {
-                    let mut fonts = FontDefinitions::default();
-                    if let Ok(font_read_data) = read(&font.path) {
-                        let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
-                        fonts.font_data.insert(
-                            name.to_owned(),
-                            Arc::new(FontData::from_owned(
-                                Arc::try_unwrap(font_data).ok().unwrap(),
-                            )),
-                        );
-
-                        // 将字体添加到字体列表中
-                        fonts
-                            .families
-                            .entry(FontFamily::Proportional)
-                            .or_default()
-                            .insert(0, name.to_owned());
-
-                        fonts
-                            .families
-                            .entry(FontFamily::Monospace)
-                            .or_default()
-                            .insert(0, name.to_owned());
-
-                        font.font_definitions = WrapDefinitions {
-                            font_definitions: fonts,
-                        };
-                    } else {
-                        return Err(RustConstructorError {
-                            error_id: "FontLoadFailed".to_string(),
-                            description: format!(
-                                "Failed to load a font from the path '{}'.",
-                                font.path
-                            ),
-                        });
-                    }
-                };
+                let split_time = downcast_resource_mut::<SplitTime>(&mut resource)?;
+                split_time.time = [self.timer.now_time, self.timer.total_time];
             }
             "Background" => {
-                if let Some(background) = resource.as_any_mut().downcast_mut::<Background>() {
-                    match &background.background_type {
-                        BackgroundType::CustomRect(config) => {
-                            let mut custom_rect = CustomRect::default().from_config(config);
-                            if background.use_background_tags {
-                                custom_rect.modify_tags(&background.tags, false);
-                            };
-                            self.add_resource(name, custom_rect)
-                        }
-                        BackgroundType::Image(config) => {
-                            let mut image = Image::default().from_config(config);
-                            if background.use_background_tags {
-                                image.modify_tags(&background.tags, false);
-                            };
-                            self.add_resource(name, image)
-                        }
-                    }?;
-                };
+                let background = downcast_resource_mut::<Background>(&mut resource)?;
+                match &background.background_type {
+                    BackgroundType::CustomRect(config) => {
+                        let mut custom_rect = CustomRect::default().from_config(config);
+                        if background.use_background_tags {
+                            custom_rect.modify_tags(&background.tags, false);
+                        };
+                        self.add_resource(name, custom_rect)
+                    }
+                    BackgroundType::Image(config) => {
+                        let mut image = Image::default().from_config(config);
+                        if background.use_background_tags {
+                            image.modify_tags(&background.tags, false);
+                        };
+                        self.add_resource(name, image)
+                    }
+                }?;
             }
             "Switch" => {
-                if let Some(switch) = resource.as_any_mut().downcast_mut::<Switch>() {
-                    let count = 1 + switch.enable_animation.iter().filter(|x| **x).count();
-                    if switch.appearance.len() != count * switch.state_amount as usize {
+                let switch = downcast_resource_mut::<Switch>(&mut resource)?;
+                let count = 1 + switch.enable_animation.iter().filter(|x| **x).count();
+                if switch.appearance.len() != count * switch.state_amount as usize {
+                    return Err(RustConstructorError {
+                        error_id: "SwitchAppearanceConfigMismatch".to_string(),
+                        description: format!(
+                            "Expected {} elements, found {}.",
+                            count * switch.state_amount as usize,
+                            switch.appearance.len()
+                        ),
+                    });
+                };
+                if !switch.radio_group.is_empty() {
+                    if !self.rust_constructor_resource.iter().any(|x| {
+                        if let Ok(check_switch) = downcast_resource::<Switch>(&*x.content) {
+                            switch.radio_group == check_switch.radio_group
+                        } else {
+                            false
+                        }
+                    }) {
+                        switch.state = 1;
+                    };
+                    if switch.state_amount != 2 {
                         return Err(RustConstructorError {
                             error_id: "SwitchAppearanceConfigMismatch".to_string(),
                             description: format!(
-                                "Expected {} elements, found {}.",
-                                count * switch.state_amount as usize,
-                                switch.appearance.len()
+                                "Radio group is only supported for switches with 2 states, found {}.",
+                                switch.state_amount
                             ),
                         });
                     };
-                    self.add_resource(
-                        &format!("{name}Background"),
-                        Background::default()
-                            .background_type(&switch.background_type)
-                            .auto_update(true)
-                            .use_background_tags(true)
-                            .tags(
-                                if switch.use_switch_tags {
-                                    &switch.tags
-                                } else {
-                                    &[]
-                                },
-                                false,
-                            )
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
-                    )?;
-                    self.add_resource(
-                        &format!("{name}Text"),
-                        Text::default()
-                            .from_config(&switch.text_config)
-                            .tags(
-                                if switch.use_switch_tags {
-                                    &switch.tags
-                                } else {
-                                    &[]
-                                },
-                                false,
-                            )
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
-                    )?;
-                    self.add_resource(
-                        &format!("{name}HintText"),
-                        Text::default()
-                            .from_config(&switch.hint_text_config)
-                            .ignore_render_layer(true)
-                            .hidden(true)
-                            .alpha(0)
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                    ["disable_x_scrolling".to_string(), "".to_string()],
-                                    ["disable_y_scrolling".to_string(), "".to_string()],
-                                ],
-                                false,
-                            ),
-                    )?;
-                    self.add_resource(
-                        &format!("{name}StartHoverTime"),
-                        SplitTime::default().tags(
-                            &[
-                                ["citer_name".to_string(), name.to_string()],
-                                ["citer_type".to_string(), discern_type.to_string()],
-                            ],
-                            false,
-                        ),
-                    )?;
-                    self.add_resource(
-                        &format!("{name}HintFadeAnimation"),
-                        SplitTime::default().tags(
-                            &[
-                                ["citer_name".to_string(), name.to_string()],
-                                ["citer_type".to_string(), discern_type.to_string()],
-                            ],
-                            false,
-                        ),
-                    )?;
                 };
+                self.add_resource(
+                    &format!("{name}Background"),
+                    Background::default()
+                        .background_type(&switch.background_type)
+                        .auto_update(true)
+                        .use_background_tags(true)
+                        .tags(
+                            if switch.use_switch_tags {
+                                &switch.tags
+                            } else {
+                                &[]
+                            },
+                            false,
+                        )
+                        .tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                                ["panel_layout_group".to_string(), name.to_string()],
+                            ],
+                            false,
+                        ),
+                )?;
+                self.add_resource(
+                    &format!("{name}Text"),
+                    Text::default()
+                        .from_config(&switch.text_config)
+                        .tags(
+                            if switch.use_switch_tags {
+                                &switch.tags
+                            } else {
+                                &[]
+                            },
+                            false,
+                        )
+                        .tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                                ["panel_layout_group".to_string(), name.to_string()],
+                            ],
+                            false,
+                        ),
+                )?;
+                self.add_resource(
+                    &format!("{name}HintText"),
+                    Text::default()
+                        .from_config(&switch.hint_text_config)
+                        .ignore_render_layer(true)
+                        .hidden(true)
+                        .alpha(0)
+                        .tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                                ["disable_x_scrolling".to_string(), "".to_string()],
+                                ["disable_y_scrolling".to_string(), "".to_string()],
+                            ],
+                            false,
+                        ),
+                )?;
+                self.add_resource(
+                    &format!("{name}StartHoverTime"),
+                    SplitTime::default().tags(
+                        &[
+                            ["citer_name".to_string(), name.to_string()],
+                            ["citer_type".to_string(), discern_type.to_string()],
+                        ],
+                        false,
+                    ),
+                )?;
+                self.add_resource(
+                    &format!("{name}HintFadeAnimation"),
+                    SplitTime::default().tags(
+                        &[
+                            ["citer_name".to_string(), name.to_string()],
+                            ["citer_type".to_string(), discern_type.to_string()],
+                        ],
+                        false,
+                    ),
+                )?;
             }
             "ResourcePanel" => {
-                if let Some(resource_panel) = resource.as_any_mut().downcast_mut::<ResourcePanel>()
+                let resource_panel = downcast_resource_mut::<ResourcePanel>(&mut resource)?;
+                self.add_resource(
+                    &format!("{name}Background"),
+                    Background::default()
+                        .background_type(&resource_panel.background)
+                        .auto_update(true)
+                        .use_background_tags(true)
+                        .tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                )?;
+                if let ScrollBarDisplayMethod::Always(_, _, _) =
+                    &resource_panel.scroll_bar_display_method
                 {
                     self.add_resource(
-                        &format!("{name}Background"),
+                        &format!("{name}XScroll"),
                         Background::default()
-                            .background_type(&resource_panel.background)
                             .auto_update(true)
                             .use_background_tags(true)
                             .tags(
@@ -2100,106 +2161,89 @@ impl App {
                                 false,
                             ),
                     )?;
-                    if let ScrollBarDisplayMethod::Always(_, _, _) =
-                        &resource_panel.scroll_bar_display_method
-                    {
-                        self.add_resource(
-                            &format!("{name}XScroll"),
-                            Background::default()
-                                .auto_update(true)
-                                .use_background_tags(true)
-                                .tags(
-                                    &[
-                                        ["citer_name".to_string(), name.to_string()],
-                                        ["citer_type".to_string(), discern_type.to_string()],
-                                    ],
-                                    false,
-                                ),
-                        )?;
-                        self.add_resource(
-                            &format!("{name}YScroll"),
-                            Background::default()
-                                .auto_update(true)
-                                .use_background_tags(true)
-                                .tags(
-                                    &[
-                                        ["citer_name".to_string(), name.to_string()],
-                                        ["citer_type".to_string(), discern_type.to_string()],
-                                    ],
-                                    false,
-                                ),
-                        )?;
-                    };
-                    if let ScrollBarDisplayMethod::OnlyScroll(_, _, _) =
-                        &resource_panel.scroll_bar_display_method
-                    {
-                        self.add_resource(
-                            &format!("{name}XScroll"),
-                            Background::default()
-                                .auto_update(true)
-                                .use_background_tags(true)
-                                .tags(
-                                    &[
-                                        ["citer_name".to_string(), name.to_string()],
-                                        ["citer_type".to_string(), discern_type.to_string()],
-                                    ],
-                                    false,
-                                ),
-                        )?;
-                        self.add_resource(
-                            &format!("{name}YScroll"),
-                            Background::default()
-                                .auto_update(true)
-                                .use_background_tags(true)
-                                .tags(
-                                    &[
-                                        ["citer_name".to_string(), name.to_string()],
-                                        ["citer_type".to_string(), discern_type.to_string()],
-                                    ],
-                                    false,
-                                ),
-                        )?;
-                        self.add_resource(
-                            &format!("{name}ScrollBarXAlpha"),
-                            SplitTime::default().tags(
+                    self.add_resource(
+                        &format!("{name}YScroll"),
+                        Background::default()
+                            .auto_update(true)
+                            .use_background_tags(true)
+                            .tags(
                                 &[
                                     ["citer_name".to_string(), name.to_string()],
                                     ["citer_type".to_string(), discern_type.to_string()],
                                 ],
                                 false,
                             ),
-                        )?;
-                        self.add_resource(
-                            &format!("{name}ScrollBarXAlphaStart"),
-                            SplitTime::default().tags(
+                    )?;
+                };
+                if let ScrollBarDisplayMethod::OnlyScroll(_, _, _) =
+                    &resource_panel.scroll_bar_display_method
+                {
+                    self.add_resource(
+                        &format!("{name}XScroll"),
+                        Background::default()
+                            .auto_update(true)
+                            .use_background_tags(true)
+                            .tags(
                                 &[
                                     ["citer_name".to_string(), name.to_string()],
                                     ["citer_type".to_string(), discern_type.to_string()],
                                 ],
                                 false,
                             ),
-                        )?;
-                        self.add_resource(
-                            &format!("{name}ScrollBarYAlpha"),
-                            SplitTime::default().tags(
+                    )?;
+                    self.add_resource(
+                        &format!("{name}YScroll"),
+                        Background::default()
+                            .auto_update(true)
+                            .use_background_tags(true)
+                            .tags(
                                 &[
                                     ["citer_name".to_string(), name.to_string()],
                                     ["citer_type".to_string(), discern_type.to_string()],
                                 ],
                                 false,
                             ),
-                        )?;
-                        self.add_resource(
-                            &format!("{name}ScrollBarYAlphaStart"),
-                            SplitTime::default().tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
-                        )?;
-                    };
+                    )?;
+                    self.add_resource(
+                        &format!("{name}ScrollBarXAlpha"),
+                        SplitTime::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}ScrollBarXAlphaStart"),
+                        SplitTime::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}ScrollBarYAlpha"),
+                        SplitTime::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
+                    self.add_resource(
+                        &format!("{name}ScrollBarYAlphaStart"),
+                        SplitTime::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
+                    )?;
                 };
             }
             _ => {}
@@ -2235,7 +2279,7 @@ impl App {
     pub fn drop_resource(&mut self, id: &RustConstructorId) -> Result<(), RustConstructorError> {
         if let Some(index) = self.check_resource_exists(id) {
             self.rust_constructor_resource.remove(index);
-            if let Some(index) = self.active_list.iter().position(|x| x == id) {
+            if let Some(index) = self.active_list.iter().position(|x| &x.0 == id) {
                 self.active_list.remove(index);
             };
             if let Some(index) = self
@@ -2283,7 +2327,7 @@ impl App {
     where
         T: RustConstructorResource + 'static,
     {
-        let discern_type = &*self.type_processor(&resource);
+        let discern_type = &*type_processor(&resource);
         if let Some(index) = self.check_resource_exists(&RustConstructorId {
             name: name.to_string(),
             discern_type: discern_type.to_string(),
@@ -2296,6 +2340,83 @@ impl App {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{name}({discern_type})' not found."),
             })
+        }
+    }
+
+    /// Obtain basic front resource from the list.
+    ///
+    /// 从列表中获取基本前端资源。
+    ///
+    /// If you want to use the basic front resource method, please call this method to retrieve the resource.
+    ///
+    /// 如果想要使用基本前端资源的方法，请调用此方法来取出资源。
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier of the resource
+    ///
+    /// # Returns
+    ///
+    /// If the resource is found, return the reference of the resource; otherwise, return `Err(RustConstructorError)`.
+    ///
+    /// # 参数
+    ///
+    /// * `id` - 资源的唯一标识符
+    ///
+    /// # 返回值
+    ///
+    /// 如果找到资源，返回资源的引用，否则返回`Err(RustConstructorError)`。
+    pub fn get_basic_front_resource(
+        &self,
+        id: &RustConstructorId,
+    ) -> Result<&dyn BasicFrontResource, RustConstructorError> {
+        match &*id.discern_type {
+            "Image" => Ok(downcast_resource::<Image>(self.get_box_resource(id)?)?),
+            "Text" => Ok(downcast_resource::<Text>(self.get_box_resource(id)?)?),
+            "CustomRect" => Ok(downcast_resource::<CustomRect>(self.get_box_resource(id)?)?),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Obtain mutable basic front resource from the list.
+    ///
+    /// 从列表中获取可变基本前端资源。
+    ///
+    /// If you want to use the basic front resource method and modify the basic front resource, please call
+    /// this method to retrieve the resource.
+    ///
+    /// 如果想要使用基本前端资源的方法并修改基本前端资源，请调用此方法来取出资源。
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier of the resource
+    ///
+    /// # Returns
+    ///
+    /// If the resource is found, return the mutable reference of the resource; otherwise, return `Err(RustConstructorError)`.
+    ///
+    /// # 参数
+    ///
+    /// * `id` - 资源的唯一标识符
+    ///
+    /// # 返回值
+    ///
+    /// 如果找到资源，返回资源的可变引用，否则返回`Err(RustConstructorError)`。
+    pub fn get_basic_front_resource_mut(
+        &mut self,
+        id: &RustConstructorId,
+    ) -> Result<&mut dyn BasicFrontResource, RustConstructorError> {
+        match &*id.discern_type {
+            "Image" => Ok(downcast_resource_mut::<Image>(
+                self.get_box_resource_mut(id)?,
+            )?),
+            "Text" => Ok(downcast_resource_mut::<Text>(
+                self.get_box_resource_mut(id)?,
+            )?),
+            "CustomRect" => Ok(downcast_resource_mut::<CustomRect>(
+                self.get_box_resource_mut(id)?,
+            )?),
+            _ => unreachable!(),
         }
     }
 
@@ -2396,17 +2517,7 @@ impl App {
     where
         T: RustConstructorResource + 'static,
     {
-        if let Some(resource) = self.get_box_resource(id)?.as_any().downcast_ref::<T>() {
-            Ok(resource)
-        } else {
-            Err(RustConstructorError {
-                error_id: "ResourceGenericMismatch".to_string(),
-                description: format!(
-                    "The generic type of the resource '{}({})' is mismatched.",
-                    id.name, id.discern_type
-                ),
-            })
-        }
+        downcast_resource(self.get_box_resource(id)?)
     }
 
     /// Obtain the mutable resources from the list.
@@ -2435,21 +2546,7 @@ impl App {
     where
         T: RustConstructorResource + 'static,
     {
-        if let Some(resource) = self
-            .get_box_resource_mut(id)?
-            .as_any_mut()
-            .downcast_mut::<T>()
-        {
-            Ok(resource)
-        } else {
-            Err(RustConstructorError {
-                error_id: "ResourceGenericMismatch".to_string(),
-                description: format!(
-                    "The generic type of the resource '{}({})' is mismatched.",
-                    id.name, id.discern_type
-                ),
-            })
-        }
+        downcast_resource_mut(self.get_box_resource_mut(id)?)
     }
 
     /// Checks if a specific resource exists in the application.
@@ -2513,7 +2610,7 @@ impl App {
         ui: &mut Ui,
         ctx: &Context,
     ) -> Result<(), RustConstructorError> {
-        let discern_type = &*self.type_processor(&resource);
+        let discern_type = &*type_processor(&resource);
         if self
             .check_resource_exists(&RustConstructorId {
                 name: name.to_string(),
@@ -2582,9 +2679,14 @@ impl App {
                         self.draw_resource_by_index(ui, ctx, i)?;
                     }
                     // 更新渲染列表。
-                    self.update_render_layer(ctx);
+                    self.update_render_layer(ctx)?;
                     // 更新资源活跃状态。
                     self.active_list.clear();
+                    // 更新字体加载情况。
+                    if !self.loading_fonts.is_empty() {
+                        self.loaded_fonts = self.loading_fonts.clone();
+                        self.loading_fonts.clear();
+                    };
                     // 更新资源启用状态。
                     for rcr in &mut self.rust_constructor_resource {
                         if let Some(display_info) = &mut rcr.content.display_display_info() {
@@ -2668,26 +2770,12 @@ impl App {
                         BackgroundType::CustomRect(_) => "CustomRect",
                         BackgroundType::Image(_) => "Image",
                     };
-                    let background_resource: Box<dyn BasicFrontResource> =
-                        match background_resource_type {
-                            "CustomRect" => Box::new(
-                                self.get_resource::<CustomRect>(&RustConstructorId {
-                                    name: format!("{}Background", &id.name),
-                                    discern_type: background_resource_type.to_string(),
-                                })?
-                                .clone(),
-                            ),
-                            "Image" => Box::new(
-                                self.get_resource::<Image>(&RustConstructorId {
-                                    name: format!("{}Background", &id.name),
-                                    discern_type: background_resource_type.to_string(),
-                                })?
-                                .clone(),
-                            ),
-                            _ => {
-                                unreachable!()
-                            }
-                        };
+                    let background_resource =
+                        self.get_basic_front_resource(&RustConstructorId {
+                            name: format!("{}Background", &id.name),
+                            discern_type: background_resource_type.to_string(),
+                        })?;
+                    let display_info = background_resource.display_display_info();
                     let mut text = self
                         .get_resource::<Text>(&RustConstructorId {
                             name: format!("{}Text", &id.name),
@@ -2712,7 +2800,7 @@ impl App {
                         discern_type: background_resource_type.to_string(),
                     }) && switch.enable
                         && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
-                        && self.resource_get_focus(index, mouse_pos.into(), true)
+                        && self.resource_get_focus(index, mouse_pos.into(), true, vec![])
                         && let Some(display_info) = background_resource.display_display_info()
                         && !display_info.hidden
                     {
@@ -2768,13 +2856,27 @@ impl App {
                         {
                             switch.switched = true;
                             if switch.click_method[clicked_index].action {
-                                if switch.state
-                                    < (switch.appearance.len() / animation_count - 1) as u32
-                                {
-                                    switch.state += 1;
-                                } else {
-                                    switch.state = 0;
+                                if !switch.radio_group.is_empty() {
+                                    self.rust_constructor_resource
+                                        .iter_mut()
+                                        .filter(|x| &x.id.discern_type == "Switch")
+                                        .for_each(|x| {
+                                            if let Ok(check_switch) =
+                                                downcast_resource_mut::<Switch>(&mut *x.content)
+                                                && switch.radio_group == check_switch.radio_group
+                                            {
+                                                check_switch.state = 0;
+                                            };
+                                        });
                                 };
+                                if switch.radio_group.is_empty() || switch.state == 0 {
+                                    if switch.state < switch.appearance.len() / animation_count - 1
+                                    {
+                                        switch.state += 1;
+                                    } else {
+                                        switch.state = 0;
+                                    };
+                                }
                             };
                         };
                         appearance_count = if clicked.is_some() {
@@ -2808,7 +2910,7 @@ impl App {
 
                     // 更新Background样式。
                     background.background_type = switch.appearance
-                        [(switch.state * animation_count as u32 + appearance_count) as usize]
+                        [switch.state * animation_count + appearance_count]
                         .background_config
                         .clone();
 
@@ -2825,16 +2927,13 @@ impl App {
                     let alpha = hint_text.alpha;
                     hint_text = hint_text
                         .from_config(
-                            &switch.appearance[(switch.state * animation_count as u32
-                                + appearance_count)
-                                as usize]
+                            &switch.appearance[switch.state * animation_count + appearance_count]
                                 .hint_text_config,
                         )
                         .ignore_render_layer(true);
                     hint_text.background_alpha = alpha;
                     hint_text.alpha = alpha;
-                    hint_text.display_info.hidden = if let Some(display_info) =
-                        background_resource.display_display_info()
+                    hint_text.display_info.hidden = if let Some(display_info) = display_info
                         && display_info.hidden
                     {
                         true
@@ -2853,9 +2952,7 @@ impl App {
                             false,
                         )
                         .from_config(
-                            &switch.appearance[(switch.state * animation_count as u32
-                                + appearance_count)
-                                as usize]
+                            &switch.appearance[switch.state * animation_count + appearance_count]
                                 .text_config,
                         );
 
@@ -2884,25 +2981,13 @@ impl App {
                         ctx,
                     )?;
                     if alpha != 0 {
-                        if let [Some(hint_text_index), Some(switch_background_index)] = [
-                            self.get_render_layer_resource(&RustConstructorId {
+                        self.try_request_jump_render_list(
+                            RequestMethod::Id(RustConstructorId {
                                 name: format!("{}HintText", &id.name),
                                 discern_type: "Text".to_string(),
                             }),
-                            self.get_render_layer_resource(&RustConstructorId {
-                                name: format!("{}Background", &id.name),
-                                discern_type: background_resource_type.to_string(),
-                            }),
-                        ] && hint_text_index < switch_background_index
-                        {
-                            self.try_request_jump_render_list(
-                                RequestMethod::Id(RustConstructorId {
-                                    name: format!("{}HintText", &id.name),
-                                    discern_type: "Text".to_string(),
-                                }),
-                                RequestType::Up(switch_background_index - hint_text_index),
-                            );
-                        };
+                            RequestType::Top,
+                        );
                         self.use_resource(
                             &RustConstructorId {
                                 name: format!("{}HintText", &id.name),
@@ -2974,7 +3059,7 @@ impl App {
                     if position_size_config.origin_size[1] < resource_panel.min_size[1] {
                         position_size_config.origin_size[1] = resource_panel.min_size[1];
                     };
-                    [position, size] = self.position_size_processor(position_size_config, ctx);
+                    [position, size] = position_size_processor(position_size_config, ctx);
                     let scroll_delta: [f32; 2] = if resource_panel.use_smooth_scroll_delta {
                         ui.input(|i| i.smooth_scroll_delta).into()
                     } else {
@@ -3000,108 +3085,115 @@ impl App {
                                 },
                             ]
                         };
+                    let mut resource_get_focus = [false, false];
                     if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
                         && !resource_panel.hidden
-                    {
-                        if let Some(index) = self.get_render_layer_resource(&RustConstructorId {
+                        && let Some(index) = self.get_render_layer_resource(&RustConstructorId {
                             name: format!("{}Background", &id.name),
                             discern_type: match background.background_type {
                                 BackgroundType::CustomRect(_) => "CustomRect",
                                 BackgroundType::Image(_) => "Image",
                             }
                             .to_string(),
-                        }) && self.resource_get_focus(index, mouse_pos.into(), false)
+                        })
+                    {
+                        resource_get_focus = [
+                            self.resource_get_focus(index, mouse_pos.into(), false, vec![]),
+                            self.resource_get_focus(
+                                index,
+                                mouse_pos.into(),
+                                true,
+                                vec![[index + 1, resource_panel.resource_storage.len()]],
+                            ),
+                        ];
+                        if resource_get_focus[1]
+                            && resource_panel.raise_on_focus
+                            && ui.input(|i| i.pointer.primary_pressed())
                         {
-                            if ui.input(|i| i.pointer.primary_pressed())
-                                && Rect::from_min_size(position.into(), size.into())
-                                    .contains(mouse_pos)
+                            self.request_jump_render_list(
+                                RequestMethod::Id(RustConstructorId {
+                                    name: format!("{}Background", &id.name),
+                                    discern_type: match background.background_type {
+                                        BackgroundType::CustomRect(_) => "CustomRect",
+                                        BackgroundType::Image(_) => "Image",
+                                    }
+                                    .to_string(),
+                                }),
+                                RequestType::Top,
+                            )
+                            .unwrap();
+                            let mut update_list = Vec::new();
+                            for rcr in &self.rust_constructor_resource {
+                                if self
+                                    .basic_front_resource_list
+                                    .contains(&rcr.id.discern_type)
+                                    && let Some(panel_name) =
+                                        get_tag("panel_name", &rcr.content.display_tags())
+                                    && panel_name.1 == id.name
+                                {
+                                    update_list.push(rcr.id.clone());
+                                };
+                            }
+                            for id in update_list {
+                                self.try_request_jump_render_list(
+                                    RequestMethod::Id(id),
+                                    RequestType::Top,
+                                );
+                            }
+                            if let ScrollBarDisplayMethod::Always(ref background_type, _, _) =
+                                resource_panel.scroll_bar_display_method
                             {
-                                self.request_jump_render_list(
+                                self.try_request_jump_render_list(
                                     RequestMethod::Id(RustConstructorId {
-                                        name: format!("{}Background", &id.name),
-                                        discern_type: match background.background_type {
+                                        name: format!("{}XScroll", &id.name),
+                                        discern_type: match background_type {
                                             BackgroundType::CustomRect(_) => "CustomRect",
                                             BackgroundType::Image(_) => "Image",
                                         }
                                         .to_string(),
                                     }),
                                     RequestType::Top,
-                                )
-                                .unwrap();
-                                let mut update_list = Vec::new();
-                                for rcr in &self.rust_constructor_resource {
-                                    if self
-                                        .basic_front_resource_list
-                                        .contains(&rcr.id.discern_type)
-                                        && let Some(panel_name) =
-                                            self.get_tag("panel_name", &rcr.content.display_tags())
-                                        && panel_name.1 == id.name
-                                    {
-                                        update_list.push(rcr.id.clone());
-                                    };
-                                }
-                                for id in update_list {
-                                    self.try_request_jump_render_list(
-                                        RequestMethod::Id(id),
-                                        RequestType::Top,
-                                    );
-                                }
-                                if let ScrollBarDisplayMethod::Always(ref background_type, _, _) =
-                                    resource_panel.scroll_bar_display_method
-                                {
-                                    self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}XScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
-                                        RequestType::Top,
-                                    );
-                                    self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}YScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
-                                        RequestType::Top,
-                                    );
-                                };
-                                if let ScrollBarDisplayMethod::OnlyScroll(
-                                    ref background_type,
-                                    _,
-                                    _,
-                                ) = resource_panel.scroll_bar_display_method
-                                {
-                                    self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}XScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
-                                        RequestType::Top,
-                                    );
-                                    self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}YScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
-                                        RequestType::Top,
-                                    );
-                                };
+                                );
+                                self.try_request_jump_render_list(
+                                    RequestMethod::Id(RustConstructorId {
+                                        name: format!("{}YScroll", &id.name),
+                                        discern_type: match background_type {
+                                            BackgroundType::CustomRect(_) => "CustomRect",
+                                            BackgroundType::Image(_) => "Image",
+                                        }
+                                        .to_string(),
+                                    }),
+                                    RequestType::Top,
+                                );
                             };
+                            if let ScrollBarDisplayMethod::OnlyScroll(ref background_type, _, _) =
+                                resource_panel.scroll_bar_display_method
+                            {
+                                self.try_request_jump_render_list(
+                                    RequestMethod::Id(RustConstructorId {
+                                        name: format!("{}XScroll", &id.name),
+                                        discern_type: match background_type {
+                                            BackgroundType::CustomRect(_) => "CustomRect",
+                                            BackgroundType::Image(_) => "Image",
+                                        }
+                                        .to_string(),
+                                    }),
+                                    RequestType::Top,
+                                );
+                                self.try_request_jump_render_list(
+                                    RequestMethod::Id(RustConstructorId {
+                                        name: format!("{}YScroll", &id.name),
+                                        discern_type: match background_type {
+                                            BackgroundType::CustomRect(_) => "CustomRect",
+                                            BackgroundType::Image(_) => "Image",
+                                        }
+                                        .to_string(),
+                                    }),
+                                    RequestType::Top,
+                                );
+                            };
+                        };
+                        if resource_get_focus[0] {
                             let top_rect = Rect::from_min_size(
                                 [position[0], position[1]].into(),
                                 [size[0], 3_f32].into(),
@@ -4016,6 +4108,12 @@ impl App {
                                 };
                             }
                             ClickAim::Move => {
+                                ctx.set_cursor_icon(match resource_panel.movable {
+                                    [true, true] => CursorIcon::Move,
+                                    [true, false] => CursorIcon::ResizeColumn,
+                                    [false, true] => CursorIcon::ResizeRow,
+                                    [false, false] => CursorIcon::NotAllowed,
+                                });
                                 if resource_panel.movable[0] {
                                     position_size_config.origin_position[0] =
                                         mouse_pos[0] - offset[0];
@@ -4027,7 +4125,7 @@ impl App {
                             }
                         };
                     };
-                    [position, size] = self.position_size_processor(position_size_config, ctx);
+                    [position, size] = position_size_processor(position_size_config, ctx);
                     let background_type = match background.background_type.clone() {
                         BackgroundType::CustomRect(config) => BackgroundType::CustomRect(
                             config
@@ -4052,7 +4150,8 @@ impl App {
                         ui,
                         ctx,
                     )?;
-                    let mut resource_point_list: Vec<([f32; 2], [f32; 2], [bool; 2])> = Vec::new();
+                    type PointList = Vec<([f32; 2], [f32; 2], [bool; 2], Option<String>)>;
+                    let mut resource_point_list: PointList = Vec::new();
                     let mut use_resource_list = Vec::new();
                     let mut replace_resource_list = Vec::new();
                     for rcr in &self.rust_constructor_resource {
@@ -4060,12 +4159,12 @@ impl App {
                             .basic_front_resource_list
                             .contains(&rcr.id.discern_type)
                             && let Some(panel_name) =
-                                self.get_tag("panel_name", &rcr.content.display_tags())
+                                get_tag("panel_name", &rcr.content.display_tags())
                             && panel_name.1 == id.name
                         {
                             if let [Some(citer_name), Some(citer_type)] = [
-                                self.get_tag("citer_name", &rcr.content.display_tags()),
-                                self.get_tag("citer_type", &rcr.content.display_tags()),
+                                get_tag("citer_name", &rcr.content.display_tags()),
+                                get_tag("citer_type", &rcr.content.display_tags()),
                             ] {
                                 if !use_resource_list
                                     .iter()
@@ -4080,31 +4179,21 @@ impl App {
                                 use_resource_list
                                     .push([rcr.id.name.clone(), rcr.id.discern_type.clone()]);
                             };
-                            let mut basic_front_resource: Box<dyn BasicFrontResource> = match &*rcr
-                                .id
-                                .discern_type
-                            {
-                                "Image" => Box::new(
-                                    rcr.content
-                                        .as_any()
-                                        .downcast_ref::<Image>()
-                                        .unwrap()
-                                        .clone(),
-                                ),
-                                "Text" => Box::new(
-                                    rcr.content.as_any().downcast_ref::<Text>().unwrap().clone(),
-                                ),
-                                "CustomRect" => Box::new(
-                                    rcr.content
-                                        .as_any()
-                                        .downcast_ref::<CustomRect>()
-                                        .unwrap()
-                                        .clone(),
-                                ),
-                                _ => {
-                                    unreachable!()
-                                }
-                            };
+                            let mut basic_front_resource: Box<dyn BasicFrontResource> =
+                                match &*rcr.id.discern_type {
+                                    "Image" => {
+                                        Box::new(downcast_resource::<Image>(&*rcr.content)?.clone())
+                                    }
+                                    "Text" => {
+                                        Box::new(downcast_resource::<Text>(&*rcr.content)?.clone())
+                                    }
+                                    "CustomRect" => Box::new(
+                                        downcast_resource::<CustomRect>(&*rcr.content)?.clone(),
+                                    ),
+                                    _ => {
+                                        unreachable!()
+                                    }
+                                };
                             if !resource_panel
                                 .resource_storage
                                 .iter()
@@ -4129,9 +4218,9 @@ impl App {
                                 });
                             };
                             let enable_scrolling = [
-                                self.get_tag("disable_x_scrolling", &rcr.content.display_tags())
+                                get_tag("disable_x_scrolling", &rcr.content.display_tags())
                                     .is_none(),
-                                self.get_tag("disable_y_scrolling", &rcr.content.display_tags())
+                                get_tag("disable_y_scrolling", &rcr.content.display_tags())
                                     .is_none(),
                             ];
                             let offset = basic_front_resource.display_position_size_config().offset;
@@ -4171,6 +4260,13 @@ impl App {
                                     }
                                 };
                             }
+                            let panel_layout_group = if let Some(panel_layout_group) =
+                                get_tag("panel_layout_group", &basic_front_resource.display_tags())
+                            {
+                                Some(panel_layout_group.1)
+                            } else {
+                                None
+                            };
                             match layout.panel_margin {
                                 PanelMargin::Vertical(
                                     [top, bottom, left, right],
@@ -4228,6 +4324,12 @@ impl App {
                                         }
                                     };
                                     for point in &resource_point_list {
+                                        if let Some(ref point_panel_layout_group) = point.3
+                                            && let Some(ref panel_layout_group) = panel_layout_group
+                                            && panel_layout_group == point_panel_layout_group
+                                        {
+                                            continue;
+                                        };
                                         if default_x_position - left < point.1[0]
                                             && default_y_position - top + modify_y < point.1[1]
                                             && default_x_position
@@ -4317,6 +4419,7 @@ impl App {
                                                 + bottom,
                                         ],
                                         enable_scrolling,
+                                        panel_layout_group,
                                     ));
                                 }
                                 PanelMargin::Horizontal(
@@ -4375,6 +4478,12 @@ impl App {
                                         }
                                     };
                                     for point in &resource_point_list {
+                                        if let Some(ref point_panel_layout_group) = point.3
+                                            && let Some(ref panel_layout_group) = panel_layout_group
+                                            && panel_layout_group == point_panel_layout_group
+                                        {
+                                            continue;
+                                        };
                                         if default_x_position - left + modify_x < point.1[0]
                                             && default_y_position - top < point.1[1]
                                             && default_x_position
@@ -4464,6 +4573,7 @@ impl App {
                                                 + bottom,
                                         ],
                                         enable_scrolling,
+                                        panel_layout_group,
                                     ));
                                 }
                                 PanelMargin::None([top, bottom, left, right], influence_layout) => {
@@ -4515,6 +4625,7 @@ impl App {
                                                     + bottom,
                                             ],
                                             enable_scrolling,
+                                            panel_layout_group,
                                         ));
                                     };
                                 }
@@ -4537,121 +4648,48 @@ impl App {
                         } else {
                             [false, true, true]
                         };
-                        match &*discern_type {
-                            "CustomRect" => {
-                                let mut custom_rect = self.get_resource::<CustomRect>(&id)?.clone();
-                                custom_rect.basic_front_resource_config.position_size_config =
-                                    new_position_size_config;
-                                custom_rect.display_info.ignore_render_layer = if resource_panel
-                                    .last_frame_mouse_status
-                                    .is_some()
-                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32)
+                        let basic_front_resource = self.get_basic_front_resource_mut(&id)?;
+                        basic_front_resource.modify_position_size_config(new_position_size_config);
+                        basic_front_resource.modify_clip_rect(Some(
+                            position_size_config
+                                .origin_size(
+                                    position_size_config.origin_size[0]
+                                        - resource_panel.inner_margin[2]
+                                        - resource_panel.inner_margin[3],
+                                    position_size_config.origin_size[1]
+                                        - resource_panel.inner_margin[0]
+                                        - resource_panel.inner_margin[1],
+                                )
+                                .origin_position(
+                                    position_size_config.origin_position[0]
+                                        + resource_panel.inner_margin[2],
+                                    position_size_config.origin_position[1]
+                                        + resource_panel.inner_margin[0],
+                                ),
+                        ));
+                        basic_front_resource.modify_display_info({
+                            let mut display_info =
+                                basic_front_resource.display_display_info().unwrap();
+                            display_info.ignore_render_layer =
+                                if (resource_panel.last_frame_mouse_status.is_some()
+                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32))
+                                    && resource_get_focus[1]
                                 {
                                     true
                                 } else if default_storage[0] {
                                     default_storage[1]
                                 } else {
-                                    custom_rect.display_info.ignore_render_layer
+                                    display_info.ignore_render_layer
                                 };
-                                custom_rect.basic_front_resource_config.clip_rect = Some(
-                                    position_size_config
-                                        .origin_size(
-                                            position_size_config.origin_size[0]
-                                                - resource_panel.inner_margin[2]
-                                                - resource_panel.inner_margin[3],
-                                            position_size_config.origin_size[1]
-                                                - resource_panel.inner_margin[0]
-                                                - resource_panel.inner_margin[1],
-                                        )
-                                        .origin_position(
-                                            position_size_config.origin_position[0]
-                                                + resource_panel.inner_margin[2],
-                                            position_size_config.origin_position[1]
-                                                + resource_panel.inner_margin[0],
-                                        ),
-                                );
-                                custom_rect.display_info.hidden = if resource_panel.hidden {
-                                    true
-                                } else if default_storage[0] {
-                                    default_storage[2]
-                                } else {
-                                    custom_rect.display_info.hidden
-                                };
-                                self.replace_resource(&name, custom_rect)?;
-                            }
-                            "Image" => {
-                                let mut image = self.get_resource::<Image>(&id)?.clone();
-                                image.basic_front_resource_config.position_size_config =
-                                    new_position_size_config;
-                                image.display_info.ignore_render_layer = if resource_panel
-                                    .last_frame_mouse_status
-                                    .is_some()
-                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32)
-                                {
-                                    true
-                                } else if default_storage[0] {
-                                    default_storage[1]
-                                } else {
-                                    image.display_info.ignore_render_layer
-                                };
-                                image.basic_front_resource_config.clip_rect = Some(
-                                    position_size_config
-                                        .origin_size(
-                                            position_size_config.origin_size[0]
-                                                - resource_panel.inner_margin[2]
-                                                - resource_panel.inner_margin[3],
-                                            position_size_config.origin_size[1]
-                                                - resource_panel.inner_margin[0]
-                                                - resource_panel.inner_margin[1],
-                                        )
-                                        .origin_position(
-                                            position_size_config.origin_position[0]
-                                                + resource_panel.inner_margin[2],
-                                            position_size_config.origin_position[1]
-                                                + resource_panel.inner_margin[0],
-                                        ),
-                                );
-                                image.display_info.hidden = resource_panel.hidden;
-                                self.replace_resource(&name, image)?;
-                            }
-                            "Text" => {
-                                let mut text = self.get_resource::<Text>(&id)?.clone();
-                                text.basic_front_resource_config.position_size_config =
-                                    new_position_size_config;
-                                text.display_info.ignore_render_layer = if resource_panel
-                                    .last_frame_mouse_status
-                                    .is_some()
-                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32)
-                                {
-                                    true
-                                } else if default_storage[0] {
-                                    default_storage[1]
-                                } else {
-                                    text.display_info.ignore_render_layer
-                                };
-                                text.auto_fit = [false, false];
-                                text.basic_front_resource_config.clip_rect = Some(
-                                    position_size_config
-                                        .origin_size(
-                                            position_size_config.origin_size[0]
-                                                - resource_panel.inner_margin[2]
-                                                - resource_panel.inner_margin[3],
-                                            position_size_config.origin_size[1]
-                                                - resource_panel.inner_margin[0]
-                                                - resource_panel.inner_margin[1],
-                                        )
-                                        .origin_position(
-                                            position_size_config.origin_position[0]
-                                                + resource_panel.inner_margin[2],
-                                            position_size_config.origin_position[1]
-                                                + resource_panel.inner_margin[0],
-                                        ),
-                                );
-                                text.display_info.hidden = resource_panel.hidden;
-                                self.replace_resource(&name, text)?;
-                            }
-                            _ => unreachable!(),
-                        }
+                            display_info.hidden = if resource_panel.hidden {
+                                true
+                            } else if default_storage[0] {
+                                default_storage[2]
+                            } else {
+                                display_info.hidden
+                            };
+                            display_info
+                        });
                     }
                     for info in use_resource_list {
                         self.use_resource(
@@ -5167,171 +5205,169 @@ impl App {
         Ok(())
     }
 
-    /// Retrieves font definitions for a font resource.
+    /// Try to register all fonts in the egui context.
     ///
-    /// 获取字体资源的字体定义。
+    /// 尝试向egui上下文中注册所有字体。
     ///
-    /// # Arguments
+    /// This method loads and registers all fonts with the egui rendering system for
+    /// text display.
     ///
-    /// * `name` - The name of the font resource
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(FontDefinitions)` if the font exists, or `Err(RustConstructorError)` if not found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 字体资源的名称
-    ///
-    /// # 返回值
-    ///
-    /// 如果字体存在则返回 `Ok(FontDefinitions)`，否则返回 `Err(RustConstructorError)`。
-    pub fn get_font(&self, name: &str) -> Result<WrapDefinitions, RustConstructorError> {
-        let font = self.get_resource::<Font>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "Font".to_string(),
-        })?;
-        Ok(font.font_definitions.clone())
-    }
-
-    /// Registers all font resources with the egui context.
-    ///
-    /// 向egui上下文中注册所有字体资源。
-    ///
-    /// This method loads and registers all fonts that have been added to the application
-    /// with the egui rendering system for text display.
-    ///
-    /// 此方法加载并注册应用程序中已添加的所有字体到egui渲染系统中，用于文本显示。
+    /// 此方法加载并注册所有字体到egui渲染系统中，用于文本显示。
     ///
     /// # Arguments
     ///
     /// * `ctx` - The egui context for font registration
+    /// * `font_info` - Font information, including font names and paths
     ///
     /// # 参数
     ///
     /// * `ctx` - 用于字体注册的egui上下文
-    pub fn register_all_fonts(&self, ctx: &Context) {
+    /// * `font_info` - 字体信息，包含字体名称和路径
+    pub fn try_register_all_fonts(&mut self, ctx: &Context, font_info: Vec<[&str; 2]>) {
         let mut font_definitions_amount = FontDefinitions::default();
-        let mut fonts = Vec::new();
-        for i in 0..self.rust_constructor_resource.len() {
-            if let Some(font) = self.rust_constructor_resource[i]
-                .content
-                .as_any()
-                .downcast_ref::<Font>()
-            {
-                fonts.push((
-                    self.rust_constructor_resource[i].id.name.clone(),
-                    font.font_definitions.clone(),
-                ));
-            };
-        }
-        for i in &fonts {
-            // 从 font_def 中提取对应字体的 Arc<FontData>
-            if let Some(font_data) = i.1.font_definitions.font_data.get(&i.0) {
-                font_definitions_amount
-                    .font_data
-                    .insert(i.0.clone(), Arc::clone(font_data));
-                font_definitions_amount
-                    .families
-                    .entry(FontFamily::Name(i.0.clone().into()))
+        let mut loaded_fonts = Vec::new();
+        for font_info in font_info {
+            let mut font = FontDefinitions::default();
+            if let Ok(font_read_data) = read(font_info[1]) {
+                let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
+                font.font_data.insert(
+                    font_info[0].to_owned(),
+                    Arc::new(FontData::from_owned(
+                        Arc::try_unwrap(font_data).ok().unwrap(),
+                    )),
+                );
+                // 将字体添加到字体列表中
+                font.families
+                    .entry(FontFamily::Proportional)
                     .or_default()
-                    .push(i.0.clone());
-            };
+                    .insert(0, font_info[0].to_owned());
 
-            // 将字体添加到字体列表中
-            font_definitions_amount
-                .families
-                .entry(FontFamily::Proportional)
-                .or_default()
-                .insert(0, i.0.to_owned());
+                font.families
+                    .entry(FontFamily::Monospace)
+                    .or_default()
+                    .insert(0, font_info[0].to_owned());
+                if let Some(font_data) = font.font_data.get(font_info[0]) {
+                    font_definitions_amount
+                        .font_data
+                        .insert(font_info[0].to_string(), Arc::clone(font_data));
+                    font_definitions_amount
+                        .families
+                        .entry(FontFamily::Name(font_info[0].into()))
+                        .or_default()
+                        .push(font_info[0].to_string());
+                    // 将字体添加到字体列表中
+                    font_definitions_amount
+                        .families
+                        .entry(FontFamily::Proportional)
+                        .or_default()
+                        .insert(0, font_info[0].to_owned());
 
-            font_definitions_amount
-                .families
-                .entry(FontFamily::Monospace)
-                .or_default()
-                .insert(0, i.0.to_owned());
+                    font_definitions_amount
+                        .families
+                        .entry(FontFamily::Monospace)
+                        .or_default()
+                        .insert(0, font_info[0].to_owned());
+                    loaded_fonts.push(font_info);
+                };
+            }
         }
+        self.loading_fonts = loaded_fonts
+            .iter()
+            .map(|x| [x[0].to_string(), x[1].to_string()])
+            .collect();
         ctx.set_fonts(font_definitions_amount);
     }
 
-    /// Processes position and size calculations for resources.
+    /// Registers all fonts with the egui context.
     ///
-    /// 处理资源的最基本位置和尺寸计算。
+    /// 向egui上下文中注册所有字体。
     ///
-    /// This method handles the complex positioning logic including grid-based layout,
-    /// alignment, and offset calculations for UI resources.
+    /// This method loads and registers all fonts with the egui rendering system for
+    /// text display.
     ///
-    /// 此方法处理复杂的定位逻辑，包括基于网格的布局、对齐方式和UI资源的偏移计算。
+    /// 此方法加载并注册所有字体到egui渲染系统中，用于文本显示。
     ///
     /// # Arguments
     ///
-    /// * `position_size_config` - The configuration for position and size
-    /// * `ctx` - The egui context for available space calculations
+    /// * `ctx` - The egui context for font registration
+    /// * `font_info` - Font information, including font names and paths
     ///
     /// # Returns
     ///
-    /// Returns `[position, size]` as computed from the configuration
+    /// If the loading is successfully completed, return `Ok(())`; otherwise,
+    /// return `Err(RustConstructorError)`.
     ///
     /// # 参数
     ///
-    /// * `position_size_config` - 位置和尺寸的配置
-    /// * `ctx` - 用于可用空间计算的egui上下文
+    /// * `ctx` - 用于字体注册的egui上下文
+    /// * `font_info` - 字体信息，包含字体名称和路径
     ///
     /// # 返回值
     ///
-    /// 返回根据配置计算出的 `[位置, 尺寸]`
-    pub fn position_size_processor(
-        &self,
-        position_size_config: PositionSizeConfig,
+    /// 如果成功完成加载返回`Ok(())`，否则返回`Err(RustConstructorError)`。
+    pub fn register_all_fonts(
+        &mut self,
         ctx: &Context,
-    ) -> [[f32; 2]; 2] {
-        let mut position = [0_f32, 0_f32];
-        let mut size = [0_f32, 0_f32];
-        size[0] = match position_size_config.x_size_grid[0] {
-            0_f32 => position_size_config.origin_size[0],
-            _ => {
-                (ctx.available_rect().width() / position_size_config.x_size_grid[1]
-                    * position_size_config.x_size_grid[0])
-                    + position_size_config.origin_size[0]
+        font_info: Vec<[&str; 2]>,
+    ) -> Result<(), RustConstructorError> {
+        let mut font_definitions_amount = FontDefinitions::default();
+        let mut loaded_fonts = Vec::new();
+        for font_info in font_info {
+            let mut font = FontDefinitions::default();
+            if let Ok(font_read_data) = read(font_info[1]) {
+                let font_data: Arc<Vec<u8>> = Arc::new(font_read_data);
+                font.font_data.insert(
+                    font_info[0].to_owned(),
+                    Arc::new(FontData::from_owned(
+                        Arc::try_unwrap(font_data).ok().unwrap(),
+                    )),
+                );
+                // 将字体添加到字体列表中
+                font.families
+                    .entry(FontFamily::Proportional)
+                    .or_default()
+                    .insert(0, font_info[0].to_owned());
+
+                font.families
+                    .entry(FontFamily::Monospace)
+                    .or_default()
+                    .insert(0, font_info[0].to_owned());
+                if let Some(font_data) = font.font_data.get(font_info[0]) {
+                    font_definitions_amount
+                        .font_data
+                        .insert(font_info[0].to_string(), Arc::clone(font_data));
+                    font_definitions_amount
+                        .families
+                        .entry(FontFamily::Name(font_info[0].into()))
+                        .or_default()
+                        .push(font_info[0].to_string());
+                    // 将字体添加到字体列表中
+                    font_definitions_amount
+                        .families
+                        .entry(FontFamily::Proportional)
+                        .or_default()
+                        .insert(0, font_info[0].to_owned());
+
+                    font_definitions_amount
+                        .families
+                        .entry(FontFamily::Monospace)
+                        .or_default()
+                        .insert(0, font_info[0].to_owned());
+                    loaded_fonts.push(font_info);
+                };
+            } else {
+                return Err(RustConstructorError {
+                    error_id: "FontLoadFailed".to_string(),
+                    description: format!("Failed to load a font from the path '{}'.", font_info[1]),
+                });
             }
-        };
-        size[1] = match position_size_config.y_size_grid[0] {
-            0_f32 => position_size_config.origin_size[1],
-            _ => {
-                (ctx.available_rect().height() / position_size_config.y_size_grid[1]
-                    * position_size_config.y_size_grid[0])
-                    + position_size_config.origin_size[1]
-            }
-        };
-        position[0] = match position_size_config.x_location_grid[1] {
-            0_f32 => position_size_config.origin_position[0],
-            _ => {
-                (ctx.available_rect().width() / position_size_config.x_location_grid[1]
-                    * position_size_config.x_location_grid[0])
-                    + position_size_config.origin_position[0]
-            }
-        };
-        position[1] = match position_size_config.y_location_grid[1] {
-            0_f32 => position_size_config.origin_position[1],
-            _ => {
-                (ctx.available_rect().height() / position_size_config.y_location_grid[1]
-                    * position_size_config.y_location_grid[0])
-                    + position_size_config.origin_position[1]
-            }
-        };
-        match position_size_config.display_method.0 {
-            HorizontalAlign::Left => {}
-            HorizontalAlign::Center => position[0] -= size[0] / 2.0,
-            HorizontalAlign::Right => position[0] -= size[0],
-        };
-        match position_size_config.display_method.1 {
-            VerticalAlign::Top => {}
-            VerticalAlign::Center => position[1] -= size[1] / 2.0,
-            VerticalAlign::Bottom => position[1] -= size[1],
-        };
-        position[0] += position_size_config.offset[0];
-        position[1] += position_size_config.offset[1];
-        [position, size]
+        }
+        self.loading_fonts = loaded_fonts
+            .iter()
+            .map(|x| [x[0].to_string(), x[1].to_string()])
+            .collect();
+        ctx.set_fonts(font_definitions_amount);
+        Ok(())
     }
 
     /// Checks if a page has completed its initial loading phase.
@@ -5445,9 +5481,8 @@ impl App {
         if let Some(last) = self.last_frame_time {
             let delta = current_time - last;
             self.frame_times.push(delta);
-            const MAX_SAMPLES: usize = 120;
-            if self.frame_times.len() > MAX_SAMPLES {
-                let remove_count = self.frame_times.len() - MAX_SAMPLES;
+            if self.frame_times.len() > 120 {
+                let remove_count = self.frame_times.len() - 120;
                 self.frame_times.drain(0..remove_count);
             }
         }

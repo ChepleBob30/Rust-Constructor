@@ -386,6 +386,11 @@ pub struct ResourcePanel {
     /// 使用此字段以保证缩放等功能可以正常使用。
     pub inner_margin: [f32; 4],
 
+    /// Whether to place the panel in the front when clicking
+    ///
+    /// 是否在点击时将面板前置。
+    pub raise_on_focus: bool,
+
     /// Current scroll length: [horizontal, vertical].
     ///
     /// 当前滚动长度：[horizontal, vertical]。
@@ -479,6 +484,7 @@ impl Default for ResourcePanel {
             hidden: false,
             reverse_scroll_direction: [false, false],
             inner_margin: [6_f32, 6_f32, 6_f32, 6_f32],
+            raise_on_focus: true,
             scroll_length: [0_f32, 0_f32],
             scroll_progress: [0_f32, 0_f32],
             last_frame_mouse_status: None,
@@ -589,6 +595,12 @@ impl ResourcePanel {
     }
 
     #[inline]
+    pub fn raise_on_focus(mut self, raise_on_focus: bool) -> Self {
+        self.raise_on_focus = raise_on_focus;
+        self
+    }
+
+    #[inline]
     pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
         if replace {
             self.tags = tags.to_owned();
@@ -659,7 +671,7 @@ pub struct SwitchData {
     /// Current state of the switch.
     ///
     /// 开关当前的状态。
-    pub state: u32,
+    pub state: usize,
 }
 
 /// Switch resource for toggleable UI elements.
@@ -702,6 +714,15 @@ pub struct Switch {
     /// 单击交互的配置。
     pub click_method: Vec<SwitchClickConfig>,
 
+    /// Set the single-choice grouping of the switch.
+    ///
+    /// 设置开关的单选分组。
+    ///
+    /// Only one switch can be activated within the same single-choice group.
+    ///
+    /// 同一单选分组内只能有一个开关被激活。
+    pub radio_group: String,
+
     /// Whether the switch is enabled (disabled shows but not interactive).
     ///
     /// 开关是否启用（disabled会显示，但无法交互）。
@@ -710,7 +731,7 @@ pub struct Switch {
     /// Current state of the switch.
     ///
     /// 开关当前状态。
-    pub state: u32,
+    pub state: usize,
 
     /// Whether the mouse was hovering in the previous frame.
     ///
@@ -781,6 +802,7 @@ impl Default for Switch {
             enable_animation: [false, false],
             state_amount: 0,
             click_method: vec![],
+            radio_group: String::new(),
             enable: true,
             state: 0,
             last_frame_hovered: false,
@@ -836,13 +858,19 @@ impl Switch {
     }
 
     #[inline]
+    pub fn radio_group(mut self, radio_group: &str) -> Self {
+        self.radio_group = radio_group.to_string();
+        self
+    }
+
+    #[inline]
     pub fn enable(mut self, enable: bool) -> Self {
         self.enable = enable;
         self
     }
 
     #[inline]
-    pub fn state(mut self, state: u32) -> Self {
+    pub fn state(mut self, state: usize) -> Self {
         self.state = state;
         self
     }
