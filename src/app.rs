@@ -45,10 +45,10 @@ pub struct App {
     /// 所有Rust Constructor资源的集合，使用类型擦除存储。
     pub rust_constructor_resource: Vec<RustConstructorResourceBox>,
 
-    /// Refresh rate for resource updates in seconds.
+    /// Refresh rate for resource updates in milliseconds.
     ///
-    /// 资源更新的刷新率（秒）。
-    pub tick_interval: f32,
+    /// 资源更新的刷新率（毫秒）。
+    pub tick_interval: u128,
 
     /// Name of the current active page.
     ///
@@ -63,12 +63,12 @@ pub struct App {
     /// Record of recent frame times for performance monitoring.
     ///
     /// 最近帧时间的记录，用于性能监控。
-    pub frame_times: Vec<f32>,
+    pub frame_times: Vec<u128>,
 
-    /// Time taken to render the previous frame in seconds.
+    /// The time for rendering the previous frame in milliseconds.
     ///
-    /// 渲染上一帧所用的时间（秒）。
-    pub last_frame_time: Option<f32>,
+    /// 渲染上一帧的时间（毫秒）。
+    pub last_frame_time: Option<u128>,
 
     /// List of resource IDs that are basic front resources.
     ///
@@ -109,7 +109,7 @@ impl Default for App {
     fn default() -> Self {
         App {
             rust_constructor_resource: Vec::new(),
-            tick_interval: 0.05,
+            tick_interval: 50,
             current_page: String::new(),
             timer: Timer::default(),
             frame_times: Vec::new(),
@@ -130,7 +130,7 @@ impl Default for App {
 
 impl App {
     #[inline]
-    pub fn tick_interval(mut self, tick_interval: f32) -> Self {
+    pub fn tick_interval(mut self, tick_interval: u128) -> Self {
         self.tick_interval = tick_interval;
         self
     }
@@ -2808,7 +2808,7 @@ impl App {
                             self.reset_split_time(&format!("{}StartHoverTime", &id.name))?;
                         } else if self.timer.total_time
                             - self.get_split_time(&format!("{}StartHoverTime", &id.name))?[1]
-                            >= 2_f32
+                            >= 2000
                             || hint_text.alpha != 0
                         {
                             hint_text.alpha = 255;
@@ -3106,93 +3106,137 @@ impl App {
                                 vec![[index + 1, resource_panel.resource_storage.len()]],
                             ),
                         ];
-                        if resource_get_focus[1]
-                            && resource_panel.raise_on_focus
-                            && ui.input(|i| i.pointer.primary_pressed())
-                        {
-                            self.request_jump_render_list(
-                                RequestMethod::Id(RustConstructorId {
-                                    name: format!("{}Background", &id.name),
-                                    discern_type: match background.background_type {
-                                        BackgroundType::CustomRect(_) => "CustomRect",
-                                        BackgroundType::Image(_) => "Image",
-                                    }
-                                    .to_string(),
-                                }),
-                                RequestType::Top,
-                            )
-                            .unwrap();
-                            let mut update_list = Vec::new();
-                            for rcr in &self.rust_constructor_resource {
-                                if self
-                                    .basic_front_resource_list
-                                    .contains(&rcr.id.discern_type)
-                                    && let Some(panel_name) =
-                                        get_tag("panel_name", &rcr.content.display_tags())
-                                    && panel_name.1 == id.name
+                        if resource_get_focus[1] {
+                            if resource_panel.scroll_length_method[0].is_some()
+                                && x_scroll_delta != 0_f32
+                            {
+                                resource_panel.scrolled[0] = true;
+                                resource_panel.scroll_progress[0] = if resource_panel
+                                    .scroll_progress[0]
+                                    + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                    > resource_panel.scroll_length[0]
                                 {
-                                    update_list.push(rcr.id.clone());
+                                    resource_panel.scroll_length[0]
+                                } else if resource_panel.scroll_progress[0]
+                                    + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                    > 0_f32
+                                {
+                                    resource_panel.scroll_progress[0]
+                                        + -x_scroll_delta * resource_panel.scroll_sensitivity
+                                } else {
+                                    0_f32
                                 };
-                            }
-                            for id in update_list {
-                                self.try_request_jump_render_list(
-                                    RequestMethod::Id(id),
-                                    RequestType::Top,
-                                );
-                            }
-                            if let ScrollBarDisplayMethod::Always(ref background_type, _, _) =
-                                resource_panel.scroll_bar_display_method
-                            {
-                                self.try_request_jump_render_list(
-                                    RequestMethod::Id(RustConstructorId {
-                                        name: format!("{}XScroll", &id.name),
-                                        discern_type: match background_type {
-                                            BackgroundType::CustomRect(_) => "CustomRect",
-                                            BackgroundType::Image(_) => "Image",
-                                        }
-                                        .to_string(),
-                                    }),
-                                    RequestType::Top,
-                                );
-                                self.try_request_jump_render_list(
-                                    RequestMethod::Id(RustConstructorId {
-                                        name: format!("{}YScroll", &id.name),
-                                        discern_type: match background_type {
-                                            BackgroundType::CustomRect(_) => "CustomRect",
-                                            BackgroundType::Image(_) => "Image",
-                                        }
-                                        .to_string(),
-                                    }),
-                                    RequestType::Top,
-                                );
                             };
-                            if let ScrollBarDisplayMethod::OnlyScroll(ref background_type, _, _) =
-                                resource_panel.scroll_bar_display_method
+                            if resource_panel.scroll_length_method[1].is_some()
+                                && y_scroll_delta != 0_f32
                             {
-                                self.try_request_jump_render_list(
-                                    RequestMethod::Id(RustConstructorId {
-                                        name: format!("{}XScroll", &id.name),
-                                        discern_type: match background_type {
-                                            BackgroundType::CustomRect(_) => "CustomRect",
-                                            BackgroundType::Image(_) => "Image",
-                                        }
-                                        .to_string(),
-                                    }),
-                                    RequestType::Top,
-                                );
-                                self.try_request_jump_render_list(
-                                    RequestMethod::Id(RustConstructorId {
-                                        name: format!("{}YScroll", &id.name),
-                                        discern_type: match background_type {
-                                            BackgroundType::CustomRect(_) => "CustomRect",
-                                            BackgroundType::Image(_) => "Image",
-                                        }
-                                        .to_string(),
-                                    }),
-                                    RequestType::Top,
-                                );
+                                resource_panel.scrolled[1] = true;
+                                resource_panel.scroll_progress[1] = if resource_panel
+                                    .scroll_progress[1]
+                                    + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                    > resource_panel.scroll_length[1]
+                                {
+                                    resource_panel.scroll_length[1]
+                                } else if resource_panel.scroll_progress[1]
+                                    + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                    > 0_f32
+                                {
+                                    resource_panel.scroll_progress[1]
+                                        + -y_scroll_delta * resource_panel.scroll_sensitivity
+                                } else {
+                                    0_f32
+                                };
                             };
-                        };
+                            if resource_panel.raise_on_focus
+                                && ui.input(|i| i.pointer.primary_pressed())
+                            {
+                                self.request_jump_render_list(
+                                    RequestMethod::Id(RustConstructorId {
+                                        name: format!("{}Background", &id.name),
+                                        discern_type: match background.background_type {
+                                            BackgroundType::CustomRect(_) => "CustomRect",
+                                            BackgroundType::Image(_) => "Image",
+                                        }
+                                        .to_string(),
+                                    }),
+                                    RequestType::Top,
+                                )
+                                .unwrap();
+                                let mut update_list = Vec::new();
+                                for rcr in &self.rust_constructor_resource {
+                                    if self
+                                        .basic_front_resource_list
+                                        .contains(&rcr.id.discern_type)
+                                        && let Some(panel_name) =
+                                            get_tag("panel_name", &rcr.content.display_tags())
+                                        && panel_name.1 == id.name
+                                    {
+                                        update_list.push(rcr.id.clone());
+                                    };
+                                }
+                                for id in update_list {
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(id),
+                                        RequestType::Top,
+                                    );
+                                }
+                                if let ScrollBarDisplayMethod::Always(ref background_type, _, _) =
+                                    resource_panel.scroll_bar_display_method
+                                {
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{}XScroll", &id.name),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => "CustomRect",
+                                                BackgroundType::Image(_) => "Image",
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{}YScroll", &id.name),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => "CustomRect",
+                                                BackgroundType::Image(_) => "Image",
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                };
+                                if let ScrollBarDisplayMethod::OnlyScroll(
+                                    ref background_type,
+                                    _,
+                                    _,
+                                ) = resource_panel.scroll_bar_display_method
+                                {
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{}XScroll", &id.name),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => "CustomRect",
+                                                BackgroundType::Image(_) => "Image",
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                    self.try_request_jump_render_list(
+                                        RequestMethod::Id(RustConstructorId {
+                                            name: format!("{}YScroll", &id.name),
+                                            discern_type: match background_type {
+                                                BackgroundType::CustomRect(_) => "CustomRect",
+                                                BackgroundType::Image(_) => "Image",
+                                            }
+                                            .to_string(),
+                                        }),
+                                        RequestType::Top,
+                                    );
+                                };
+                            };
+                        }
                         if resource_get_focus[0] {
                             let top_rect = Rect::from_min_size(
                                 [position[0], position[1]].into(),
@@ -3719,48 +3763,6 @@ impl App {
                                 } else {
                                     None
                                 };
-                            if resource_panel.scroll_length_method[0].is_some()
-                                && x_scroll_delta != 0_f32
-                                && rect.contains(mouse_pos)
-                            {
-                                resource_panel.scrolled[0] = true;
-                                resource_panel.scroll_progress[0] = if resource_panel
-                                    .scroll_progress[0]
-                                    + -x_scroll_delta * resource_panel.scroll_sensitivity
-                                    > resource_panel.scroll_length[0]
-                                {
-                                    resource_panel.scroll_length[0]
-                                } else if resource_panel.scroll_progress[0]
-                                    + -x_scroll_delta * resource_panel.scroll_sensitivity
-                                    > 0_f32
-                                {
-                                    resource_panel.scroll_progress[0]
-                                        + -x_scroll_delta * resource_panel.scroll_sensitivity
-                                } else {
-                                    0_f32
-                                };
-                            };
-                            if resource_panel.scroll_length_method[1].is_some()
-                                && y_scroll_delta != 0_f32
-                                && rect.contains(mouse_pos)
-                            {
-                                resource_panel.scrolled[1] = true;
-                                resource_panel.scroll_progress[1] = if resource_panel
-                                    .scroll_progress[1]
-                                    + -y_scroll_delta * resource_panel.scroll_sensitivity
-                                    > resource_panel.scroll_length[1]
-                                {
-                                    resource_panel.scroll_length[1]
-                                } else if resource_panel.scroll_progress[1]
-                                    + -y_scroll_delta * resource_panel.scroll_sensitivity
-                                    > 0_f32
-                                {
-                                    resource_panel.scroll_progress[1]
-                                        + -y_scroll_delta * resource_panel.scroll_sensitivity
-                                } else {
-                                    0_f32
-                                };
-                            };
                         } else if ui.input(|i| i.pointer.primary_released()) {
                             resource_panel.last_frame_mouse_status = None;
                         };
@@ -4671,8 +4673,7 @@ impl App {
                             let mut display_info =
                                 basic_front_resource.display_display_info().unwrap();
                             display_info.ignore_render_layer =
-                                if (resource_panel.last_frame_mouse_status.is_some()
-                                    || [x_scroll_delta, y_scroll_delta].iter().any(|x| *x != 0_f32))
+                                if resource_panel.last_frame_mouse_status.is_some()
                                     && resource_get_focus[1]
                                 {
                                     true
@@ -4958,7 +4959,7 @@ impl App {
                                 - self
                                     .get_split_time(&format!("{}ScrollBarXAlphaStart", &id.name))?
                                     [0]
-                                >= 1_f32
+                                >= 1000
                                 && self.timer.now_time
                                     - self
                                         .get_split_time(&format!("{}ScrollBarXAlpha", &id.name))?[0]
@@ -4979,7 +4980,7 @@ impl App {
                                 - self
                                     .get_split_time(&format!("{}ScrollBarYAlphaStart", &id.name))?
                                     [0]
-                                >= 1_f32
+                                >= 1000
                                 && self.timer.now_time
                                     - self
                                         .get_split_time(&format!("{}ScrollBarYAlpha", &id.name))?[0]
@@ -5482,8 +5483,7 @@ impl App {
             let delta = current_time - last;
             self.frame_times.push(delta);
             if self.frame_times.len() > 120 {
-                let remove_count = self.frame_times.len() - 120;
-                self.frame_times.drain(0..remove_count);
+                self.frame_times.drain(0..120);
             }
         }
         self.last_frame_time = Some(current_time);
@@ -5508,7 +5508,8 @@ impl App {
         if self.frame_times.is_empty() {
             0.0
         } else {
-            1.0 / (self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32)
+            1000_f32
+                / (self.frame_times.iter().sum::<u128>() as f32 / self.frame_times.len() as f32)
         }
     }
 
@@ -5560,7 +5561,7 @@ impl App {
     /// # 返回值
     ///
     /// 如果找到则返回 `Ok([页面运行时间, 总运行时间])`，否则返回 `Err(RustConstructorError)`。
-    pub fn get_split_time(&self, name: &str) -> Result<[f32; 2], RustConstructorError> {
+    pub fn get_split_time(&self, name: &str) -> Result<[u128; 2], RustConstructorError> {
         let split_time = self.get_resource::<SplitTime>(&RustConstructorId {
             name: name.to_string(),
             discern_type: "SplitTime".to_string(),
@@ -5577,9 +5578,7 @@ impl App {
     /// 此方法更新总运行时间和当前页面运行时间。
     pub fn update_timer(&mut self) {
         let elapsed = self.timer.timer.elapsed();
-        let seconds = elapsed.as_secs();
-        let milliseconds = elapsed.subsec_millis();
-        self.timer.total_time = seconds as f32 + milliseconds as f32 / 1000.0;
+        self.timer.total_time = elapsed.as_millis();
         self.timer.now_time = self.timer.total_time - self.timer.start_time
     }
 
@@ -5731,5 +5730,39 @@ impl App {
             last_frame_clicked: switch.last_frame_clicked,
             state: switch.state,
         })
+    }
+
+    /// Find out which switch in the radio switch group is activated.
+    ///
+    /// 查找单选开关组中哪个开关被激活了。
+    ///
+    /// # Arguments
+    ///
+    /// * `radio_group` - The name of the radio switch group
+    ///
+    /// # Returns
+    ///
+    /// Returns the name of the activated switch. If there is no activated switch or the
+    /// radio switch group does not exist, return an empty string.
+    ///
+    /// # 参数
+    ///
+    /// * `radio_group` - 单选开关组的名称
+    ///
+    /// # 返回值
+    ///
+    /// 返回激活的开关的名称，如果没有激活的开关或单选开关组不存在则返回空字符串。
+    pub fn check_radio_switch(&self, radio_group: &str) -> String {
+        let mut activate_switch = String::new();
+        for rcr in &self.rust_constructor_resource {
+            if let Ok(switch) = downcast_resource::<Switch>(&*rcr.content)
+                && switch.radio_group == radio_group
+                && switch.state == 1
+            {
+                activate_switch = rcr.id.name.clone();
+                break;
+            };
+        }
+        activate_switch
     }
 }

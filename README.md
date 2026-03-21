@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.11.0-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.11.1-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,35 +25,16 @@
 
 ## Version Update Information
 
-- The current latest version is `v2.11.0 Comprehensive Improvements`.
-  - This update comprehensively enhances resource management with multiple practical features.
+- The current latest version is `v2.11.1`.
+  - This patch includes minor adjustments to `App`.
   - **Practical Enhancements**
-    - Added `raise_on_focus` field in `ResourcePanel` to control window focus behavior on click;
-    - Added `radio_group` field in `Switch` to support radio group functionality;
-    - `Switch` tooltip now renders at the highest layer;
-    - Implemented `downcast_resource` and `downcast_resource_mut` methods in `lib.rs` for safe resource type conversion;
-    - Added `loading_fonts` and `loaded_fonts` fields in `App` to track font loading status;
-    - Extended `active_list` and `render_list` in `App` with `Option<RustConstructorId>` for reference tracking;
-    - All `info`-class methods now support `print` parameter to control whether to print the information;
-    - Added `hover_config` parameter in `display_render_layer` to highlight resources on mouse hover;
-    - Added `ignore_render_layer` parameter in `resource_get_focus` to exclude specific render layers during focus detection;
-    - Introduced `get_basic_front_resource` and `get_basic_front_resource_mut` for basic front resource access;
-    - `ResourcePanel` changes cursor appearance during drag operations;
-    - Added `panel_layout_group` tag to specify resources that ignore mutual layout constraints;
-    - Implemented `try_register_all_fonts` for safe font registration;
-    - Improved codebase quality.
+    - Added `check_radio_switch` method to identify which switch is active within a radio group;
+    - Improved code quality in select areas.
   - **Breaking Changes**
-    - Changed `state` field type in `Switch` and `SwitchData` from previous type to `usize`;
-    - Removed `Font` resource implementation;
-    - Moved `type_processor`, `get_tag`, and `position_size_processor` to `lib.rs`;
-    - Renamed `ListInfoMethod` to `ListInfoDescribeMethod`;
-    - `update_render_layer` now returns `Result<(), RustConstructorError>`;
-    - `register_all_fonts` now requires explicit font path input and returns `Result<(), RustConstructorError>`;
+    - Changed time unit from seconds to milliseconds;
     - Modified internal implementation details.
   - **Bug Fixes**
-    - Fixed mouse position check omission in `resource_get_focus` for top-layer detection;
-    - Resolved window focus issue when clicking resources inside `ResourcePanel`;
-    - Fixed scroll event causing all `ResourcePanel` children to ignore render layers;
+    - Fixed potential scroll interruption when `ResourcePanel` scrolls to a target resource;
     - Addressed several known issues.
 
 ---

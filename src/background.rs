@@ -190,12 +190,12 @@ impl<T> Variable<T> {
 /// and total application runtime, enabling coordinated animations.
 ///
 /// 该资源通过存储页面特定运行时间和应用程序总运行时间实现精确的时间控制，支持协调动画。
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
 pub struct SplitTime {
     /// Timing values: [page_runtime, total_runtime] in seconds.
     ///
     /// 时间点：[页面运行时间, 总运行时间]，单位为秒。
-    pub time: [f32; 2],
+    pub time: [u128; 2],
 
     /// Key-value pairs for categorization and metadata storage.
     ///
@@ -233,15 +233,6 @@ impl RustConstructorResource for SplitTime {
             }
             self.tags.extend(tags.iter().cloned());
         };
-    }
-}
-
-impl Default for SplitTime {
-    fn default() -> Self {
-        Self {
-            time: [0_f32, 0_f32],
-            tags: Vec::new(),
-        }
     }
 }
 

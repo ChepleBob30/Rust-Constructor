@@ -451,34 +451,34 @@ impl PositionSizeConfig {
 /// 用于跟踪应用程序和页面运行时间的计时器。
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Timer {
-    /// Time when the current page was entered, in seconds.
+    /// Time when the current page was entered, in milliseconds.
     ///
-    /// 进入当前页面的时间（秒）。
-    pub start_time: f32,
+    /// 进入当前页面的时间（毫秒）。
+    pub start_time: u128,
 
-    /// Total runtime of the application since start, in seconds.
+    /// Total runtime of the application since start, in milliseconds.
     ///
-    /// 应用程序自启动以来的总运行时间（秒）。
-    pub total_time: f32,
+    /// 应用程序自启动以来的总运行时间（毫秒）。
+    pub total_time: u128,
 
     /// Core timer instance for precise timing.
     ///
     /// 用于精确计时的核心计时器实例。
     pub timer: Instant,
 
-    /// Runtime of the current page, in seconds.
+    /// Runtime of the current page, in milliseconds.
     ///
-    /// 当前页面的运行时间（秒）。
-    pub now_time: f32,
+    /// 当前页面的运行时间（毫秒）。
+    pub now_time: u128,
 }
 
 impl Default for Timer {
     fn default() -> Self {
         Timer {
-            start_time: 0_f32,
-            total_time: 0_f32,
+            start_time: 0,
+            total_time: 0,
             timer: Instant::now(),
-            now_time: 0_f32,
+            now_time: 0,
         }
     }
 }
