@@ -16,15 +16,12 @@ use crate::{
     },
     downcast_resource, downcast_resource_mut, get_tag, position_size_processor, type_processor,
 };
-use eframe::{
-    egui::{
-        Color32, ColorImage, Context, CornerRadius, CursorIcon, FontData, FontDefinitions,
-        FontFamily, FontId, Galley, Id, ImageSource, Key, OpenUrl, Pos2, Sense, StrokeKind, Ui,
-        Vec2, text::CCursor,
-    },
-    emath::Rect,
-    epaint::{Stroke, textures::TextureOptions},
+use egui::{
+    Color32, ColorImage, CornerRadius, CursorIcon, FontData, FontDefinitions, FontFamily, FontId,
+    Galley, Id, ImageSource, Key, OpenUrl, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
+    text::CCursor,
 };
+use epaint::textures::TextureOptions;
 use std::{
     char,
     cmp::Ordering,
@@ -105,6 +102,10 @@ pub struct App {
     pub loading_fonts: Vec<[String; 2]>,
 }
 
+unsafe impl Send for App {}
+
+unsafe impl Sync for App {}
+
 impl Default for App {
     fn default() -> Self {
         App {
@@ -153,15 +154,13 @@ impl App {
     /// # Arguments
     ///
     /// * `ui` - The UI context for drawing
-    /// * `ctx` - The rendering context
     ///
     /// # 参数
     ///
     /// * `ui` - 用于绘制的UI上下文
-    /// * `ctx` - 渲染上下文
-    pub fn draw_resources(&mut self, ui: &mut Ui, ctx: &Context) {
+    pub fn draw_resources(&mut self, ui: &mut Ui) {
         for i in 0..self.render_list.len() {
-            let _ = self.draw_resource_by_index(ui, ctx, i);
+            let _ = self.draw_resource_by_index(ui, i);
         }
     }
 
@@ -182,7 +181,6 @@ impl App {
     /// # Arguments
     ///
     /// * `ui` - The UI context for drawing
-    /// * `ctx` - The rendering context
     /// * `index` - The index of the resource in the render list
     ///
     /// # Returns
@@ -193,7 +191,6 @@ impl App {
     /// # 参数
     ///
     /// * `ui` - 用于绘制的UI上下文
-    /// * `ctx` - 渲染上下文
     /// * `index` - 资源在渲染列表中的索引
     ///
     /// # 返回值
@@ -202,7 +199,6 @@ impl App {
     pub fn draw_resource_by_index(
         &mut self,
         ui: &mut Ui,
-        ctx: &Context,
         index: usize,
     ) -> Result<(), RustConstructorError> {
         if let Some(render_resource) = self.render_list.clone().get(index) {
@@ -235,7 +231,7 @@ impl App {
                                             [w as usize, h as usize],
                                             &raw_data,
                                         );
-                                        let loaded_image_texture = ctx.load_texture(
+                                        let loaded_image_texture = ui.load_texture(
                                             &render_resource.0.name,
                                             color_image,
                                             TextureOptions::LINEAR,
@@ -258,11 +254,11 @@ impl App {
                         };
                         [image.position, image.size] = position_size_processor(
                             image.basic_front_resource_config.position_size_config,
-                            ctx,
+                            ui,
                         );
                         if !image.display_info.hidden {
                             if let Some(clip_rect) = image.basic_front_resource_config.clip_rect {
-                                let [min, size] = position_size_processor(clip_rect, ctx);
+                                let [min, size] = position_size_processor(clip_rect, ui);
                                 ui.set_clip_rect(Rect::from_min_size(min.into(), size.into()));
                             };
                             if let Some(texture) = &image.texture {
@@ -272,7 +268,7 @@ impl App {
                                 );
 
                                 // 直接绘制图片
-                                eframe::egui::Image::new(ImageSource::Texture((&texture.0).into()))
+                                egui::Image::new(ImageSource::Texture((&texture.0).into()))
                                     .tint(Color32::from_rgba_unmultiplied(
                                         image.overlay_color[0],
                                         image.overlay_color[1],
@@ -301,8 +297,7 @@ impl App {
                             if image.basic_front_resource_config.clip_rect.is_some() {
                                 ui.set_clip_rect(Rect::from_min_size(
                                     [0_f32, 0_f32].into(),
-                                    [ctx.available_rect().width(), ctx.available_rect().height()]
-                                        .into(),
+                                    [ui.available_width(), ui.available_height()].into(),
                                 ));
                             };
                         };
@@ -324,7 +319,7 @@ impl App {
                         let mut text = text.clone();
                         [_, text.truncate_size] = position_size_processor(
                             text.basic_front_resource_config.position_size_config,
-                            ctx,
+                            ui,
                         );
                         let display_content = if text.content.is_empty()
                             || text
@@ -415,7 +410,7 @@ impl App {
                                 .x_size_grid(0_f32, 0_f32)
                                 .y_size_grid(0_f32, 0_f32)
                                 .origin_size(text.size[0], text.size[1]),
-                            ctx,
+                            ui,
                         );
                         // 查找超链接索引值
                         if text.last_frame_content != display_content {
@@ -482,7 +477,7 @@ impl App {
                             );
 
                             if let Some(clip_rect) = text.basic_front_resource_config.clip_rect {
-                                let [min, size] = position_size_processor(clip_rect, ctx);
+                                let [min, size] = position_size_processor(clip_rect, ui);
                                 ui.set_clip_rect(Rect::from_min_size(min.into(), size.into()));
                             };
 
@@ -681,7 +676,7 @@ impl App {
                                     if start <= chars.len() && end <= chars.len() && start < end {
                                         let selected_text: String =
                                             chars[start..end].iter().collect();
-                                        ui.ctx().copy_text(selected_text);
+                                        ui.copy_text(selected_text);
                                     };
                                 };
 
@@ -952,7 +947,7 @@ impl App {
                                         if clicked_on_link {
                                             // 执行超链接跳转
                                             if !url.is_empty() {
-                                                ui.ctx().open_url(OpenUrl::new_tab(url));
+                                                ui.open_url(OpenUrl::new_tab(url));
                                             };
                                         };
                                     };
@@ -1068,8 +1063,7 @@ impl App {
                             if text.basic_front_resource_config.clip_rect.is_some() {
                                 ui.set_clip_rect(Rect::from_min_size(
                                     [0_f32, 0_f32].into(),
-                                    [ctx.available_rect().width(), ctx.available_rect().height()]
-                                        .into(),
+                                    [ui.available_width(), ui.available_height()].into(),
                                 ));
                             };
                         } else {
@@ -1088,13 +1082,13 @@ impl App {
                         let mut custom_rect = custom_rect.clone();
                         [custom_rect.position, custom_rect.size] = position_size_processor(
                             custom_rect.basic_front_resource_config.position_size_config,
-                            ctx,
+                            ui,
                         );
                         if !custom_rect.display_info.hidden {
                             if let Some(clip_rect) =
                                 custom_rect.basic_front_resource_config.clip_rect
                             {
-                                let [min, size] = position_size_processor(clip_rect, ctx);
+                                let [min, size] = position_size_processor(clip_rect, ui);
                                 ui.set_clip_rect(Rect::from_min_size(min.into(), size.into()));
                             };
                             ui.painter().rect(
@@ -1172,8 +1166,7 @@ impl App {
                             if custom_rect.basic_front_resource_config.clip_rect.is_some() {
                                 ui.set_clip_rect(Rect::from_min_size(
                                     [0_f32, 0_f32].into(),
-                                    [ctx.available_rect().width(), ctx.available_rect().height()]
-                                        .into(),
+                                    [ui.available_width(), ui.available_height()].into(),
                                 ));
                             };
                         };
@@ -1598,7 +1591,7 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `ctx` - The rendering context
+    /// * `ui` - The UI context for drawing
     ///
     /// # Returns
     ///
@@ -1607,12 +1600,12 @@ impl App {
     ///
     /// # 参数
     ///
-    /// * `ctx` - 渲染上下文
+    /// * `ui` - 用于绘制的UI上下文
     ///
     /// # 返回值
     ///
     /// 成功时返回`Ok(())`，如果资源无法找到则返回`Err(RustConstructorError)`。
-    pub fn update_render_layer(&mut self, ctx: &Context) -> Result<(), RustConstructorError> {
+    pub fn update_render_layer(&mut self, ui: &Ui) -> Result<(), RustConstructorError> {
         self.render_layer.clear();
         for info in &self.render_list {
             let basic_front_resource = self.get_basic_front_resource(&info.0)?;
@@ -1623,7 +1616,7 @@ impl App {
                         .display_basic_front_resource_config()
                         .clip_rect
                     {
-                        let [position, size] = position_size_processor(clip_rect, ctx);
+                        let [position, size] = position_size_processor(clip_rect, ui);
                         let [resource_rect, clip_rect] = [
                             Rect::from_min_max(
                                 basic_front_resource.display_position().into(),
@@ -2587,7 +2580,6 @@ impl App {
     /// * `name` - The name for the resource
     /// * `resource` - The resource instance to add and draw
     /// * `ui` - The UI context for drawing
-    /// * `ctx` - The rendering context
     ///
     /// # Returns
     ///
@@ -2598,7 +2590,6 @@ impl App {
     /// * `name` - 资源的名称
     /// * `resource` - 要添加和绘制的资源实例
     /// * `ui` - 用于绘制的UI上下文
-    /// * `ctx` - 渲染上下文
     ///
     /// # 返回值
     ///
@@ -2608,7 +2599,6 @@ impl App {
         name: &str,
         resource: T,
         ui: &mut Ui,
-        ctx: &Context,
     ) -> Result<(), RustConstructorError> {
         let discern_type = &*type_processor(&resource);
         if self
@@ -2626,7 +2616,6 @@ impl App {
                     discern_type: discern_type.to_string(),
                 },
                 ui,
-                ctx,
             )
         }
     }
@@ -2643,7 +2632,6 @@ impl App {
     ///
     /// * `id` - The unique identifier of the resource
     /// * `ui` - The UI context for drawing
-    /// * `ctx` - The rendering context
     ///
     /// # Returns
     ///
@@ -2653,7 +2641,6 @@ impl App {
     ///
     /// * `id` - 资源的唯一标识符
     /// * `ui` - 用于绘制的UI上下文
-    /// * `ctx` - 渲染上下文
     ///
     /// # 返回值
     ///
@@ -2662,7 +2649,6 @@ impl App {
         &mut self,
         id: &RustConstructorId,
         ui: &mut Ui,
-        ctx: &Context,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(id).is_some() {
             match &*id.discern_type {
@@ -2676,10 +2662,10 @@ impl App {
                     self.update_render_list();
                     // 绘制渲染队列中的资源。
                     for i in 0..self.render_list.len() {
-                        self.draw_resource_by_index(ui, ctx, i)?;
+                        self.draw_resource_by_index(ui, i)?;
                     }
                     // 更新渲染列表。
-                    self.update_render_layer(ctx)?;
+                    self.update_render_layer(ui)?;
                     // 更新资源活跃状态。
                     self.active_list.clear();
                     // 更新字体加载情况。
@@ -2704,7 +2690,7 @@ impl App {
                         discern_type: "PageData".to_string(),
                     })?;
                     if page_data.forced_update {
-                        ctx.request_repaint();
+                        ui.request_repaint();
                     };
                 }
                 "Background" => {
@@ -2746,7 +2732,6 @@ impl App {
                                 discern_type: "CustomRect".to_string(),
                             },
                             ui,
-                            ctx,
                         ),
                         BackgroundType::Image(_) => self.use_resource(
                             &RustConstructorId {
@@ -2754,7 +2739,6 @@ impl App {
                                 discern_type: "Image".to_string(),
                             },
                             ui,
-                            ctx,
                         ),
                     }?;
                 }
@@ -2821,9 +2805,7 @@ impl App {
                             .basic_front_resource_config
                             .position_size_config
                             .display_method
-                            .0 = if mouse_pos.x + hint_text.actual_size[0]
-                            <= ctx.available_rect().width()
-                        {
+                            .0 = if mouse_pos.x + hint_text.actual_size[0] <= ui.available_width() {
                             HorizontalAlign::Left
                         } else {
                             HorizontalAlign::Right
@@ -2832,8 +2814,7 @@ impl App {
                             .basic_front_resource_config
                             .position_size_config
                             .display_method
-                            .1 = if mouse_pos.y + hint_text.actual_size[1]
-                            <= ctx.available_rect().height()
+                            .1 = if mouse_pos.y + hint_text.actual_size[1] <= ui.available_height()
                         {
                             VerticalAlign::Top
                         } else {
@@ -2970,7 +2951,6 @@ impl App {
                             discern_type: "Background".to_string(),
                         },
                         ui,
-                        ctx,
                     )?;
                     self.use_resource(
                         &RustConstructorId {
@@ -2978,7 +2958,6 @@ impl App {
                             discern_type: "Text".to_string(),
                         },
                         ui,
-                        ctx,
                     )?;
                     if alpha != 0 {
                         self.try_request_jump_render_list(
@@ -2994,7 +2973,6 @@ impl App {
                                 discern_type: "Text".to_string(),
                             },
                             ui,
-                            ctx,
                         )?;
                     };
                 }
@@ -3059,12 +3037,8 @@ impl App {
                     if position_size_config.origin_size[1] < resource_panel.min_size[1] {
                         position_size_config.origin_size[1] = resource_panel.min_size[1];
                     };
-                    [position, size] = position_size_processor(position_size_config, ctx);
-                    let scroll_delta: [f32; 2] = if resource_panel.use_smooth_scroll_delta {
-                        ui.input(|i| i.smooth_scroll_delta).into()
-                    } else {
-                        ui.input(|i| i.raw_scroll_delta).into()
-                    };
+                    [position, size] = position_size_processor(position_size_config, ui);
+                    let scroll_delta: [f32; 2] = ui.input(|i| i.smooth_scroll_delta).into();
                     let [x_scroll_delta, y_scroll_delta] =
                         if scroll_delta[0].abs() >= scroll_delta[1].abs() {
                             [
@@ -3260,116 +3234,96 @@ impl App {
                                 left_rect.contains(mouse_pos),
                                 right_rect.contains(mouse_pos),
                             ] {
-                                [true, false, false, false] => {
-                                    if resource_panel.resizable[0] {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::TopResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[1] > resource_panel.min_size[1]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[1] < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                        };
+                                [true, false, false, false] if resource_panel.resizable[0] => {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::TopResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[1] >= resource_panel.max_size.unwrap()[1]
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    } else {
+                                        ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                     };
                                 }
-                                [false, true, false, false] => {
-                                    if resource_panel.resizable[1] {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::BottomResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[1] > resource_panel.min_size[1]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[1] < resource_panel.max_size.unwrap()[1])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[1] >= resource_panel.max_size.unwrap()[1]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeNorth);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeSouth);
-                                        };
+                                [false, true, false, false] if resource_panel.resizable[1] => {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::BottomResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[1] > resource_panel.min_size[1]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[1] < resource_panel.max_size.unwrap()[1])
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[1] >= resource_panel.max_size.unwrap()[1]
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    } else {
+                                        ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                     };
                                 }
-                                [false, false, true, false] => {
-                                    if resource_panel.resizable[2] {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::LeftResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                        };
+                                [false, false, true, false] if resource_panel.resizable[2] => {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::LeftResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[0] > resource_panel.min_size[0]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[0] < resource_panel.max_size.unwrap()[0])
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                    } else {
+                                        ui.set_cursor_icon(CursorIcon::ResizeWest);
                                     };
                                 }
-                                [false, false, false, true] => {
-                                    if resource_panel.resizable[3] {
-                                        if resource_panel.last_frame_mouse_status.is_none()
-                                            && ui.input(|i| i.pointer.primary_pressed())
-                                        {
-                                            resource_panel.last_frame_mouse_status = Some((
-                                                mouse_pos.into(),
-                                                ClickAim::RightResize,
-                                                [
-                                                    mouse_pos.x - position[0],
-                                                    mouse_pos.y - position[1],
-                                                ],
-                                            ))
-                                        };
-                                        if size[0] > resource_panel.min_size[0]
-                                            && (resource_panel.max_size.is_none()
-                                                || size[0] < resource_panel.max_size.unwrap()[0])
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                                        } else if resource_panel.max_size.is_some()
-                                            && size[0] >= resource_panel.max_size.unwrap()[0]
-                                        {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeWest);
-                                        } else {
-                                            ctx.set_cursor_icon(CursorIcon::ResizeEast);
-                                        };
+                                [false, false, false, true] if resource_panel.resizable[3] => {
+                                    if resource_panel.last_frame_mouse_status.is_none()
+                                        && ui.input(|i| i.pointer.primary_pressed())
+                                    {
+                                        resource_panel.last_frame_mouse_status = Some((
+                                            mouse_pos.into(),
+                                            ClickAim::RightResize,
+                                            [mouse_pos.x - position[0], mouse_pos.y - position[1]],
+                                        ))
+                                    };
+                                    if size[0] > resource_panel.min_size[0]
+                                        && (resource_panel.max_size.is_none()
+                                            || size[0] < resource_panel.max_size.unwrap()[0])
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    } else if resource_panel.max_size.is_some()
+                                        && size[0] >= resource_panel.max_size.unwrap()[0]
+                                    {
+                                        ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                    } else {
+                                        ui.set_cursor_icon(CursorIcon::ResizeEast);
                                     };
                                 }
                                 [true, false, true, false] => {
@@ -3397,14 +3351,14 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNwSe);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouthEast);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorthWest)
                                             };
                                         }
                                         [false, true] => {
@@ -3425,13 +3379,13 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
                                             };
                                         }
                                         [true, false] => {
@@ -3452,13 +3406,13 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3489,14 +3443,14 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNwSe);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorthWest);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouthEast)
                                             };
                                         }
                                         [false, true] => {
@@ -3517,13 +3471,13 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
                                             };
                                         }
                                         [true, false] => {
@@ -3544,13 +3498,13 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3581,14 +3535,14 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNeSw);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouthWest);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorthEast)
                                             };
                                         }
                                         [false, true] => {
@@ -3609,13 +3563,13 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
                                             };
                                         }
                                         [true, false] => {
@@ -3636,13 +3590,13 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3673,14 +3627,14 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNeSw);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorthEast);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouthWest)
                                             };
                                         }
                                         [false, true] => {
@@ -3701,13 +3655,13 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
                                             };
                                         }
                                         [true, false] => {
@@ -3728,13 +3682,13 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                             } else {
-                                                ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3827,14 +3781,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNwSe);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                    ui.set_cursor_icon(CursorIcon::ResizeSouthEast);
                                 } else {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                    ui.set_cursor_icon(CursorIcon::ResizeNorthWest)
                                 };
                             }
                             ClickAim::RightBottomResize => {
@@ -3879,14 +3833,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNwSe);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNorthWest);
                                 } else {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                    ui.set_cursor_icon(CursorIcon::ResizeSouthEast)
                                 };
                             }
                             ClickAim::RightTopResize => {
@@ -3938,14 +3892,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNeSw);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                    ui.set_cursor_icon(CursorIcon::ResizeSouthWest);
                                 } else {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                    ui.set_cursor_icon(CursorIcon::ResizeNorthEast)
                                 };
                             }
                             ClickAim::LeftBottomResize => {
@@ -3997,14 +3951,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNeSw);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNorthEast);
                                 } else {
-                                    ctx.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                    ui.set_cursor_icon(CursorIcon::ResizeSouthWest)
                                 };
                             }
                             ClickAim::TopResize => {
@@ -4016,7 +3970,7 @@ impl App {
                                     position_size_config.origin_size[1] +=
                                         position[1] - mouse_pos[1];
                                     position_size_config.origin_position[1] = mouse_pos[1];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    ui.set_cursor_icon(CursorIcon::ResizeVertical);
                                 } else if resource_panel.max_size.is_some()
                                     && position[1] - mouse_pos[1] + size[1]
                                         >= resource_panel.max_size.unwrap()[1]
@@ -4026,14 +3980,14 @@ impl App {
                                             - position_size_config.origin_size[1];
                                     position_size_config.origin_size[1] =
                                         resource_panel.max_size.unwrap()[1];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                 } else {
                                     position_size_config.origin_position[1] += position_size_config
                                         .origin_size[1]
                                         - resource_panel.min_size[1];
                                     position_size_config.origin_size[1] =
                                         resource_panel.min_size[1];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                 };
                             }
                             ClickAim::BottomResize => {
@@ -4044,18 +3998,18 @@ impl App {
                                 {
                                     position_size_config.origin_size[1] =
                                         mouse_pos[1] - position[1];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    ui.set_cursor_icon(CursorIcon::ResizeVertical);
                                 } else if resource_panel.max_size.is_some()
                                     && mouse_pos[1] - position[1]
                                         >= resource_panel.max_size.unwrap()[1]
                                 {
                                     position_size_config.origin_size[1] =
                                         resource_panel.max_size.unwrap()[1];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    ui.set_cursor_icon(CursorIcon::ResizeNorth);
                                 } else {
                                     position_size_config.origin_size[1] =
                                         resource_panel.min_size[1];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    ui.set_cursor_icon(CursorIcon::ResizeSouth);
                                 };
                             }
                             ClickAim::LeftResize => {
@@ -4067,7 +4021,7 @@ impl App {
                                     position_size_config.origin_size[0] +=
                                         position[0] - mouse_pos[0];
                                     position_size_config.origin_position[0] = mouse_pos[0];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
                                 } else if resource_panel.max_size.is_some()
                                     && position[0] - mouse_pos[0] + size[0]
                                         >= resource_panel.max_size.unwrap()[0]
@@ -4077,14 +4031,14 @@ impl App {
                                             - position_size_config.origin_size[0];
                                     position_size_config.origin_size[0] =
                                         resource_panel.max_size.unwrap()[0];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                    ui.set_cursor_icon(CursorIcon::ResizeEast);
                                 } else {
                                     position_size_config.origin_position[0] += position_size_config
                                         .origin_size[0]
                                         - resource_panel.min_size[0];
                                     position_size_config.origin_size[0] =
                                         resource_panel.min_size[0];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                    ui.set_cursor_icon(CursorIcon::ResizeWest);
                                 };
                             }
                             ClickAim::RightResize => {
@@ -4095,22 +4049,22 @@ impl App {
                                 {
                                     position_size_config.origin_size[0] =
                                         mouse_pos[0] - position[0];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
                                 } else if resource_panel.max_size.is_some()
                                     && mouse_pos[0] - position[0]
                                         >= resource_panel.max_size.unwrap()[0]
                                 {
                                     position_size_config.origin_size[0] =
                                         resource_panel.max_size.unwrap()[0];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeWest);
+                                    ui.set_cursor_icon(CursorIcon::ResizeWest);
                                 } else {
                                     position_size_config.origin_size[0] =
                                         resource_panel.min_size[0];
-                                    ctx.set_cursor_icon(CursorIcon::ResizeEast);
+                                    ui.set_cursor_icon(CursorIcon::ResizeEast);
                                 };
                             }
                             ClickAim::Move => {
-                                ctx.set_cursor_icon(match resource_panel.movable {
+                                ui.set_cursor_icon(match resource_panel.movable {
                                     [true, true] => CursorIcon::Move,
                                     [true, false] => CursorIcon::ResizeColumn,
                                     [false, true] => CursorIcon::ResizeRow,
@@ -4127,7 +4081,7 @@ impl App {
                             }
                         };
                     };
-                    [position, size] = position_size_processor(position_size_config, ctx);
+                    [position, size] = position_size_processor(position_size_config, ui);
                     let background_type = match background.background_type.clone() {
                         BackgroundType::CustomRect(config) => BackgroundType::CustomRect(
                             config
@@ -4150,7 +4104,6 @@ impl App {
                             discern_type: "Background".to_string(),
                         },
                         ui,
-                        ctx,
                     )?;
                     type PointList = Vec<([f32; 2], [f32; 2], [bool; 2], Option<String>)>;
                     let mut resource_point_list: PointList = Vec::new();
@@ -4699,7 +4652,6 @@ impl App {
                                 discern_type: info[1].clone(),
                             },
                             ui,
-                            ctx,
                         )?;
                     }
                     let mut resource_length = [None, None];
@@ -4872,7 +4824,6 @@ impl App {
                                     discern_type: "Background".to_string(),
                                 },
                                 ui,
-                                ctx,
                             )?;
                             let line_length = if resource_panel.scroll_length[0] == 0_f32 {
                                 (size[1] - margin[0] * 2_f32)
@@ -4945,7 +4896,6 @@ impl App {
                                     discern_type: "Background".to_string(),
                                 },
                                 ui,
-                                ctx,
                             )?;
                         }
                         ScrollBarDisplayMethod::OnlyScroll(ref config, margin, width) => {
@@ -5073,7 +5023,6 @@ impl App {
                                     discern_type: "Background".to_string(),
                                 },
                                 ui,
-                                ctx,
                             )?;
                             let line_length = if resource_panel.scroll_length[0] == 0_f32 {
                                 (size[1] - margin[0] * 2_f32)
@@ -5157,7 +5106,6 @@ impl App {
                                     discern_type: "Background".to_string(),
                                 },
                                 ui,
-                                ctx,
                             )?;
                         }
                         ScrollBarDisplayMethod::Hidden => {}
@@ -5217,14 +5165,14 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `ctx` - The egui context for font registration
+    /// * `ui` - The UI context for drawing
     /// * `font_info` - Font information, including font names and paths
     ///
     /// # 参数
     ///
-    /// * `ctx` - 用于字体注册的egui上下文
+    /// * `ui` - 用于绘制的UI上下文
     /// * `font_info` - 字体信息，包含字体名称和路径
-    pub fn try_register_all_fonts(&mut self, ctx: &Context, font_info: Vec<[&str; 2]>) {
+    pub fn try_register_all_fonts(&mut self, ui: &Ui, font_info: Vec<[&str; 2]>) {
         let mut font_definitions_amount = FontDefinitions::default();
         let mut loaded_fonts = Vec::new();
         for font_info in font_info {
@@ -5276,7 +5224,7 @@ impl App {
             .iter()
             .map(|x| [x[0].to_string(), x[1].to_string()])
             .collect();
-        ctx.set_fonts(font_definitions_amount);
+        ui.set_fonts(font_definitions_amount);
     }
 
     /// Registers all fonts with the egui context.
@@ -5290,7 +5238,7 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `ctx` - The egui context for font registration
+    /// * `ui` - The UI context for drawing
     /// * `font_info` - Font information, including font names and paths
     ///
     /// # Returns
@@ -5300,7 +5248,7 @@ impl App {
     ///
     /// # 参数
     ///
-    /// * `ctx` - 用于字体注册的egui上下文
+    /// * `ui` - 用于绘制的UI上下文
     /// * `font_info` - 字体信息，包含字体名称和路径
     ///
     /// # 返回值
@@ -5308,7 +5256,7 @@ impl App {
     /// 如果成功完成加载返回`Ok(())`，否则返回`Err(RustConstructorError)`。
     pub fn register_all_fonts(
         &mut self,
-        ctx: &Context,
+        ui: &Ui,
         font_info: Vec<[&str; 2]>,
     ) -> Result<(), RustConstructorError> {
         let mut font_definitions_amount = FontDefinitions::default();
@@ -5367,7 +5315,7 @@ impl App {
             .iter()
             .map(|x| [x[0].to_string(), x[1].to_string()])
             .collect();
-        ctx.set_fonts(font_definitions_amount);
+        ui.set_fonts(font_definitions_amount);
         Ok(())
     }
 
@@ -5431,8 +5379,9 @@ impl App {
             name: name.to_string(),
             discern_type: "PageData".to_string(),
         })?;
+        let enter_page_updated = page_data.enter_page_updated;
         page_data.enter_page_updated = true;
-        Ok(page_data.enter_page_updated)
+        Ok(enter_page_updated)
     }
 
     /// Updates when entering a new page.
@@ -5603,7 +5552,7 @@ impl App {
     /// # 返回值
     ///
     /// 成功时返回 `Ok(())`，如果资源无法找到则返回 `Err(RustConstructorError)`。
-    pub fn modify_variable<T: Debug + 'static>(
+    pub fn modify_variable<T: Debug + Send + Sync + 'static>(
         &mut self,
         name: &str,
         value: Option<T>,
@@ -5635,7 +5584,7 @@ impl App {
     /// # 返回值
     ///
     /// 成功时返回 `Ok(Option<T>)`，如果资源无法找到则返回 `Err(RustConstructorError)`。
-    pub fn get_variable<T: Debug + Clone + 'static>(
+    pub fn get_variable<T: Debug + Clone + Send + Sync + 'static>(
         &self,
         name: &str,
     ) -> Result<Option<T>, RustConstructorError> {

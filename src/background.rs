@@ -117,7 +117,7 @@ pub struct Variable<T> {
     pub tags: Vec<[String; 2]>,
 }
 
-impl<T: Debug + 'static> RustConstructorResource for Variable<T> {
+impl<T: Debug + Send + Sync + 'static> RustConstructorResource for Variable<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }

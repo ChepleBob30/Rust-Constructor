@@ -13,31 +13,10 @@
 //!
 //! ## Quick Start 快速入门
 //!
-//! ```rust
-//! pub struct RcApp {
-//!     pub inner: rust_constructor::app::App,
-//! }
+//! Due to dependency issues, we cannot provide the test cases directly within the code. However, you can
+//! find the directly usable code in the `README`.
 //!
-//! impl eframe::App for RcApp {
-//!     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-//!         egui::CentralPanel::default().show(ctx, |ui| {
-//!             ui.label("Hello world");
-//!         });
-//!     }
-//! }
-//!
-//!
-//! eframe::run_native(
-//!     "Example App",
-//!     eframe::NativeOptions::default(),
-//!     Box::new(|_| {
-//!         Ok(Box::new(RcApp {
-//!             inner: rust_constructor::app::App::default(),
-//!         }))
-//!     }),
-//! )
-//! .unwrap();
-//! ```
+//! 由于依赖问题，我们无法直接在代码中提供测试用例，你可以在`README`中找到能直接使用的代码。
 //!
 //! ## Documentation 文档
 //!
@@ -48,7 +27,7 @@ pub mod advance_front;
 pub mod app;
 pub mod background;
 pub mod basic_front;
-use eframe::egui::Context;
+use egui::Ui;
 use std::{
     any::{Any, type_name, type_name_of_val},
     error::Error,
@@ -65,7 +44,16 @@ use std::{
 /// allowing for the acquisition and modification of specific resources and their details.
 ///
 /// 此特征为框架中的所有GUI资源提供了一个公共接口，允许获取具体资源及其细节并对其进行修改。
-pub trait RustConstructorResource: Debug {
+///
+/// # Thread Safety
+///
+/// This trait is automatically impl'd for types that implement `Send` and `Sync`,
+/// allowing `App` to be used in multi-threaded contexts (e.g., Bevy).
+///
+/// # 线程安全
+///
+/// 此特征自动为实现了 `Send` 和 `Sync` 的类型 impl，使 `App` 可以在多线程上下文中使用（例如 Bevy）。
+pub trait RustConstructorResource: Debug + Send + Sync {
     /// Returns a reference to the resource as `Any` for extract the specific type.
     ///
     /// 以`Any`返回对资源的引用，用于取出具体类型。
@@ -254,6 +242,10 @@ pub struct RustConstructorResourceBox {
     /// 类型擦除的资源内容。
     pub content: Box<dyn RustConstructorResource>,
 }
+
+unsafe impl Send for RustConstructorResourceBox {}
+
+unsafe impl Sync for RustConstructorResourceBox {}
 
 impl RustConstructorResourceBox {
     pub fn new(name: &str, discern_type: &str, content: Box<dyn RustConstructorResource>) -> Self {
@@ -813,16 +805,13 @@ pub fn downcast_resource_mut<T: RustConstructorResource + 'static>(
 /// # 返回值
 ///
 /// 返回根据配置计算出的 `[位置, 尺寸]`
-pub fn position_size_processor(
-    position_size_config: PositionSizeConfig,
-    ctx: &Context,
-) -> [[f32; 2]; 2] {
+pub fn position_size_processor(position_size_config: PositionSizeConfig, ui: &Ui) -> [[f32; 2]; 2] {
     let mut position = [0_f32, 0_f32];
     let mut size = [0_f32, 0_f32];
     size[0] = match position_size_config.x_size_grid[0] {
         0_f32 => position_size_config.origin_size[0],
         _ => {
-            (ctx.available_rect().width() / position_size_config.x_size_grid[1]
+            (ui.available_width() / position_size_config.x_size_grid[1]
                 * position_size_config.x_size_grid[0])
                 + position_size_config.origin_size[0]
         }
@@ -830,7 +819,7 @@ pub fn position_size_processor(
     size[1] = match position_size_config.y_size_grid[0] {
         0_f32 => position_size_config.origin_size[1],
         _ => {
-            (ctx.available_rect().height() / position_size_config.y_size_grid[1]
+            (ui.available_height() / position_size_config.y_size_grid[1]
                 * position_size_config.y_size_grid[0])
                 + position_size_config.origin_size[1]
         }
@@ -838,7 +827,7 @@ pub fn position_size_processor(
     position[0] = match position_size_config.x_location_grid[1] {
         0_f32 => position_size_config.origin_position[0],
         _ => {
-            (ctx.available_rect().width() / position_size_config.x_location_grid[1]
+            (ui.available_width() / position_size_config.x_location_grid[1]
                 * position_size_config.x_location_grid[0])
                 + position_size_config.origin_position[0]
         }
@@ -846,7 +835,7 @@ pub fn position_size_processor(
     position[1] = match position_size_config.y_location_grid[1] {
         0_f32 => position_size_config.origin_position[1],
         _ => {
-            (ctx.available_rect().height() / position_size_config.y_location_grid[1]
+            (ui.available_height() / position_size_config.y_location_grid[1]
                 * position_size_config.y_location_grid[0])
                 + position_size_config.origin_position[1]
         }

@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.11.1-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.11.2-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,16 +25,18 @@
 
 ## 版本更新信息
 
-- 目前的最新版本为`v2.11.1`。
-  - 本更新对`App`进行了细微修改。
+- 当前版本为`v2.11.2`。
+  - 本更新修复了一些问题，并适配了新版本的`egui`，推荐更新`egui`版本后使用。
   - **实用改动**
-    - 添加`check_radio_switch`方法，用于检查单选开关组中哪个开关被激活；
+    - `App` `RustConstructorResource` `RustConstructorResourceBox`现在实现了`Send`和`Sync`;
     - 改进了部分代码。
   - **破坏性改动**
-    - 将计时单位由秒改为毫秒；
+    - 现在不再依赖`eframe`，取而代之的是`egui`和`epaint`；
+    - 移除了`ResourcePanel`的`use_smooth_scroll_delta`；
+    - 移除了所有对`egui::Context`的依赖，现在全部采用`egui::Ui`；
     - 对部分内容进行了修改。
   - **漏洞修复**
-    - 修复了`ResourcePanel`滚动到资源时有可能会中断滚动的问题；
+    - 修复了`check_enter_updated`无法正常使用的问题；
     - 修复了一些已知问题。
 
 ---
@@ -59,13 +61,12 @@ pub struct RcApp {
 }
 
 impl eframe::App for RcApp {
-    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.label("Hello world");
         });
     }
 }
-
 
 eframe::run_native(
     "Example App",

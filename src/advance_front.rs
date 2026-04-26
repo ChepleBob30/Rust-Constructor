@@ -5,7 +5,7 @@ use crate::{
     DisplayInfo, RustConstructorId, RustConstructorResource,
     basic_front::{CustomRectConfig, ImageConfig, TextConfig},
 };
-use eframe::egui::PointerButton;
+use egui::PointerButton;
 use std::any::Any;
 
 /// Control the basic front resource type for Background selection.
@@ -347,11 +347,6 @@ pub struct ResourcePanel {
     /// 滚动交互的敏感性。
     pub scroll_sensitivity: f32,
 
-    /// Whether to use smooth scrolling with delta values.
-    ///
-    /// 是否使用平滑滚动。
-    pub use_smooth_scroll_delta: bool,
-
     /// Display behavior of the scroll bar.
     ///
     /// 显示滚动条的方法。
@@ -470,7 +465,6 @@ impl Default for ResourcePanel {
             movable: [true, true],
             scroll_length_method: [None, None],
             scroll_sensitivity: 0_f32,
-            use_smooth_scroll_delta: true,
             scroll_bar_display_method: ScrollBarDisplayMethod::OnlyScroll(
                 BackgroundType::default(),
                 [4_f32, 2_f32],
@@ -540,12 +534,6 @@ impl ResourcePanel {
     #[inline]
     pub fn scroll_sensitivity(mut self, scroll_sensitivity: f32) -> Self {
         self.scroll_sensitivity = scroll_sensitivity;
-        self
-    }
-
-    #[inline]
-    pub fn use_smooth_scroll_delta(mut self, use_smooth_scroll_delta: bool) -> Self {
-        self.use_smooth_scroll_delta = use_smooth_scroll_delta;
         self
     }
 

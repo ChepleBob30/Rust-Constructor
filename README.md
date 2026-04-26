@@ -5,9 +5,9 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.11.1-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.11.2-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
-[English](./README.md) | 简体中文
+English | [简体中文](./README_zh.md)
 
 ---
 
@@ -25,17 +25,19 @@
 
 ## Version Update Information
 
-- The current latest version is `v2.11.1`.
-  - This patch includes minor adjustments to `App`.
-  - **Practical Enhancements**
-    - Added `check_radio_switch` method to identify which switch is active within a radio group;
-    - Improved code quality in select areas.
+- The current version is `v2.11.2`.
+  - This update fixes some issues and adapts to the new version of `egui`, so it is recommended that you update the `egui` version and use it.
+  - **Useful Changes**
+    - `App` `RustConstructorResource` `RustConstructorResourceBox` now implements `Send` and `Sync`;
+    - Improved some parts of the code.
   - **Breaking Changes**
-    - Changed time unit from seconds to milliseconds;
-    - Modified internal implementation details.
+    - It no longer relies on `eframe`; it is replaced by `egui` and `epaint`;
+    - Removed `use_smooth_scroll_delta` from `ResourcePanel`;
+    - Removed all dependencies on `egui::Context`; now everything uses `egui::Ui`;
+    - Some content has been modified.
   - **Bug Fixes**
-    - Fixed potential scroll interruption when `ResourcePanel` scrolls to a target resource;
-    - Addressed several known issues.
+    - Fixed the issue where `check_enter_updated` could not be used normally;
+    - Fixed several known issues.
 
 ---
 
@@ -59,13 +61,12 @@ pub struct RcApp {
 }
 
 impl eframe::App for RcApp {
-    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.label("Hello world");
         });
     }
 }
-
 
 eframe::run_native(
     "Example App",
