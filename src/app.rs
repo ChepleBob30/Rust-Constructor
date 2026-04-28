@@ -14,14 +14,25 @@ use crate::{
     basic_front::{
         CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod, Text,
     },
-    downcast_resource, downcast_resource_mut, get_tag, position_size_processor, type_processor,
+    ctx_adapter, downcast_resource, downcast_resource_mut, get_tag, position_size_processor,
+    type_processor,
 };
-use egui::{
+#[cfg(feature = "bevy")]
+use bevy_asset::Asset;
+#[cfg(feature = "bevy")]
+use bevy_reflect::TypePath;
+#[cfg(feature = "bevy")]
+use egui_bevy::{
     Color32, ColorImage, CornerRadius, CursorIcon, FontData, FontDefinitions, FontFamily, FontId,
-    Galley, Id, ImageSource, Key, OpenUrl, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
-    text::CCursor,
+    Galley, Id, Image as Img, ImageSource, Key, OpenUrl, Pos2, Rect, Sense, Stroke, StrokeKind, Ui,
+    Vec2, epaint::textures::TextureOptions, text::CCursor,
 };
-use epaint::textures::TextureOptions;
+#[cfg(feature = "standard")]
+use egui_standard::{
+    Color32, ColorImage, CornerRadius, CursorIcon, FontData, FontDefinitions, FontFamily, FontId,
+    Galley, Id, Image as Img, ImageSource, Key, OpenUrl, Pos2, Rect, Sense, Stroke, StrokeKind, Ui,
+    Vec2, epaint::textures::TextureOptions, text::CCursor,
+};
 use std::{
     char,
     cmp::Ordering,
@@ -35,7 +46,8 @@ use std::{
 /// This struct serves as the central hub for the Rust Constructor framework.
 ///
 /// 该结构体是Rust Constructor框架的中心枢纽。
-#[derive(Debug)]
+#[cfg_attr(feature = "standard", derive(Debug))]
+#[cfg_attr(feature = "bevy", derive(Debug, Asset, TypePath))]
 pub struct App {
     /// Collection of all Rust Constructor resources with type-erased storage.
     ///
@@ -231,7 +243,7 @@ impl App {
                                             [w as usize, h as usize],
                                             &raw_data,
                                         );
-                                        let loaded_image_texture = ui.load_texture(
+                                        let loaded_image_texture = ctx_adapter(ui).load_texture(
                                             &render_resource.0.name,
                                             color_image,
                                             TextureOptions::LINEAR,
@@ -268,7 +280,7 @@ impl App {
                                 );
 
                                 // 直接绘制图片
-                                egui::Image::new(ImageSource::Texture((&texture.0).into()))
+                                Img::new(ImageSource::Texture((&texture.0).into()))
                                     .tint(Color32::from_rgba_unmultiplied(
                                         image.overlay_color[0],
                                         image.overlay_color[1],
@@ -676,7 +688,7 @@ impl App {
                                     if start <= chars.len() && end <= chars.len() && start < end {
                                         let selected_text: String =
                                             chars[start..end].iter().collect();
-                                        ui.copy_text(selected_text);
+                                        ctx_adapter(ui).copy_text(selected_text);
                                     };
                                 };
 
@@ -947,7 +959,7 @@ impl App {
                                         if clicked_on_link {
                                             // 执行超链接跳转
                                             if !url.is_empty() {
-                                                ui.open_url(OpenUrl::new_tab(url));
+                                                ctx_adapter(ui).open_url(OpenUrl::new_tab(url));
                                             };
                                         };
                                     };
@@ -2690,7 +2702,7 @@ impl App {
                         discern_type: "PageData".to_string(),
                     })?;
                     if page_data.forced_update {
-                        ui.request_repaint();
+                        ctx_adapter(ui).request_repaint();
                     };
                 }
                 "Background" => {
@@ -3248,13 +3260,13 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeVertical);
                                     } else if resource_panel.max_size.is_some()
                                         && size[1] >= resource_panel.max_size.unwrap()[1]
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouth);
                                     } else {
-                                        ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorth);
                                     };
                                 }
                                 [false, true, false, false] if resource_panel.resizable[1] => {
@@ -3271,13 +3283,13 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeVertical);
                                     } else if resource_panel.max_size.is_some()
                                         && size[1] >= resource_panel.max_size.unwrap()[1]
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorth);
                                     } else {
-                                        ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouth);
                                     };
                                 }
                                 [false, false, true, false] if resource_panel.resizable[2] => {
@@ -3294,13 +3306,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[0] < resource_panel.max_size.unwrap()[0])
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        ctx_adapter(ui)
+                                            .set_cursor_icon(CursorIcon::ResizeHorizontal);
                                     } else if resource_panel.max_size.is_some()
                                         && size[0] >= resource_panel.max_size.unwrap()[0]
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeEast);
                                     } else {
-                                        ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeWest);
                                     };
                                 }
                                 [false, false, false, true] if resource_panel.resizable[3] => {
@@ -3317,13 +3330,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[0] < resource_panel.max_size.unwrap()[0])
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                        ctx_adapter(ui)
+                                            .set_cursor_icon(CursorIcon::ResizeHorizontal);
                                     } else if resource_panel.max_size.is_some()
                                         && size[0] >= resource_panel.max_size.unwrap()[0]
                                     {
-                                        ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeWest);
                                     } else {
-                                        ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                        ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeEast);
                                     };
                                 }
                                 [true, false, true, false] => {
@@ -3351,14 +3365,17 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNwSe);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouthEast);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorthWest)
                                             };
                                         }
                                         [false, true] => {
@@ -3379,13 +3396,16 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeEast);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeWest);
                                             };
                                         }
                                         [true, false] => {
@@ -3406,13 +3426,16 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouth);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3443,14 +3466,17 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNwSe);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorthWest);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouthEast)
                                             };
                                         }
                                         [false, true] => {
@@ -3471,13 +3497,16 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeWest);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeEast);
                                             };
                                         }
                                         [true, false] => {
@@ -3498,13 +3527,16 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorth);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3535,14 +3567,17 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNeSw);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouthWest);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorthEast)
                                             };
                                         }
                                         [false, true] => {
@@ -3563,13 +3598,16 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeWest);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeEast);
                                             };
                                         }
                                         [true, false] => {
@@ -3590,13 +3628,16 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouth);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3627,14 +3668,17 @@ impl App {
                                                         || size[1]
                                                             < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNeSw);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorthEast);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouthWest)
                                             };
                                         }
                                         [false, true] => {
@@ -3655,13 +3699,16 @@ impl App {
                                                     || size[0]
                                                         < resource_panel.max_size.unwrap()[0])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeHorizontal);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[0] >= resource_panel.max_size.unwrap()[0]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeEast);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeWest);
                                             };
                                         }
                                         [true, false] => {
@@ -3682,13 +3729,16 @@ impl App {
                                                     || size[1]
                                                         < resource_panel.max_size.unwrap()[1])
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeVertical);
                                             } else if resource_panel.max_size.is_some()
                                                 && size[1] >= resource_panel.max_size.unwrap()[1]
                                             {
-                                                ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeNorth);
                                             } else {
-                                                ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                                ctx_adapter(ui)
+                                                    .set_cursor_icon(CursorIcon::ResizeSouth);
                                             };
                                         }
                                         [false, false] => {}
@@ -3781,14 +3831,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNwSe);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeSouthEast);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouthEast);
                                 } else {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNorthWest)
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorthWest)
                                 };
                             }
                             ClickAim::RightBottomResize => {
@@ -3833,14 +3883,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNwSe);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNwSe);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNorthWest);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorthWest);
                                 } else {
-                                    ui.set_cursor_icon(CursorIcon::ResizeSouthEast)
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouthEast)
                                 };
                             }
                             ClickAim::RightTopResize => {
@@ -3892,14 +3942,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNeSw);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeSouthWest);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouthWest);
                                 } else {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNorthEast)
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorthEast)
                                 };
                             }
                             ClickAim::LeftBottomResize => {
@@ -3951,14 +4001,14 @@ impl App {
                                         && (resource_panel.max_size.is_none()
                                             || size[1] < resource_panel.max_size.unwrap()[1])
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNeSw);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNeSw);
                                 } else if resource_panel.max_size.is_some()
                                     && size[0] >= resource_panel.max_size.unwrap()[0]
                                     && size[1] >= resource_panel.max_size.unwrap()[1]
                                 {
-                                    ui.set_cursor_icon(CursorIcon::ResizeNorthEast);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorthEast);
                                 } else {
-                                    ui.set_cursor_icon(CursorIcon::ResizeSouthWest)
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouthWest)
                                 };
                             }
                             ClickAim::TopResize => {
@@ -3970,7 +4020,7 @@ impl App {
                                     position_size_config.origin_size[1] +=
                                         position[1] - mouse_pos[1];
                                     position_size_config.origin_position[1] = mouse_pos[1];
-                                    ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeVertical);
                                 } else if resource_panel.max_size.is_some()
                                     && position[1] - mouse_pos[1] + size[1]
                                         >= resource_panel.max_size.unwrap()[1]
@@ -3980,14 +4030,14 @@ impl App {
                                             - position_size_config.origin_size[1];
                                     position_size_config.origin_size[1] =
                                         resource_panel.max_size.unwrap()[1];
-                                    ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouth);
                                 } else {
                                     position_size_config.origin_position[1] += position_size_config
                                         .origin_size[1]
                                         - resource_panel.min_size[1];
                                     position_size_config.origin_size[1] =
                                         resource_panel.min_size[1];
-                                    ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorth);
                                 };
                             }
                             ClickAim::BottomResize => {
@@ -3998,18 +4048,18 @@ impl App {
                                 {
                                     position_size_config.origin_size[1] =
                                         mouse_pos[1] - position[1];
-                                    ui.set_cursor_icon(CursorIcon::ResizeVertical);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeVertical);
                                 } else if resource_panel.max_size.is_some()
                                     && mouse_pos[1] - position[1]
                                         >= resource_panel.max_size.unwrap()[1]
                                 {
                                     position_size_config.origin_size[1] =
                                         resource_panel.max_size.unwrap()[1];
-                                    ui.set_cursor_icon(CursorIcon::ResizeNorth);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeNorth);
                                 } else {
                                     position_size_config.origin_size[1] =
                                         resource_panel.min_size[1];
-                                    ui.set_cursor_icon(CursorIcon::ResizeSouth);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeSouth);
                                 };
                             }
                             ClickAim::LeftResize => {
@@ -4021,7 +4071,7 @@ impl App {
                                     position_size_config.origin_size[0] +=
                                         position[0] - mouse_pos[0];
                                     position_size_config.origin_position[0] = mouse_pos[0];
-                                    ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeHorizontal);
                                 } else if resource_panel.max_size.is_some()
                                     && position[0] - mouse_pos[0] + size[0]
                                         >= resource_panel.max_size.unwrap()[0]
@@ -4031,14 +4081,14 @@ impl App {
                                             - position_size_config.origin_size[0];
                                     position_size_config.origin_size[0] =
                                         resource_panel.max_size.unwrap()[0];
-                                    ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeEast);
                                 } else {
                                     position_size_config.origin_position[0] += position_size_config
                                         .origin_size[0]
                                         - resource_panel.min_size[0];
                                     position_size_config.origin_size[0] =
                                         resource_panel.min_size[0];
-                                    ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeWest);
                                 };
                             }
                             ClickAim::RightResize => {
@@ -4049,22 +4099,22 @@ impl App {
                                 {
                                     position_size_config.origin_size[0] =
                                         mouse_pos[0] - position[0];
-                                    ui.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeHorizontal);
                                 } else if resource_panel.max_size.is_some()
                                     && mouse_pos[0] - position[0]
                                         >= resource_panel.max_size.unwrap()[0]
                                 {
                                     position_size_config.origin_size[0] =
                                         resource_panel.max_size.unwrap()[0];
-                                    ui.set_cursor_icon(CursorIcon::ResizeWest);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeWest);
                                 } else {
                                     position_size_config.origin_size[0] =
                                         resource_panel.min_size[0];
-                                    ui.set_cursor_icon(CursorIcon::ResizeEast);
+                                    ctx_adapter(ui).set_cursor_icon(CursorIcon::ResizeEast);
                                 };
                             }
                             ClickAim::Move => {
-                                ui.set_cursor_icon(match resource_panel.movable {
+                                ctx_adapter(ui).set_cursor_icon(match resource_panel.movable {
                                     [true, true] => CursorIcon::Move,
                                     [true, false] => CursorIcon::ResizeColumn,
                                     [false, true] => CursorIcon::ResizeRow,
@@ -5172,7 +5222,7 @@ impl App {
     ///
     /// * `ui` - 用于绘制的UI上下文
     /// * `font_info` - 字体信息，包含字体名称和路径
-    pub fn try_register_all_fonts(&mut self, ui: &Ui, font_info: Vec<[&str; 2]>) {
+    pub fn try_register_all_fonts(&mut self, ui: &mut Ui, font_info: Vec<[&str; 2]>) {
         let mut font_definitions_amount = FontDefinitions::default();
         let mut loaded_fonts = Vec::new();
         for font_info in font_info {
@@ -5224,7 +5274,7 @@ impl App {
             .iter()
             .map(|x| [x[0].to_string(), x[1].to_string()])
             .collect();
-        ui.set_fonts(font_definitions_amount);
+        ctx_adapter(ui).set_fonts(font_definitions_amount);
     }
 
     /// Registers all fonts with the egui context.
@@ -5256,7 +5306,7 @@ impl App {
     /// 如果成功完成加载返回`Ok(())`，否则返回`Err(RustConstructorError)`。
     pub fn register_all_fonts(
         &mut self,
-        ui: &Ui,
+        ui: &mut Ui,
         font_info: Vec<[&str; 2]>,
     ) -> Result<(), RustConstructorError> {
         let mut font_definitions_amount = FontDefinitions::default();
@@ -5315,7 +5365,7 @@ impl App {
             .iter()
             .map(|x| [x[0].to_string(), x[1].to_string()])
             .collect();
-        ui.set_fonts(font_definitions_amount);
+        ctx_adapter(ui).set_fonts(font_definitions_amount);
         Ok(())
     }
 

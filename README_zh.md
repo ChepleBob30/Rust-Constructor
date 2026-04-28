@@ -1,11 +1,11 @@
 # `Rust Constructor V2`
 
-## 基于`egui`构建的跨平台`GUI`框架, 用`Rust`开发`GUI`项目最简单的方式
+## 基于`egui`构建的跨平台`GUI`框架, 同时兼容`bevy`, 用`Rust`开发`GUI`项目最简单的方式
 
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.11.2-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.11.3-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,25 +25,24 @@
 
 ## 版本更新信息
 
-- 当前版本为`v2.11.2`。
-  - 本更新修复了一些问题，并适配了新版本的`egui`，推荐更新`egui`版本后使用。
+- 当前版本为`v2.11.3 兼容大更新`。
+  - 本更新添加了对`bevy`的兼容，现在你可以通过`bevy_egui`在`bevy`中使用`Rust Constructor`了！
   - **实用改动**
-    - `App` `RustConstructorResource` `RustConstructorResourceBox`现在实现了`Send`和`Sync`;
+    - 添加`standard feature`，启用后与以前的`Rust Constructor`相同；
+    - 添加`bevy feature`，启用即可在`bevy`中使用`Rust Constructor`(需要注意的是，两个`feature`不能同时启用)；
+    - 添加`ctx_adapter`，用于兼容不同版本`egui`的特性；
     - 改进了部分代码。
   - **破坏性改动**
-    - 现在不再依赖`eframe`，取而代之的是`egui`和`epaint`；
-    - 移除了`ResourcePanel`的`use_smooth_scroll_delta`；
-    - 移除了所有对`egui::Context`的依赖，现在全部采用`egui::Ui`；
+    - 移除了对`epaint`的依赖，改为直接从`egui`内部调用；
+    - 移除了其他依赖项默认的`feature`，并且添加了对`bevy_asset`和`bevy_reflect`的依赖；
     - 对部分内容进行了修改。
-  - **漏洞修复**
-    - 修复了`check_enter_updated`无法正常使用的问题；
-    - 修复了一些已知问题。
 
 ---
 
 ## 概述
 
 - `Rust Constructor`是一个功能全面的GUI框架，它利用了`egui`的强大功能，为构建跨平台应用程序提供了一个简单直观的工具。
+- 基于`bevy_egui`，`Rust Constructor`还与`bevy`兼容，你可以直接在`bevy`中使用它。
 - `Rust Constructor`当然不是完美的，目前它还存在编写逻辑糟糕，使用方法混乱等问题，我会尽力解决这些问题。
 
 ---

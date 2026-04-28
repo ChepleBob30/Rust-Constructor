@@ -5,7 +5,10 @@ use crate::{
     BasicFrontResource, BasicFrontResourceConfig, BorderKind, DisplayInfo, PositionSizeConfig,
     RustConstructorResource,
 };
-use egui::TextureHandle;
+#[cfg(feature = "bevy")]
+use egui_bevy::TextureHandle;
+#[cfg(feature = "standard")]
+use egui_standard::TextureHandle;
 use std::{
     any::Any,
     fmt::{Debug, Formatter},

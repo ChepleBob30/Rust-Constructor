@@ -5,7 +5,10 @@ use crate::{
     DisplayInfo, RustConstructorId, RustConstructorResource,
     basic_front::{CustomRectConfig, ImageConfig, TextConfig},
 };
-use egui::PointerButton;
+#[cfg(feature = "bevy")]
+use egui_bevy::PointerButton;
+#[cfg(feature = "standard")]
+use egui_standard::PointerButton;
 use std::any::Any;
 
 /// Control the basic front resource type for Background selection.

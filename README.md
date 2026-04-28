@@ -1,11 +1,11 @@
 # `Rust Constructor V2`
 
-## A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects with `Rust`
+## A cross-platform `GUI` framework built on `egui` as well as compatible with `bevy`, the simplest way to develop `GUI` projects with `Rust`
 
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.11.2-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.11.3-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -25,25 +25,24 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current version is `v2.11.2`.
-  - This update fixes some issues and adapts to the new version of `egui`, so it is recommended that you update the `egui` version and use it.
-  - **Useful Changes**
-    - `App` `RustConstructorResource` `RustConstructorResourceBox` now implements `Send` and `Sync`;
-    - Improved some parts of the code.
+- The current version is `v2.11.3 Big Compatibility Update`.
+  - This update added compatibility with `bevy`, so now you can use `Rust Constructor` in `bevy` through `bevy_egui`!
+  - **Utility Changes**
+    - Added `standard feature`; when enabled, it remains the same as the previous `Rust Constructor`;
+    - Added `bevy feature`; enabling it allows the use of `Rust Constructor` in `bevy` (Note: the two `feature`s cannot be enabled simultaneously);
+    - Added `ctx_adapter`, used for compatibility with different versions of `egui`'s characteristics;
+    - Improved some code.
   - **Breaking Changes**
-    - It no longer relies on `eframe`; it is replaced by `egui` and `epaint`;
-    - Removed `use_smooth_scroll_delta` from `ResourcePanel`;
-    - Removed all dependencies on `egui::Context`; now everything uses `egui::Ui`;
-    - Some content has been modified.
-  - **Bug Fixes**
-    - Fixed the issue where `check_enter_updated` could not be used normally;
-    - Fixed several known issues.
+    - Removed the dependency on `epaint`, and instead calls directly from `egui` internal;
+    - Removed default `feature`s for other dependencies, and added dependencies for `bevy_asset` and `bevy_reflect`;
+    - Modified some content.
 
 ---
 
 ## Overview
 
 - `Rust Constructor` is a comprehensive GUI framework that leverages the powerful features of `egui` to provide a simple and intuitive tool for building cross-platform applications.
+- Based on `bevy_egui`, `Rust Constructor` is also compatible with `bevy`, so you can use it directly in `bevy`.
 - `Rust Constructor` is certainly not perfect. Currently, it still has problems such as poor writing logic and confusing usage methods. I will do my best to solve these problems.
 
 ---

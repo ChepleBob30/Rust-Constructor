@@ -27,7 +27,20 @@ pub mod advance_front;
 pub mod app;
 pub mod background;
 pub mod basic_front;
-use egui::Ui;
+#[cfg(all(feature = "standard", feature = "bevy"))]
+compile_error!(
+    "You cannot use both 'bevy' and 'standard' features simultaneously!
+    If you are developing using Rust Constructor independently, please select 'standard'; if you are developing using bevy, please select 'bevy'."
+);
+#[cfg(not(any(feature = "standard", feature = "bevy")))]
+compile_error!(
+    "You must enable at least one of the 'bevy' or 'standard' features!
+    If you are developing using Rust Constructor independently, please select 'standard'; if you are developing using bevy, please select 'bevy'."
+);
+#[cfg(feature = "bevy")]
+use egui_bevy::{Context, Ui};
+#[cfg(feature = "standard")]
+use egui_standard::Ui;
 use std::{
     any::{Any, type_name, type_name_of_val},
     error::Error,
@@ -641,6 +654,61 @@ pub enum ListInfoDescribeMethod {
     Simple,
 }
 
+/// Methods for compatibility with different versions of egui.
+///
+/// 用于兼容不同版本egui的方法。
+///
+/// Use when you need to call egui::Context.
+///
+/// 需要调用egui::Context时使用。
+///
+/// # Arguments
+///
+/// * `ui` - The UI context for drawing
+///
+/// # Returns
+///
+/// Return Ui directly.
+///
+/// # 参数
+///
+/// * `ui` - 用于绘制的UI上下文
+///
+/// # 返回值
+///
+/// 直接返回Ui。
+#[cfg(feature = "standard")]
+pub fn ctx_adapter(ui: &mut Ui) -> &mut Ui {
+    ui
+}
+/// Methods for compatibility with different versions of egui.
+///
+/// 用于兼容不同版本egui的方法。
+///
+/// Use when you need to call egui::Context.
+///
+/// 需要调用egui::Context时使用。
+///
+/// # Arguments
+///
+/// * `ui` - The UI context for drawing
+///
+/// # Returns
+///
+/// Return Context.
+///
+/// # 参数
+///
+/// * `ui` - 用于绘制的UI上下文
+///
+/// # 返回值
+///
+/// 返回Context。
+#[cfg(feature = "bevy")]
+pub fn ctx_adapter(ui: &mut Ui) -> &Context {
+    ui.ctx()
+}
+
 /// Obtain the type name of the target resource.
 ///
 /// 获取目标资源的类型名称。
@@ -791,7 +859,7 @@ pub fn downcast_resource_mut<T: RustConstructorResource + 'static>(
 /// # Arguments
 ///
 /// * `position_size_config` - The configuration for position and size
-/// * `ctx` - The egui context for available space calculations
+/// * `ui` - The UI context for drawing
 ///
 /// # Returns
 ///
@@ -800,7 +868,7 @@ pub fn downcast_resource_mut<T: RustConstructorResource + 'static>(
 /// # 参数
 ///
 /// * `position_size_config` - 位置和尺寸的配置
-/// * `ctx` - 用于可用空间计算的egui上下文
+/// * `ui` - 用于绘制的UI上下文
 ///
 /// # 返回值
 ///
