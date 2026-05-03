@@ -1,8 +1,8 @@
 //! # Rust Constructor V2
 //!
-//! A cross-platform `GUI` framework built on `egui`, the simplest way to develop `GUI` projects with `Rust`
+//! A cross-platform `GUI` framework built on `egui` as well as compatible with `bevy`, the simplest way to develop `GUI` projects with `Rust`
 //!
-//! 基于`egui`构建的跨平台`GUI`框架, 用`Rust`开发`GUI`项目最简单的方式
+//! 基于`egui`构建的跨平台`GUI`框架, 同时兼容`bevy`, 用`Rust`开发`GUI`项目最简单的方式
 //!
 //! ## Overview 概述
 //!
@@ -37,6 +37,7 @@ compile_error!(
     "You must enable at least one of the 'bevy' or 'standard' features!
     If you are developing using Rust Constructor independently, please select 'standard'; if you are developing using bevy, please select 'bevy'."
 );
+use crate::advance_front::BackgroundType;
 #[cfg(feature = "bevy")]
 use egui_bevy::{Context, Ui};
 #[cfg(feature = "standard")]
@@ -921,4 +922,26 @@ pub fn position_size_processor(position_size_config: PositionSizeConfig, ui: &Ui
     position[0] += position_size_config.offset[0];
     position[1] += position_size_config.offset[1];
     [position, size]
+}
+
+/// Map a [`BackgroundType`] to its discriminant string for resource lookups.
+///
+/// 将[`BackgroundType`]映射为其判别字符串，用于资源查找。
+#[inline]
+pub fn background_type_discern(background_type: &BackgroundType) -> &'static str {
+    match background_type {
+        BackgroundType::CustomRect(_) => "CustomRect",
+        BackgroundType::Image(_) => "Image",
+    }
+}
+
+/// Build a [`RustConstructorId`] from a name and discern type.
+///
+/// 从名称和辨别类型构建[`RustConstructorId`]。
+#[inline]
+pub fn build_id(name: impl Into<String>, discern_type: impl Into<String>) -> RustConstructorId {
+    RustConstructorId {
+        name: name.into(),
+        discern_type: discern_type.into(),
+    }
 }

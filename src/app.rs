@@ -11,11 +11,13 @@ use crate::{
         SwitchData,
     },
     background::{PageData, SplitTime, Variable},
+    background_type_discern,
     basic_front::{
-        CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod, Text,
+        CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod, ImageLoader,
+        LoadedImageData, Text,
     },
-    ctx_adapter, downcast_resource, downcast_resource_mut, get_tag, position_size_processor,
-    type_processor,
+    build_id, ctx_adapter, downcast_resource, downcast_resource_mut, get_tag,
+    position_size_processor, type_processor,
 };
 #[cfg(feature = "bevy")]
 use bevy_asset::Asset;
@@ -33,13 +35,15 @@ use egui_standard::{
     Galley, Id, Image as Img, ImageSource, Key, OpenUrl, Pos2, Rect, Sense, Stroke, StrokeKind, Ui,
     Vec2, epaint::textures::TextureOptions, text::CCursor,
 };
+use log::{error, info, warn};
 use std::{
     char,
     cmp::Ordering,
+    collections::HashMap,
     fmt::Debug,
-    fs::{File, read},
-    io::Read,
-    sync::Arc,
+    fs::read,
+    sync::{Arc, Mutex},
+    thread,
     vec::Vec,
 };
 
@@ -112,6 +116,11 @@ pub struct App {
     ///
     /// 列出正在加载的字体。
     pub loading_fonts: Vec<[String; 2]>,
+
+    /// Background image loading infrastructure.
+    ///
+    /// 后台图片加载基础设施。
+    pub image_loader: ImageLoader,
 }
 
 unsafe impl Send for App {}
@@ -120,6 +129,7 @@ unsafe impl Sync for App {}
 
 impl Default for App {
     fn default() -> Self {
+        info!("Rust Constructor v2.11.4 (https://github.com/ChepleBob30/Rust-Constructor)");
         App {
             rust_constructor_resource: Vec::new(),
             tick_interval: 50,
@@ -137,6 +147,9 @@ impl Default for App {
             render_list: Vec::new(),
             loaded_fonts: Vec::new(),
             loading_fonts: Vec::new(),
+            image_loader: ImageLoader {
+                completed: Arc::new(Mutex::new(HashMap::new())),
+            },
         }
     }
 }
@@ -154,6 +167,32 @@ impl App {
         self
     }
 
+    /// Consume all completed background image loads and create egui textures.
+    ///
+    /// 消费所有已完成的后台图片加载结果并创建 egui 纹理。
+    pub fn process_completed_image_loads(&mut self, ui: &mut Ui) {
+        let completed: Vec<(String, LoadedImageData)> = {
+            let mut lock = self.image_loader.completed.lock().unwrap();
+            lock.drain().collect()
+        };
+        for (resource_name, loaded_data) in completed {
+            let id = build_id(resource_name, "Image");
+            if self.check_resource_exists(&id).is_none() {
+                continue;
+            }
+            let texture = ctx_adapter(ui).load_texture(
+                &id.name,
+                loaded_data.color_image,
+                TextureOptions::LINEAR,
+            );
+            let handle = DebugTextureHandle::new(&texture);
+            if let Ok(image) = self.get_resource_mut::<Image>(&id) {
+                image.texture = Some(handle);
+                info!("Loaded texture for image '{}'.", id.name);
+            }
+        }
+    }
+
     /// Draws all resources in the rendering queue at once, discarding all return values.
     ///
     /// 一次性绘制渲染队列中的所有资源，会丢弃所有返回值。
@@ -162,14 +201,6 @@ impl App {
     /// It's not recommended for production use due to error handling limitations.
     ///
     /// 此方法遍历渲染列表中的所有资源并绘制它们。由于错误处理限制，不建议在生产环境中使用。
-    ///
-    /// # Arguments
-    ///
-    /// * `ui` - The UI context for drawing
-    ///
-    /// # 参数
-    ///
-    /// * `ui` - 用于绘制的UI上下文
     pub fn draw_resources(&mut self, ui: &mut Ui) {
         for i in 0..self.render_list.len() {
             let _ = self.draw_resource_by_index(ui, i);
@@ -189,25 +220,6 @@ impl App {
     /// - 具有各种加载方法和变换的图像
     /// - 具有格式设置、选择和超链接支持的文本
     /// - 具有边框和样式的自定义矩形
-    ///
-    /// # Arguments
-    ///
-    /// * `ui` - The UI context for drawing
-    /// * `index` - The index of the resource in the render list
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource
-    /// cannot be found or drawn.
-    ///
-    /// # 参数
-    ///
-    /// * `ui` - 用于绘制的UI上下文
-    /// * `index` - 资源在渲染列表中的索引
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回`Ok(())`，如果资源无法找到或绘制则返回`Err(RustConstructorError)`。
     pub fn draw_resource_by_index(
         &mut self,
         ui: &mut Ui,
@@ -216,54 +228,94 @@ impl App {
         if let Some(render_resource) = self.render_list.clone().get(index) {
             match &*render_resource.0.discern_type {
                 "Image" => {
-                    let image = self.get_resource::<Image>(&RustConstructorId {
-                        name: render_resource.0.name.clone(),
-                        discern_type: "Image".to_string(),
-                    })?;
+                    let image =
+                        self.get_resource::<Image>(&build_id(&render_resource.0.name, "Image"))?;
                     if image.display_info.enable {
                         let mut image = image.clone();
                         match image.image_load_method {
                             ImageLoadMethod::ByPath((ref path, flip)) => {
                                 if *path != image.last_frame_path {
-                                    if let Ok(mut file) = File::open(path) {
-                                        let mut buffer = Vec::new();
-                                        file.read_to_end(&mut buffer).unwrap();
-                                        let img_bytes = buffer;
-                                        let img = image::load_from_memory(&img_bytes).unwrap();
-                                        let color_data = match flip {
-                                            [true, true] => img.fliph().flipv().into_rgba8(),
-                                            [true, false] => img.fliph().into_rgba8(),
-                                            [false, true] => img.flipv().into_rgba8(),
-                                            _ => img.into_rgba8(),
-                                        };
-                                        let (w, h) = (color_data.width(), color_data.height());
-                                        let raw_data: Vec<u8> = color_data.into_raw();
-
-                                        let color_image = ColorImage::from_rgba_unmultiplied(
-                                            [w as usize, h as usize],
-                                            &raw_data,
-                                        );
-                                        let loaded_image_texture = ctx_adapter(ui).load_texture(
-                                            &render_resource.0.name,
-                                            color_image,
-                                            TextureOptions::LINEAR,
-                                        );
-                                        image.texture =
-                                            Some(DebugTextureHandle::new(&loaded_image_texture));
-                                    } else {
-                                        return Err(RustConstructorError {
-                                            error_id: "ImageLoadFailed".to_string(),
-                                            description: format!(
-                                                "Failed to load an image from the path '{path}'.",
-                                            ),
-                                        });
-                                    };
-                                };
+                                    image.last_frame_path = path.clone();
+                                    let resource_name = render_resource.0.name.clone();
+                                    let path_clone = path.clone();
+                                    let flip_val = flip;
+                                    let completed_arc = Arc::clone(&self.image_loader.completed);
+                                    thread::spawn(move || {
+                                        const MAX_TEXTURE_SIDE: u32 = 8192;
+                                        match std::fs::read(&path_clone) {
+                                            Ok(bytes) => {
+                                                if let Ok(img) = image::load_from_memory(&bytes) {
+                                                    let (w, h) = (img.width(), img.height());
+                                                    let img = if w > MAX_TEXTURE_SIDE
+                                                        || h > MAX_TEXTURE_SIDE
+                                                    {
+                                                        let scale = MAX_TEXTURE_SIDE as f64
+                                                            / w.max(h) as f64;
+                                                        let new_w =
+                                                            (w as f64 * scale).round() as u32;
+                                                        let new_h =
+                                                            (h as f64 * scale).round() as u32;
+                                                        img.resize(
+                                                            new_w,
+                                                            new_h,
+                                                            image::imageops::FilterType::Triangle,
+                                                        )
+                                                    } else {
+                                                        img
+                                                    };
+                                                    let color_data = match flip_val {
+                                                        [true, true] => {
+                                                            img.fliph().flipv().into_rgba8()
+                                                        }
+                                                        [true, false] => img.fliph().into_rgba8(),
+                                                        [false, true] => img.flipv().into_rgba8(),
+                                                        _ => img.into_rgba8(),
+                                                    };
+                                                    let color_image =
+                                                        ColorImage::from_rgba_unmultiplied(
+                                                            [
+                                                                color_data.width() as usize,
+                                                                color_data.height() as usize,
+                                                            ],
+                                                            &color_data.into_raw(),
+                                                        );
+                                                    completed_arc.lock().unwrap().insert(
+                                                        resource_name,
+                                                        LoadedImageData { color_image },
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!(
+                                                    "[ImageLoadFailed]draw_resource_by_index: Failed to load an image from the path '{path_clone}': {e}",
+                                                );
+                                                warn!(
+                                                    "[ImageLoadFailed]draw_resource_by_index: Failed to load an image from the path '{path_clone}': {e}",
+                                                );
+                                            }
+                                        }
+                                    });
+                                }
                             }
                             ImageLoadMethod::ByTexture(ref texture) => {
                                 image.texture = Some(texture.clone());
                             }
                         };
+                        if image.texture.is_none()
+                            && let Some(loaded) = self
+                                .image_loader
+                                .completed
+                                .lock()
+                                .unwrap()
+                                .remove(&render_resource.0.name)
+                        {
+                            let texture = ctx_adapter(ui).load_texture(
+                                &render_resource.0.name,
+                                loaded.color_image,
+                                TextureOptions::LINEAR,
+                            );
+                            image.texture = Some(DebugTextureHandle::new(&texture));
+                        }
                         [image.position, image.size] = position_size_processor(
                             image.basic_front_resource_config.position_size_config,
                             ui,
@@ -323,10 +375,8 @@ impl App {
                     };
                 }
                 "Text" => {
-                    let text = self.get_resource::<Text>(&RustConstructorId {
-                        name: render_resource.0.name.clone(),
-                        discern_type: "Text".to_string(),
-                    })?;
+                    let text =
+                        self.get_resource::<Text>(&build_id(&render_resource.0.name, "Text"))?;
                     if text.display_info.enable {
                         let mut text = text.clone();
                         [_, text.truncate_size] = position_size_processor(
@@ -639,12 +689,11 @@ impl App {
                                     text.selection = None;
                                 };
 
-                                if let Some(index) =
-                                    self.get_render_layer_resource(&RustConstructorId {
-                                        name: render_resource.0.name.clone(),
-                                        discern_type: "Text".to_string(),
-                                    })
-                                    && let Some(mouse_pos) = fullscreen_detect_result.interact_pos()
+                                if let Some(index) = self.get_render_layer_resource(&build_id(
+                                    &render_resource.0.name,
+                                    "Text",
+                                )) && let Some(mouse_pos) =
+                                    fullscreen_detect_result.interact_pos()
                                     && self.resource_get_focus(
                                         index,
                                         mouse_pos.into(),
@@ -909,13 +958,11 @@ impl App {
                                 // 检查是否正在点击这个超链接
                                 let mut is_pressing_link = false;
                                 for link_response in &link_responses {
-                                    if let Some(index) =
-                                        self.get_render_layer_resource(&RustConstructorId {
-                                            name: render_resource.0.name.clone(),
-                                            discern_type: "Text".to_string(),
-                                        })
-                                        && let Some(mouse_pos) =
-                                            ui.input(|i| i.pointer.interact_pos())
+                                    if let Some(index) = self.get_render_layer_resource(&build_id(
+                                        &render_resource.0.name,
+                                        "Text",
+                                    )) && let Some(mouse_pos) =
+                                        ui.input(|i| i.pointer.interact_pos())
                                         && self.resource_get_focus(
                                             index,
                                             mouse_pos.into(),
@@ -1086,10 +1133,10 @@ impl App {
                     };
                 }
                 "CustomRect" => {
-                    let custom_rect = self.get_resource::<CustomRect>(&RustConstructorId {
-                        name: render_resource.0.name.clone(),
-                        discern_type: "CustomRect".to_string(),
-                    })?;
+                    let custom_rect = self.get_resource::<CustomRect>(&build_id(
+                        &render_resource.0.name,
+                        "CustomRect",
+                    ))?;
                     if custom_rect.display_info.enable {
                         let mut custom_rect = custom_rect.clone();
                         [custom_rect.position, custom_rect.size] = position_size_processor(
@@ -1191,6 +1238,10 @@ impl App {
             }
             Ok(())
         } else {
+            error!(
+                "[IndexOutOfRange]draw_resource_by_index: The maximum index of the target list is {}, but the index is {index}.",
+                self.render_list.len() - 1
+            );
             Err(RustConstructorError {
                 error_id: "IndexOutOfRange".to_string(),
                 description: format!(
@@ -1210,24 +1261,6 @@ impl App {
     ///
     /// 此方法返回一个格式化字符串，包含所有资源的详细信息。
     /// 详细程度取决于指定的方法。
-    ///
-    /// # Arguments
-    ///
-    /// * `describe` - Determines the level of detail in the output
-    /// * `print` - Determines whether to print
-    ///
-    /// # Returns
-    ///
-    /// A formatted string with resource information.
-    ///
-    /// # 参数
-    ///
-    /// * `describe` - 决定输出信息的详细程度
-    /// * `print` - 决定是否打印
-    ///
-    /// # 返回值
-    ///
-    /// 包含资源信息的格式化字符串。
     pub fn rust_constructor_resource_info(
         &self,
         describe: ListInfoDescribeMethod,
@@ -1267,24 +1300,6 @@ impl App {
     ///
     /// 此方法返回一个格式化字符串，包含活动列表中所有资源的详细信息。
     /// 详细程度取决于指定的方法。
-    ///
-    /// # Arguments
-    ///
-    /// * `describe` - Determines the level of detail in the output
-    /// * `print` - Determines whether to print
-    ///
-    /// # Returns
-    ///
-    /// A formatted string with resource information.
-    ///
-    /// # 参数
-    ///
-    /// * `describe` - 决定输出信息的详细程度
-    /// * `print` - 决定是否打印
-    ///
-    /// # 返回值
-    ///
-    /// 包含资源信息的格式化字符串。
     pub fn active_list_info(&self, describe: ListInfoDescribeMethod, print: bool) -> String {
         let mut text =
             String::from("————————————————————————————————————\nResource Active Info:\n");
@@ -1331,22 +1346,6 @@ impl App {
     ///
     /// 此方法返回一个格式化字符串，包含渲染层级堆栈的详细信息，
     /// 包括资源位置和渲染行为。
-    ///
-    /// # Arguments
-    ///
-    /// * `print` - Determines whether to print
-    ///
-    /// # Returns
-    ///
-    /// A formatted string with rendering layer information.
-    ///
-    /// # 参数
-    ///
-    /// * `print` - 决定是否打印
-    ///
-    /// # 返回值
-    ///
-    /// 包含渲染层级信息的格式化字符串。
     pub fn render_layer_info(&self, print: bool) -> String {
         let mut text = String::from("————————————————————————————————————\nRender Layer Info:\n");
         for (
@@ -1374,22 +1373,6 @@ impl App {
     /// render queue with their names and types.
     ///
     /// 此方法返回一个格式化字符串，列出渲染队列中的所有资源及其名称和类型。
-    ///
-    /// # Arguments
-    ///
-    /// * `print` - Determines whether to print
-    ///
-    /// # Returns
-    ///
-    /// A formatted string with render queue information.
-    ///
-    /// # 参数
-    ///
-    /// * `print` - 决定是否打印
-    ///
-    /// # 返回值
-    ///
-    /// 包含渲染队列信息的格式化字符串。
     pub fn render_list_info(&self, print: bool) -> String {
         let mut text = String::from("————————————————————————————————————\nRender List Info:\n");
         for (RustConstructorId { name, discern_type }, citer) in &self.render_list {
@@ -1456,16 +1439,6 @@ impl App {
     /// Use when you want to attempt reordering without handling potential errors.
     ///
     /// 这是`request_jump_render_list`的安全包装器，会抑制错误。当您想要尝试重新排序而不处理潜在错误时使用。
-    ///
-    /// # Arguments
-    ///
-    /// * `requester` - The resource to move in the queue
-    /// * `request_type` - How to move the resource (to top or up N layers)
-    ///
-    /// # 参数
-    ///
-    /// * `requester` - 要在队列中移动的资源
-    /// * `request_type` - 如何移动资源（到顶部或上移N层）
     pub fn try_request_jump_render_list(
         &mut self,
         requester: RequestMethod,
@@ -1482,25 +1455,6 @@ impl App {
     /// resource to the top of the queue or up a specified number of layers.
     ///
     /// 此方法允许通过将特定资源移动到队列顶部或上移指定层数来更改资源的渲染顺序。
-    ///
-    /// # Arguments
-    ///
-    /// * `requester` - The resource to move in the queue
-    /// * `request_type` - How to move the resource (to top or up N layers)
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource
-    /// cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `requester` - 要在队列中移动的资源
-    /// * `request_type` - 如何移动资源（到顶部或上移N层）
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回`Ok(())`，如果资源无法找到则返回`Err(RustConstructorError)`。
     pub fn request_jump_render_list(
         &mut self,
         requester: RequestMethod,
@@ -1512,6 +1466,10 @@ impl App {
                     self.jump_render_list_processor(index, request_type)?;
                     Ok(())
                 } else {
+                    error!(
+                        "[RenderResourceNotFound]request_jump_render_list: Render resource '{}({})' not found.",
+                        id.name, id.discern_type
+                    );
                     Err(RustConstructorError {
                         error_id: "RenderResourceNotFound".to_string(),
                         description: format!(
@@ -1530,6 +1488,10 @@ impl App {
                         return Ok(());
                     };
                 }
+                error!(
+                    "[RenderResourceNotFound]request_jump_render_list: Render resource citer '{}({})' not found.",
+                    citer.name, citer.discern_type
+                );
                 Err(RustConstructorError {
                     error_id: "RenderResourceNotFound".to_string(),
                     description: format!(
@@ -1544,24 +1506,6 @@ impl App {
     /// Handle the operation of skipping the rendering queue.
     ///
     /// 处理跳过渲染队列操作。
-    ///
-    /// # Arguments
-    ///
-    /// * `requester_index` - The index of the resources to be moved in the queue
-    /// * `request_type` - How to move the resource (to top or up N layers)
-    ///
-    /// # Returns
-    ///
-    /// When successful, return `Ok(())`. If the index is out of bounds, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `requester_index` - 要在队列中移动的资源的索引
-    /// * `request_type` - 如何移动资源（到顶部或上移N层）
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回`Ok(())`，如果索引越界则返回`Err(RustConstructorError)`。
     pub fn jump_render_list_processor(
         &mut self,
         requester_index: usize,
@@ -1582,6 +1526,10 @@ impl App {
             self.render_list.insert(new_index, requester);
             Ok(())
         } else {
+            error!(
+                "[IndexOutOfRange]jump_render_list_processor: The maximum index of the target list is {}, but the index is {requester_index}.",
+                self.render_list.len() - 1
+            );
             Err(RustConstructorError {
                 error_id: "IndexOutOfRange".to_string(),
                 description: format!(
@@ -1600,23 +1548,6 @@ impl App {
     /// in the render list and updating their position, size, and rendering properties.
     ///
     /// 此方法通过处理渲染列表中的所有资源并更新它们的位置、尺寸和渲染属性来重新计算渲染层级。
-    ///
-    /// # Arguments
-    ///
-    /// * `ui` - The UI context for drawing
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource
-    /// cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `ui` - 用于绘制的UI上下文
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回`Ok(())`，如果资源无法找到则返回`Err(RustConstructorError)`。
     pub fn update_render_layer(&mut self, ui: &Ui) -> Result<(), RustConstructorError> {
         self.render_layer.clear();
         for info in &self.render_list {
@@ -1677,20 +1608,6 @@ impl App {
     /// resources and promptly correct any issues.
     ///
     /// 此方法可以直观检查所有渲染资源的渲染情况，并及时修正问题。
-    ///
-    /// # Arguments
-    ///
-    /// * `ui` - The UI context for drawing
-    /// * `render_config` - The config of the rendering layer area
-    /// * `ignore_render` - The config of ignore the rendering layer area
-    /// * `hover_config` - The config of hover the rendering layer area
-    ///
-    /// # 参数
-    ///
-    /// * `ui` - 用于绘制的UI上下文
-    /// * `render_config` - 渲染层区域的配置
-    /// * `ignore_render_config` - 无视渲染层区域的配置
-    /// * `hover_config` - 鼠标悬停时的配置
     pub fn display_render_layer(
         &self,
         ui: &mut Ui,
@@ -1814,22 +1731,6 @@ impl App {
     /// Search for resources in the render list by ID.
     ///
     /// 通过ID在渲染列表中查找资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The ID of the resource to search for
-    ///
-    /// # Returns
-    ///
-    /// The index of the resource in the render list, or None if not found
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 要查找的资源的ID
-    ///
-    /// # 返回值
-    ///
-    /// 渲染列表中的资源索引，如果没有找到则为None
     pub fn get_render_layer_resource(&self, id: &RustConstructorId) -> Option<usize> {
         self.render_layer.iter().position(|x| &x.0 == id)
     }
@@ -1842,28 +1743,6 @@ impl App {
     /// multiple components simultaneously, causing confusion.
     ///
     /// 使用此方法以保证鼠标操作不会同时触发多个组件产生混乱。
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The index value of the rendering resource
-    /// * `mouse_pos` - The position of the mouse
-    /// * `need_contains_mouse` - Is it necessary to include the mouse position
-    /// * `ignore_render_layer` - The range of indices to ignore in the render layer
-    ///
-    /// # Returns
-    ///
-    /// Return true if the resource is not blocked; otherwise, return false.
-    ///
-    /// # 参数
-    ///
-    /// * `index` - 渲染资源的索引值
-    /// * `mouse_pos` - 鼠标的位置
-    /// * `need_contains_mouse` - 是否需要包含鼠标位置
-    /// * `ignore_render_layer` - 要忽略的渲染层索引范围
-    ///
-    /// # 返回值
-    ///
-    /// 如果资源未被阻挡，返回true，否则返回false。
     pub fn resource_get_focus(
         &self,
         index: usize,
@@ -1905,23 +1784,6 @@ impl App {
     /// the need for manual control.
     ///
     /// 此方法会被Rust Constructor自动调用，无需手动控制。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// When a success mark is made, return `Ok(())`, and when the resource is not found,
-    /// return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 成功标记时返回`Ok(())`，找不到资源时返回`Err(RustConstructorError)`。
     pub fn add_active_resource(
         &mut self,
         id: &RustConstructorId,
@@ -1932,10 +1794,7 @@ impl App {
                 get_tag("citer_name", &self.get_box_resource(id)?.display_tags()),
                 get_tag("citer_type", &self.get_box_resource(id)?.display_tags()),
             ] {
-                Some(RustConstructorId {
-                    name: citer_name.1,
-                    discern_type: citer_type.1,
-                })
+                Some(build_id(citer_name.1, citer_type.1))
             } else {
                 None
             },
@@ -1953,24 +1812,6 @@ impl App {
     ///
     /// 此方法使用唯一名称注册资源实例。如果名称已存在或无效，则返回错误。
     /// 对于某些资源类型（如 SplitTime），它会自动初始化时间值。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - A unique identifier for the resource
-    /// * `resource` - The resource instance to add
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be added.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 资源的唯一标识符
-    /// * `resource` - 要添加的资源实例
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法添加则返回 `Err(RustConstructorError)`。
     pub fn add_resource<T: RustConstructorResource + 'static>(
         &mut self,
         name: &str,
@@ -1978,18 +1819,19 @@ impl App {
     ) -> Result<(), RustConstructorError> {
         let discern_type = &*type_processor(&resource);
         if self
-            .check_resource_exists(&RustConstructorId {
-                name: name.to_string(),
-                discern_type: discern_type.to_string(),
-            })
+            .check_resource_exists(&build_id(name, discern_type))
             .is_some()
         {
+            error!(
+                "[ResourceNameRepetition]add_resource: Resource '{name}({discern_type})' has already existed."
+            );
             return Err(RustConstructorError {
                 error_id: "ResourceNameRepetition".to_string(),
                 description: format!("Resource '{name}({discern_type})' has already existed."),
             });
         };
         if name.is_empty() {
+            error!("[ResourceUntitled]add_resource: All resources must have a valid name.");
             return Err(RustConstructorError {
                 error_id: "ResourceUntitled".to_string(),
                 description: "All resources must have a valid name.".to_string(),
@@ -2023,6 +1865,11 @@ impl App {
                 let switch = downcast_resource_mut::<Switch>(&mut resource)?;
                 let count = 1 + switch.enable_animation.iter().filter(|x| **x).count();
                 if switch.appearance.len() != count * switch.state_amount as usize {
+                    error!(
+                        "[SwitchAppearanceConfigMismatch]add_resource: Expected {} elements, found {}.",
+                        count * switch.state_amount as usize,
+                        switch.appearance.len()
+                    );
                     return Err(RustConstructorError {
                         error_id: "SwitchAppearanceConfigMismatch".to_string(),
                         description: format!(
@@ -2043,6 +1890,10 @@ impl App {
                         switch.state = 1;
                     };
                     if switch.state_amount != 2 {
+                        error!(
+                            "[SwitchAppearanceConfigMismatch]add_resource: Radio group is only supported for switches with 2 states, found {}.",
+                            switch.state_amount
+                        );
                         return Err(RustConstructorError {
                             error_id: "SwitchAppearanceConfigMismatch".to_string(),
                             description: format!(
@@ -2259,28 +2110,13 @@ impl App {
                 discern_type,
                 Box::new(resource),
             ));
+        info!("Added resource: '{name}({discern_type})'");
         Ok(())
     }
 
     /// Removes a resource from the application. This method is very dangerous! Ensure the resource is no longer in use before deletion.
     ///
     /// 移除资源。此方法非常危险！务必确保资源一定不再使用后删除。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法找到则返回 `Err(RustConstructorError)`。
     pub fn drop_resource(&mut self, id: &RustConstructorId) -> Result<(), RustConstructorError> {
         if let Some(index) = self.check_resource_exists(id) {
             self.rust_constructor_resource.remove(index);
@@ -2296,6 +2132,10 @@ impl App {
             };
             Ok(())
         } else {
+            error!(
+                "[ResourceNotFound]drop_resource: Resource '{}({})' not found.",
+                id.name, id.discern_type
+            );
             Err(RustConstructorError {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{}({})' not found.", id.name, id.discern_type),
@@ -2306,24 +2146,6 @@ impl App {
     /// Replaces an existing resource with a new one in the application.
     ///
     /// 用应用程序中的新资源替换现有资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the resource to replace
-    /// * `resource` - The new resource instance
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be found or replaced.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 要替换的资源名称
-    /// * `resource` - 新的资源实例
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法找到或替换则返回 `Err(RustConstructorError)`。
     pub fn replace_resource<T>(
         &mut self,
         name: &str,
@@ -2333,14 +2155,14 @@ impl App {
         T: RustConstructorResource + 'static,
     {
         let discern_type = &*type_processor(&resource);
-        if let Some(index) = self.check_resource_exists(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: discern_type.to_string(),
-        }) {
+        if let Some(index) = self.check_resource_exists(&build_id(name, discern_type)) {
             self.rust_constructor_resource[index] =
                 RustConstructorResourceBox::new(name, discern_type, Box::new(resource));
             Ok(())
         } else {
+            error!(
+                "[ResourceNotFound]replace_resource: Resource '{name}({discern_type})' not found."
+            );
             Err(RustConstructorError {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{name}({discern_type})' not found."),
@@ -2355,22 +2177,6 @@ impl App {
     /// If you want to use the basic front resource method, please call this method to retrieve the resource.
     ///
     /// 如果想要使用基本前端资源的方法，请调用此方法来取出资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// If the resource is found, return the reference of the resource; otherwise, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到资源，返回资源的引用，否则返回`Err(RustConstructorError)`。
     pub fn get_basic_front_resource(
         &self,
         id: &RustConstructorId,
@@ -2391,22 +2197,6 @@ impl App {
     /// this method to retrieve the resource.
     ///
     /// 如果想要使用基本前端资源的方法并修改基本前端资源，请调用此方法来取出资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// If the resource is found, return the mutable reference of the resource; otherwise, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到资源，返回资源的可变引用，否则返回`Err(RustConstructorError)`。
     pub fn get_basic_front_resource_mut(
         &mut self,
         id: &RustConstructorId,
@@ -2432,22 +2222,6 @@ impl App {
     /// If you need to use a resource without knowing its type, please use this method to retrieve the resource.
     ///
     /// 如果需要在不知道类型的情况下使用资源，请使用此方法取出资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// If the resource is found, return the reference of the resource; otherwise, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到资源，返回资源的引用，否则返回`Err(RustConstructorError)`。
     pub fn get_box_resource(
         &self,
         id: &RustConstructorId,
@@ -2455,6 +2229,10 @@ impl App {
         if let Some(index) = self.check_resource_exists(id) {
             Ok(&*self.rust_constructor_resource[index].content)
         } else {
+            error!(
+                "[ResourceNotFound]get_box_resource: Resource '{}({})' not found.",
+                id.name, id.discern_type
+            );
             Err(RustConstructorError {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{}({})' not found.", id.name, id.discern_type),
@@ -2469,22 +2247,6 @@ impl App {
     /// If you need to use a resource without knowing its type, please use this method to retrieve the resource.
     ///
     /// 如果需要在不知道类型的情况下使用资源，请使用此方法取出资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// If the resource is found, return the mutable reference of the resource; otherwise, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到资源，返回资源的可变引用，否则返回`Err(RustConstructorError)`。
     pub fn get_box_resource_mut(
         &mut self,
         id: &RustConstructorId,
@@ -2492,6 +2254,10 @@ impl App {
         if let Some(index) = self.check_resource_exists(id) {
             Ok(&mut *self.rust_constructor_resource[index].content)
         } else {
+            error!(
+                "[ResourceNotFound]get_box_resource_mut: Resource '{}({})' not found.",
+                id.name, id.discern_type
+            );
             Err(RustConstructorError {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{}({})' not found.", id.name, id.discern_type),
@@ -2502,22 +2268,6 @@ impl App {
     /// Obtain the immutable resources from the list.
     ///
     /// 从列表中获取不可变资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// If the resource is found, return the reference of the resource; otherwise, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到资源，返回资源的引用，否则返回`Err(RustConstructorError)`。
     pub fn get_resource<T>(&self, id: &RustConstructorId) -> Result<&T, RustConstructorError>
     where
         T: RustConstructorResource + 'static,
@@ -2528,22 +2278,6 @@ impl App {
     /// Obtain the mutable resources from the list.
     ///
     /// 从列表中获取可变资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// If the resource is found, return the reference of the resource; otherwise, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到资源，返回资源的引用，否则返回`Err(RustConstructorError)`。
     pub fn get_resource_mut<T>(
         &mut self,
         id: &RustConstructorId,
@@ -2557,22 +2291,6 @@ impl App {
     /// Checks if a specific resource exists in the application.
     ///
     /// 检查应用程序中是否存在特定资源。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    ///
-    /// # Returns
-    ///
-    /// Returns `Some(index)` if the resource exists, or `None` if not found.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    ///
-    /// # 返回值
-    ///
-    /// 如果资源存在则返回 `Some(索引)`，否则返回 `None`。
     pub fn check_resource_exists(&self, id: &RustConstructorId) -> Option<usize> {
         self.rust_constructor_resource
             .iter()
@@ -2586,26 +2304,6 @@ impl App {
     /// This method combines adding a resource to the application and immediately using it.
     ///
     /// 此方法将资源添加到应用程序并立即使用它。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name for the resource
-    /// * `resource` - The resource instance to add and draw
-    /// * `ui` - The UI context for drawing
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be added or drawn.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 资源的名称
-    /// * `resource` - 要添加和绘制的资源实例
-    /// * `ui` - 用于绘制的UI上下文
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法添加或绘制则返回 `Err(RustConstructorError)`。
     pub fn quick_place<T: RustConstructorResource + 'static>(
         &mut self,
         name: &str,
@@ -2614,21 +2312,12 @@ impl App {
     ) -> Result<(), RustConstructorError> {
         let discern_type = &*type_processor(&resource);
         if self
-            .check_resource_exists(&RustConstructorId {
-                name: name.to_string(),
-                discern_type: discern_type.to_string(),
-            })
+            .check_resource_exists(&build_id(name, discern_type))
             .is_none()
         {
             self.add_resource(name, resource)
         } else {
-            self.use_resource(
-                &RustConstructorId {
-                    name: name.to_string(),
-                    discern_type: discern_type.to_string(),
-                },
-                ui,
-            )
+            self.use_resource(&build_id(name, discern_type), ui)
         }
     }
 
@@ -2639,24 +2328,6 @@ impl App {
     /// This method invokes existing resources and performs operations.
     ///
     /// 此方法调用存在的资源并进行操作。
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The unique identifier of the resource
-    /// * `ui` - The UI context for drawing
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be handled.
-    ///
-    /// # 参数
-    ///
-    /// * `id` - 资源的唯一标识符
-    /// * `ui` - 用于绘制的UI上下文
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法处理则返回 `Err(RustConstructorError)`。
     pub fn use_resource(
         &mut self,
         id: &RustConstructorId,
@@ -2670,6 +2341,8 @@ impl App {
                 "PageData" => {
                     // 更新帧数
                     self.update_frame_stats();
+                    // 消费已完成的后台图片加载并创建纹理。
+                    self.process_completed_image_loads(ui);
                     // 更新渲染队列。
                     self.update_render_list();
                     // 绘制渲染队列中的资源。
@@ -2697,10 +2370,8 @@ impl App {
                     }
                     // 更新计时器
                     self.update_timer();
-                    let page_data = self.get_resource::<PageData>(&RustConstructorId {
-                        name: self.current_page.clone(),
-                        discern_type: "PageData".to_string(),
-                    })?;
+                    let page_data =
+                        self.get_resource::<PageData>(&build_id(&self.current_page, "PageData"))?;
                     if page_data.forced_update {
                         ctx_adapter(ui).request_repaint();
                     };
@@ -2711,10 +2382,7 @@ impl App {
                         match &background.background_type {
                             BackgroundType::CustomRect(config) => {
                                 let mut custom_rect = self
-                                    .get_resource::<CustomRect>(&RustConstructorId {
-                                        name: id.name.clone(),
-                                        discern_type: "CustomRect".to_string(),
-                                    })?
+                                    .get_resource::<CustomRect>(&build_id(&id.name, "CustomRect"))?
                                     .clone()
                                     .from_config(config);
                                 if background.use_background_tags {
@@ -2724,10 +2392,7 @@ impl App {
                             }
                             BackgroundType::Image(config) => {
                                 let mut image = self
-                                    .get_resource::<Image>(&RustConstructorId {
-                                        name: id.name.clone(),
-                                        discern_type: "Image".to_string(),
-                                    })?
+                                    .get_resource::<Image>(&build_id(&id.name, "Image"))?
                                     .clone()
                                     .from_config(config);
                                 if background.use_background_tags {
@@ -2738,51 +2403,34 @@ impl App {
                         };
                     };
                     match background.background_type {
-                        BackgroundType::CustomRect(_) => self.use_resource(
-                            &RustConstructorId {
-                                name: id.name.clone(),
-                                discern_type: "CustomRect".to_string(),
-                            },
-                            ui,
-                        ),
-                        BackgroundType::Image(_) => self.use_resource(
-                            &RustConstructorId {
-                                name: id.name.clone(),
-                                discern_type: "Image".to_string(),
-                            },
-                            ui,
-                        ),
+                        BackgroundType::CustomRect(_) => {
+                            self.use_resource(&build_id(&id.name, "CustomRect"), ui)
+                        }
+                        BackgroundType::Image(_) => {
+                            self.use_resource(&build_id(&id.name, "Image"), ui)
+                        }
                     }?;
                 }
                 "Switch" => {
                     let mut switch = self.get_resource::<Switch>(id)?.clone();
-                    let mut background = self
-                        .get_resource::<Background>(&RustConstructorId {
-                            name: format!("{}Background", &id.name),
-                            discern_type: "Background".to_string(),
-                        })?
-                        .clone();
-                    let background_resource_type = match switch.background_type {
-                        BackgroundType::CustomRect(_) => "CustomRect",
-                        BackgroundType::Image(_) => "Image",
-                    };
-                    let background_resource =
-                        self.get_basic_front_resource(&RustConstructorId {
-                            name: format!("{}Background", &id.name),
-                            discern_type: background_resource_type.to_string(),
-                        })?;
+                    let background_name = format!("{}Background", &id.name);
+                    let text_name = format!("{}Text", &id.name);
+                    let hint_name = format!("{}HintText", &id.name);
+                    let start_hover_time = format!("{}StartHoverTime", &id.name);
+                    let hint_fade_animation = format!("{}HintFadeAnimation", &id.name);
+                    let background_id = build_id(&background_name, "Background");
+                    let mut background = self.get_resource::<Background>(&background_id)?.clone();
+                    let background_resource_type = background_type_discern(&switch.background_type);
+                    let background_resource = self.get_basic_front_resource(&build_id(
+                        &background_name,
+                        background_resource_type,
+                    ))?;
                     let display_info = background_resource.display_display_info();
                     let mut text = self
-                        .get_resource::<Text>(&RustConstructorId {
-                            name: format!("{}Text", &id.name),
-                            discern_type: "Text".to_string(),
-                        })?
+                        .get_resource::<Text>(&build_id(text_name.clone(), "Text"))?
                         .clone();
                     let mut hint_text = self
-                        .get_resource::<Text>(&RustConstructorId {
-                            name: format!("{}HintText", &id.name),
-                            discern_type: "Text".to_string(),
-                        })?
+                        .get_resource::<Text>(&build_id(hint_name.clone(), "Text"))?
                         .clone();
                     switch.switched = false;
                     let animation_count =
@@ -2791,19 +2439,18 @@ impl App {
                     let mut hovered = false;
                     let mut appearance_count = 0;
                     // 处理点击事件
-                    if let Some(index) = self.get_render_layer_resource(&RustConstructorId {
-                        name: format!("{}Background", &id.name),
-                        discern_type: background_resource_type.to_string(),
-                    }) && switch.enable
+                    if let Some(index) = self.get_render_layer_resource(&build_id(
+                        &background_name,
+                        background_resource_type.to_string(),
+                    )) && switch.enable
                         && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
                         && self.resource_get_focus(index, mouse_pos.into(), true, vec![])
                         && let Some(display_info) = background_resource.display_display_info()
                         && !display_info.hidden
                     {
                         if !switch.last_frame_hovered {
-                            self.reset_split_time(&format!("{}StartHoverTime", &id.name))?;
-                        } else if self.timer.total_time
-                            - self.get_split_time(&format!("{}StartHoverTime", &id.name))?[1]
+                            self.reset_split_time(&start_hover_time)?;
+                        } else if self.timer.total_time - self.get_split_time(&start_hover_time)?[1]
                             >= 2000
                             || hint_text.alpha != 0
                         {
@@ -2888,13 +2535,12 @@ impl App {
                     // 若鼠标未悬挂在开关上，逐渐隐藏提示文本
                     if !hovered {
                         if switch.last_frame_hovered {
-                            self.reset_split_time(&format!("{}HintFadeAnimation", &id.name))?;
+                            self.reset_split_time(&hint_fade_animation)?;
                         };
-                        if self.timer.total_time
-                            - self.get_split_time(&format!("{}HintFadeAnimation", &id.name))?[1]
+                        if self.timer.total_time - self.get_split_time(&hint_fade_animation)?[1]
                             >= self.tick_interval
                         {
-                            self.reset_split_time(&format!("{}HintFadeAnimation", &id.name))?;
+                            self.reset_split_time(&hint_fade_animation)?;
                             hint_text.alpha = hint_text.alpha.saturating_sub(10);
                         };
                     };
@@ -2952,69 +2598,52 @@ impl App {
                     switch.last_frame_hovered = hovered;
                     switch.last_frame_clicked = clicked;
 
-                    self.replace_resource(&format!("{}Text", &id.name), text)?;
-                    self.replace_resource(&format!("{}HintText", &id.name), hint_text)?;
+                    self.replace_resource(&text_name, text)?;
+                    self.replace_resource(&hint_name, hint_text)?;
                     self.replace_resource(&id.name, switch)?;
-                    self.replace_resource(&format!("{}Background", &id.name), background)?;
+                    self.replace_resource(&background_name, background)?;
 
-                    self.use_resource(
-                        &RustConstructorId {
-                            name: format!("{}Background", &id.name),
-                            discern_type: "Background".to_string(),
-                        },
-                        ui,
-                    )?;
-                    self.use_resource(
-                        &RustConstructorId {
-                            name: format!("{}Text", &id.name),
-                            discern_type: "Text".to_string(),
-                        },
-                        ui,
-                    )?;
+                    self.use_resource(&build_id(background_name, "Background"), ui)?;
+                    self.use_resource(&build_id(text_name.clone(), "Text"), ui)?;
                     if alpha != 0 {
-                        self.try_request_jump_render_list(
-                            RequestMethod::Id(RustConstructorId {
-                                name: format!("{}HintText", &id.name),
-                                discern_type: "Text".to_string(),
-                            }),
-                            RequestType::Top,
-                        );
-                        self.use_resource(
-                            &RustConstructorId {
-                                name: format!("{}HintText", &id.name),
-                                discern_type: "Text".to_string(),
-                            },
-                            ui,
-                        )?;
+                        if self
+                            .render_list
+                            .iter()
+                            .any(|x| x.0 == build_id(&hint_name, "Text"))
+                        {
+                            self.try_request_jump_render_list(
+                                RequestMethod::Id(build_id(&hint_name, "Text")),
+                                RequestType::Top,
+                            );
+                        };
+                        self.use_resource(&build_id(&hint_name, "Text"), ui)?;
                     };
                 }
                 "ResourcePanel" => {
                     let mut resource_panel = self
-                        .get_resource::<ResourcePanel>(&RustConstructorId {
-                            name: id.name.clone(),
-                            discern_type: "ResourcePanel".to_string(),
-                        })?
+                        .get_resource::<ResourcePanel>(&build_id(&id.name, "ResourcePanel"))?
                         .clone();
+                    let background_name = format!("{}Background", &id.name);
                     let background = self
-                        .get_resource::<Background>(&RustConstructorId {
-                            name: format!("{}Background", &id.name),
-                            discern_type: "Background".to_string(),
-                        })?
+                        .get_resource::<Background>(&build_id(
+                            background_name.clone(),
+                            "Background",
+                        ))?
                         .clone();
                     let background_resource: Box<dyn BasicFrontResource> =
                         match background.background_type.clone() {
                             BackgroundType::CustomRect(_) => Box::new(
-                                self.get_resource::<CustomRect>(&RustConstructorId {
-                                    name: format!("{}Background", &id.name),
-                                    discern_type: "CustomRect".to_string(),
-                                })?
+                                self.get_resource::<CustomRect>(&build_id(
+                                    background_name.clone(),
+                                    background_type_discern(&background.background_type),
+                                ))?
                                 .clone(),
                             ),
                             BackgroundType::Image(_) => Box::new(
-                                self.get_resource::<Image>(&RustConstructorId {
-                                    name: format!("{}Background", &id.name),
-                                    discern_type: "Image".to_string(),
-                                })?
+                                self.get_resource::<Image>(&build_id(
+                                    background_name.clone(),
+                                    background_type_discern(&background.background_type),
+                                ))?
                                 .clone(),
                             ),
                         };
@@ -3074,14 +2703,10 @@ impl App {
                     let mut resource_get_focus = [false, false];
                     if let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
                         && !resource_panel.hidden
-                        && let Some(index) = self.get_render_layer_resource(&RustConstructorId {
-                            name: format!("{}Background", &id.name),
-                            discern_type: match background.background_type {
-                                BackgroundType::CustomRect(_) => "CustomRect",
-                                BackgroundType::Image(_) => "Image",
-                            }
-                            .to_string(),
-                        })
+                        && let Some(index) = self.get_render_layer_resource(&build_id(
+                            background_name.clone(),
+                            background_type_discern(&background.background_type).to_string(),
+                        ))
                     {
                         resource_get_focus = [
                             self.resource_get_focus(index, mouse_pos.into(), false, vec![]),
@@ -3137,14 +2762,11 @@ impl App {
                                 && ui.input(|i| i.pointer.primary_pressed())
                             {
                                 self.request_jump_render_list(
-                                    RequestMethod::Id(RustConstructorId {
-                                        name: format!("{}Background", &id.name),
-                                        discern_type: match background.background_type {
-                                            BackgroundType::CustomRect(_) => "CustomRect",
-                                            BackgroundType::Image(_) => "Image",
-                                        }
-                                        .to_string(),
-                                    }),
+                                    RequestMethod::Id(build_id(
+                                        background_name.clone(),
+                                        background_type_discern(&background.background_type)
+                                            .to_string(),
+                                    )),
                                     RequestType::Top,
                                 )
                                 .unwrap();
@@ -3170,25 +2792,17 @@ impl App {
                                     resource_panel.scroll_bar_display_method
                                 {
                                     self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}XScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
+                                        RequestMethod::Id(build_id(
+                                            format!("{}XScroll", &id.name),
+                                            background_type_discern(background_type).to_string(),
+                                        )),
                                         RequestType::Top,
                                     );
                                     self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}YScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
+                                        RequestMethod::Id(build_id(
+                                            format!("{}YScroll", &id.name),
+                                            background_type_discern(background_type).to_string(),
+                                        )),
                                         RequestType::Top,
                                     );
                                 };
@@ -3199,25 +2813,17 @@ impl App {
                                 ) = resource_panel.scroll_bar_display_method
                                 {
                                     self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}XScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
+                                        RequestMethod::Id(build_id(
+                                            format!("{}XScroll", &id.name),
+                                            background_type_discern(background_type),
+                                        )),
                                         RequestType::Top,
                                     );
                                     self.try_request_jump_render_list(
-                                        RequestMethod::Id(RustConstructorId {
-                                            name: format!("{}YScroll", &id.name),
-                                            discern_type: match background_type {
-                                                BackgroundType::CustomRect(_) => "CustomRect",
-                                                BackgroundType::Image(_) => "Image",
-                                            }
-                                            .to_string(),
-                                        }),
+                                        RequestMethod::Id(build_id(
+                                            format!("{}YScroll", &id.name),
+                                            background_type_discern(background_type),
+                                        )),
                                         RequestType::Top,
                                     );
                                 };
@@ -4145,16 +3751,10 @@ impl App {
                         ),
                     };
                     self.replace_resource(
-                        &format!("{}Background", &id.name),
+                        &background_name,
                         background.clone().background_type(&background_type).clone(),
                     )?;
-                    self.use_resource(
-                        &RustConstructorId {
-                            name: format!("{}Background", &id.name),
-                            discern_type: "Background".to_string(),
-                        },
-                        ui,
-                    )?;
+                    self.use_resource(&build_id(&background_name, "Background"), ui)?;
                     type PointList = Vec<([f32; 2], [f32; 2], [bool; 2], Option<String>)>;
                     let mut resource_point_list: PointList = Vec::new();
                     let mut use_resource_list = Vec::new();
@@ -4638,10 +4238,7 @@ impl App {
                         };
                     }
                     for (new_position_size_config, [name, discern_type]) in replace_resource_list {
-                        let id = RustConstructorId {
-                            name: name.clone(),
-                            discern_type: discern_type.clone(),
-                        };
+                        let id = build_id(name, discern_type);
                         let default_storage = if let Some(resource_storage) =
                             resource_panel.resource_storage.iter().find(|x| x.id == id)
                         {
@@ -4696,13 +4293,7 @@ impl App {
                         });
                     }
                     for info in use_resource_list {
-                        self.use_resource(
-                            &RustConstructorId {
-                                name: info[0].clone(),
-                                discern_type: info[1].clone(),
-                            },
-                            ui,
-                        )?;
+                        self.use_resource(&build_id(&info[0], &info[1]), ui)?;
                     }
                     let mut resource_length = [None, None];
                     for point in resource_point_list {
@@ -4869,10 +4460,7 @@ impl App {
                                 }),
                             )?;
                             self.use_resource(
-                                &RustConstructorId {
-                                    name: format!("{}XScroll", &id.name),
-                                    discern_type: "Background".to_string(),
-                                },
+                                &build_id(format!("{}XScroll", &id.name), "Background"),
                                 ui,
                             )?;
                             let line_length = if resource_panel.scroll_length[0] == 0_f32 {
@@ -4941,10 +4529,7 @@ impl App {
                                 }),
                             )?;
                             self.use_resource(
-                                &RustConstructorId {
-                                    name: format!("{}YScroll", &id.name),
-                                    discern_type: "Background".to_string(),
-                                },
+                                &build_id(format!("{}YScroll", &id.name), "Background"),
                                 ui,
                             )?;
                         }
@@ -5068,10 +4653,7 @@ impl App {
                                 }),
                             )?;
                             self.use_resource(
-                                &RustConstructorId {
-                                    name: format!("{}XScroll", &id.name),
-                                    discern_type: "Background".to_string(),
-                                },
+                                &build_id(format!("{}XScroll", &id.name), "Background"),
                                 ui,
                             )?;
                             let line_length = if resource_panel.scroll_length[0] == 0_f32 {
@@ -5151,10 +4733,7 @@ impl App {
                                 }),
                             )?;
                             self.use_resource(
-                                &RustConstructorId {
-                                    name: format!("{}YScroll", &id.name),
-                                    discern_type: "Background".to_string(),
-                                },
+                                &build_id(format!("{}YScroll", &id.name), "Background"),
                                 ui,
                             )?;
                         }
@@ -5166,6 +4745,10 @@ impl App {
             };
             Ok(())
         } else {
+            error!(
+                "[ResourceNotFound]use_resource: Resource '{}({})' not found.",
+                id.name, id.discern_type
+            );
             Err(RustConstructorError {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{}({})' not found.", id.name, id.discern_type),
@@ -5176,27 +4759,8 @@ impl App {
     /// Switches to a different page and resets page-specific state.
     ///
     /// 切换到不同页面并重置页面特定状态。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the page to switch to
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the page cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 要切换到的页面名称
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果页面无法找到则返回 `Err(RustConstructorError)`。
     pub fn switch_page(&mut self, name: &str) -> Result<(), RustConstructorError> {
-        let page_data = self.get_resource_mut::<PageData>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "PageData".to_string(),
-        })?;
+        let page_data = self.get_resource_mut::<PageData>(&build_id(name, "PageData"))?;
         page_data.enter_page_updated = false;
         self.timer.start_time = self.timer.total_time;
         self.current_page = name.to_string();
@@ -5204,24 +4768,14 @@ impl App {
         Ok(())
     }
 
-    /// Try to register all fonts in the egui context.
+    /// Try to register all fonts.
     ///
-    /// 尝试向egui上下文中注册所有字体。
+    /// 尝试注册所有字体。
     ///
     /// This method loads and registers all fonts with the egui rendering system for
     /// text display.
     ///
     /// 此方法加载并注册所有字体到egui渲染系统中，用于文本显示。
-    ///
-    /// # Arguments
-    ///
-    /// * `ui` - The UI context for drawing
-    /// * `font_info` - Font information, including font names and paths
-    ///
-    /// # 参数
-    ///
-    /// * `ui` - 用于绘制的UI上下文
-    /// * `font_info` - 字体信息，包含字体名称和路径
     pub fn try_register_all_fonts(&mut self, ui: &mut Ui, font_info: Vec<[&str; 2]>) {
         let mut font_definitions_amount = FontDefinitions::default();
         let mut loaded_fonts = Vec::new();
@@ -5277,33 +4831,14 @@ impl App {
         ctx_adapter(ui).set_fonts(font_definitions_amount);
     }
 
-    /// Registers all fonts with the egui context.
+    /// Registers all fonts.
     ///
-    /// 向egui上下文中注册所有字体。
+    /// 注册所有字体。
     ///
     /// This method loads and registers all fonts with the egui rendering system for
     /// text display.
     ///
     /// 此方法加载并注册所有字体到egui渲染系统中，用于文本显示。
-    ///
-    /// # Arguments
-    ///
-    /// * `ui` - The UI context for drawing
-    /// * `font_info` - Font information, including font names and paths
-    ///
-    /// # Returns
-    ///
-    /// If the loading is successfully completed, return `Ok(())`; otherwise,
-    /// return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `ui` - 用于绘制的UI上下文
-    /// * `font_info` - 字体信息，包含字体名称和路径
-    ///
-    /// # 返回值
-    ///
-    /// 如果成功完成加载返回`Ok(())`，否则返回`Err(RustConstructorError)`。
     pub fn register_all_fonts(
         &mut self,
         ui: &mut Ui,
@@ -5355,6 +4890,10 @@ impl App {
                     loaded_fonts.push(font_info);
                 };
             } else {
+                error!(
+                    "[FontLoadFailed]register_all_fonts: Failed to load a font from the path '{}'.",
+                    font_info[1]
+                );
                 return Err(RustConstructorError {
                     error_id: "FontLoadFailed".to_string(),
                     description: format!("Failed to load a font from the path '{}'.", font_info[1]),
@@ -5372,30 +4911,9 @@ impl App {
     /// Checks if a page has completed its initial loading phase.
     ///
     /// 检查页面是否已完成首次加载。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the page to check
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(true)` if the page has completed loading, or `Ok(false)` if the page has not completed loading.
-    /// Returns `Err(RustConstructorError)` if the page cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 要检查的页面名称
-    ///
-    /// # 返回值
-    ///
-    /// 如果页面已完成加载则返回 `Ok(true)`，如果未加载则返回 `Ok(false)`。
-    /// 如果页面无法找到则返回 `Err(RustConstructorError)`。
     pub fn check_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
         let page_data = self
-            .get_resource::<PageData>(&RustConstructorId {
-                name: name.to_string(),
-                discern_type: "PageData".to_string(),
-            })?
+            .get_resource::<PageData>(&build_id(name, "PageData"))?
             .clone();
         if !page_data.change_page_updated {
             self.new_page_update(name)?;
@@ -5406,29 +4924,8 @@ impl App {
     /// Checks if a page has completed its enter transition.
     ///
     /// 检查页面是否已完成进入过渡。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the page to check
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(true)` if the page has completed entering, or `Ok(false)` if the page has not completed entering.
-    /// Returns `Err(RustConstructorError)` if the page cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 要检查的页面名称
-    ///
-    /// # 返回值
-    ///
-    /// 如果页面已完成进入则返回 `Ok(true)`，如果未过渡则返回 `Ok(false)`。
-    /// 如果页面无法找到则返回 `Err(RustConstructorError)`。
     pub fn check_enter_updated(&mut self, name: &str) -> Result<bool, RustConstructorError> {
-        let page_data = self.get_resource_mut::<PageData>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "PageData".to_string(),
-        })?;
+        let page_data = self.get_resource_mut::<PageData>(&build_id(name, "PageData"))?;
         let enter_page_updated = page_data.enter_page_updated;
         page_data.enter_page_updated = true;
         Ok(enter_page_updated)
@@ -5441,27 +4938,8 @@ impl App {
     /// This method is used to ensure the accuracy of the content based on the page, and the Rust Constructor will automatically call this method.
     ///
     /// 此方法用于确保基于页面的内容的准确性，Rust Constructor会自动调用此方法。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the page to be updated
-    ///
-    /// # Returns
-    ///
-    /// If the update is successful, return `Ok(())`; if the resource is not found, return `Err(RustConstructorError)`.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 要更新的页面名称
-    ///
-    /// # 返回值
-    ///
-    /// 如果更新成功则返回`Ok(())`，找不到资源则返回`Err(RustConstructorError)`。
     pub fn new_page_update(&mut self, name: &str) -> Result<(), RustConstructorError> {
-        let page_data = self.get_resource_mut::<PageData>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "PageData".to_string(),
-        })?;
+        let page_data = self.get_resource_mut::<PageData>(&build_id(name, "PageData"))?;
         page_data.change_page_updated = true;
         self.timer.start_time = self.timer.total_time;
         self.update_timer();
@@ -5495,14 +4973,6 @@ impl App {
     /// This method is used to obtain the number of program frames and conduct analysis.
     ///
     /// 此方法用于获取程序帧数并进行分析。
-    ///
-    /// # Returns
-    ///
-    /// Return the number of frames.
-    ///
-    /// # 返回值
-    ///
-    /// 返回帧数。
     pub fn current_fps(&self) -> f32 {
         if self.frame_times.is_empty() {
             0.0
@@ -5515,28 +4985,9 @@ impl App {
     /// Resets the split time for a specific resource.
     ///
     /// 重置特定资源的分段计时器。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the split time resource to reset
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 要重置的分段时间资源名称
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法找到则返回 `Err(RustConstructorError)`。
     pub fn reset_split_time(&mut self, name: &str) -> Result<(), RustConstructorError> {
         let new_time = [self.timer.now_time, self.timer.total_time];
-        let split_time = self.get_resource_mut::<SplitTime>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "SplitTime".to_string(),
-        })?;
+        let split_time = self.get_resource_mut::<SplitTime>(&build_id(name, "SplitTime"))?;
         split_time.time = new_time;
         Ok(())
     }
@@ -5544,27 +4995,8 @@ impl App {
     /// Retrieves the timing information from a split time resource.
     ///
     /// 获取分段计时器资源的时间信息。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the split time resource
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok([page_runtime, total_runtime])` if found, or `Err(RustConstructorError)` if not found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 分段计时器资源的名称
-    ///
-    /// # 返回值
-    ///
-    /// 如果找到则返回 `Ok([页面运行时间, 总运行时间])`，否则返回 `Err(RustConstructorError)`。
     pub fn get_split_time(&self, name: &str) -> Result<[u128; 2], RustConstructorError> {
-        let split_time = self.get_resource::<SplitTime>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "SplitTime".to_string(),
-        })?;
+        let split_time = self.get_resource::<SplitTime>(&build_id(name, "SplitTime"))?;
         Ok(split_time.time)
     }
 
@@ -5584,33 +5016,12 @@ impl App {
     /// Modifies the value of a variable resource.
     ///
     /// 修改变量资源的值。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the variable resource
-    /// * `value` - The new value to set (use `None` to clear)
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 变量资源的名称
-    /// * `value` - 要设置的新值（使用 `None` 来清除）
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法找到则返回 `Err(RustConstructorError)`。
     pub fn modify_variable<T: Debug + Send + Sync + 'static>(
         &mut self,
         name: &str,
         value: Option<T>,
     ) -> Result<(), RustConstructorError> {
-        let variable = self.get_resource_mut::<Variable<T>>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "Variable".to_string(),
-        })?;
+        let variable = self.get_resource_mut::<Variable<T>>(&build_id(name, "Variable"))?;
         variable.value = value;
         Ok(())
     }
@@ -5618,43 +5029,25 @@ impl App {
     /// Take the variable out of the list.
     ///
     /// 从列表中取出变量。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the variable resource
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(Option<T>)` on success, or `Err(RustConstructorError)` if the resource cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 变量资源的名称
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(Option<T>)`，如果资源无法找到则返回 `Err(RustConstructorError)`。
     pub fn get_variable<T: Debug + Clone + Send + Sync + 'static>(
         &self,
         name: &str,
     ) -> Result<Option<T>, RustConstructorError> {
-        if let Ok(variable) = self.get_resource::<Variable<T>>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "Variable".to_string(),
-        }) {
+        if let Ok(variable) = self.get_resource::<Variable<T>>(&build_id(name, "Variable")) {
             Ok(variable.value.clone())
         } else if self
-            .check_resource_exists(&RustConstructorId {
-                name: name.to_string(),
-                discern_type: "Variable".to_string(),
-            })
+            .check_resource_exists(&build_id(name, "Variable"))
             .is_none()
         {
+            error!("[ResourceNotFound]get_variable: Resource '{name}(Variable<T>)' not found.");
             Err(RustConstructorError {
                 error_id: "ResourceNotFound".to_string(),
                 description: format!("Resource '{name}(Variable<T>)' not found."),
             })
         } else {
+            error!(
+                "[ResourceGenericMismatch]get_variable: The generic type of the resource '{name}(Variable<T>)' is mismatched."
+            );
             Err(RustConstructorError {
                 error_id: "ResourceGenericMismatch".to_string(),
                 description: format!(
@@ -5667,33 +5060,12 @@ impl App {
     /// Modify the enable status of the switch.
     ///
     /// 修改开关的启用状态。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the switch resource
-    /// * `enable` - The new enable status
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err(RustConstructorError)` if the resource cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 开关资源的名称
-    /// * `enable` - 新的启用状态
-    ///
-    /// # 返回值
-    ///
-    /// 成功时返回 `Ok(())`，如果资源无法找到则返回 `Err(RustConstructorError)`。
     pub fn set_switch_enable(
         &mut self,
         name: &str,
         enable: bool,
     ) -> Result<(), RustConstructorError> {
-        let switch = self.get_resource_mut::<Switch>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "Switch".to_string(),
-        })?;
+        let switch = self.get_resource_mut::<Switch>(&build_id(name, "Switch"))?;
         switch.enable = enable;
         Ok(())
     }
@@ -5701,29 +5073,8 @@ impl App {
     /// Retrieves the current state and interaction data from a switch resource.
     ///
     /// 获取开关资源的当前状态和交互数据。
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the switch resource
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(SwitchData)` containing the switch state and interaction history,
-    /// or `Err(RustConstructorError)` if the resource cannot be found.
-    ///
-    /// # 参数
-    ///
-    /// * `name` - 开关资源的名称
-    ///
-    /// # 返回值
-    ///
-    /// 返回包含开关状态和交互历史的 `Ok(SwitchData)`，
-    /// 如果资源无法找到则返回 `Err(RustConstructorError)`。
     pub fn check_switch_data(&self, name: &str) -> Result<SwitchData, RustConstructorError> {
-        let switch = self.get_resource::<Switch>(&RustConstructorId {
-            name: name.to_string(),
-            discern_type: "Switch".to_string(),
-        })?;
+        let switch = self.get_resource::<Switch>(&build_id(name, "Switch"))?;
         Ok(SwitchData {
             switched: switch.switched,
             last_frame_clicked: switch.last_frame_clicked,
@@ -5734,23 +5085,6 @@ impl App {
     /// Find out which switch in the radio switch group is activated.
     ///
     /// 查找单选开关组中哪个开关被激活了。
-    ///
-    /// # Arguments
-    ///
-    /// * `radio_group` - The name of the radio switch group
-    ///
-    /// # Returns
-    ///
-    /// Returns the name of the activated switch. If there is no activated switch or the
-    /// radio switch group does not exist, return an empty string.
-    ///
-    /// # 参数
-    ///
-    /// * `radio_group` - 单选开关组的名称
-    ///
-    /// # 返回值
-    ///
-    /// 返回激活的开关的名称，如果没有激活的开关或单选开关组不存在则返回空字符串。
     pub fn check_radio_switch(&self, radio_group: &str) -> String {
         let mut activate_switch = String::new();
         for rcr in &self.rust_constructor_resource {

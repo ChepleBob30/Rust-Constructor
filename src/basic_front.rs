@@ -6,12 +6,14 @@ use crate::{
     RustConstructorResource,
 };
 #[cfg(feature = "bevy")]
-use egui_bevy::TextureHandle;
+use egui_bevy::{ColorImage, TextureHandle};
 #[cfg(feature = "standard")]
-use egui_standard::TextureHandle;
+use egui_standard::{ColorImage, TextureHandle};
 use std::{
     any::Any,
+    collections::HashMap,
     fmt::{Debug, Formatter},
+    sync::{Arc, Mutex},
 };
 
 /// Config options for custom rectangles.
@@ -583,6 +585,32 @@ impl DebugTextureHandle {
     pub fn new(texture_handle: &TextureHandle) -> Self {
         Self(texture_handle.clone())
     }
+}
+
+/// Request sent to the background worker thread to load an image from disk.
+///
+/// 发送到后台工作线程的图片加载请求。
+/// Result returned from the background worker thread after loading an image.
+///
+/// 后台工作线程完成图片加载后返回的结果。
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct LoadedImageData {
+    /// Decoded image data ready for texture upload on the main thread.
+    ///
+    /// 已解码的图像数据，可在主线程直接上传为纹理。
+    pub color_image: ColorImage,
+}
+
+/// Manages the background image loading infrastructure.
+///
+/// 管理后台图片加载基础设施。
+#[derive(Debug, Default, Clone)]
+pub struct ImageLoader {
+    /// Completed loads from worker threads, keyed by resource name.
+    /// Each frame, completed loads are drained to create egui textures.
+    ///
+    /// 工作线程完成的加载结果，按资源名称索引。每帧消耗以创建 egui 纹理。
+    pub completed: Arc<Mutex<HashMap<String, LoadedImageData>>>,
 }
 
 /// Methods for loading images into the resource.
