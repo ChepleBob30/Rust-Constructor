@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.11.4-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.11.5-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,22 +25,19 @@
 
 ## 版本更新信息
 
-- 当前版本为`v2.11.4 小修小补`。
-  - 本更新添加了日志输出功能，并进行了少量优化。
+- 当前版本为`v2.11.5 资源大解放`。
+  - 本更新修复了一些已知问题。
   - **实用改动**
-    - 添加`log`依赖，在`App`中添加大量日志输出；
-    - 现在图片纹理加载支持多线程，加载完毕后显示，不再阻塞主线程；
-    - 添加`background_type_discern`，用于快速匹配`BackgroundType`对应的类型；
-    - 添加`build_id`，用于快速从字符串构建`RustConstructorId`；
-    - 添加`ImageLoader`和`LoadedImageData`，用于辅助多线程加载图片；
-    - 添加`process_completed_image_loads`方法，用于显示加载完的图片；
-    - 移除了大量无意义的注释；
+    - 更新了`egui`依赖；
     - 改进了部分代码。
   - **破坏性改动**
-    - `App`中添加`image_loader`，用于后台图片加载；
+    - `BorderKind`迁移至`basic_front.rs`中；
+    - 调整了部分获取窗口尺寸的方法，使其与实际窗口大小更加贴合；
+    - 移除了`try`类方法；
+    - 为`ResourcePanel`添加`overall_offset`字段，用于调整资源显示位置；
     - 对部分内容进行了修改。
   - **漏洞修复**
-    - 修复了`Switch`前置提示文本时会出错的问题；
+    - 修复了`ResourcePanel`资源使用不同对齐方式时排版错乱的问题；
     - 修复了一些已知问题。
 
 ---

@@ -2,12 +2,12 @@
 //!
 //! 此文件包含基本前端资源。基本前端资源可以单独使用，也可被用于创建高级前端资源。
 use crate::{
-    BasicFrontResource, BasicFrontResourceConfig, BorderKind, DisplayInfo, PositionSizeConfig,
+    BasicFrontResource, BasicFrontResourceConfig, DisplayInfo, PositionSizeConfig,
     RustConstructorResource,
 };
-#[cfg(feature = "bevy")]
+#[cfg(feature = "rc_bevy")]
 use egui_bevy::{ColorImage, TextureHandle};
-#[cfg(feature = "standard")]
+#[cfg(feature = "rc_standard")]
 use egui_standard::{ColorImage, TextureHandle};
 use std::{
     any::Any,
@@ -15,6 +15,26 @@ use std::{
     fmt::{Debug, Formatter},
     sync::{Arc, Mutex},
 };
+
+/// Defines the placement of borders relative to the element's bounds.
+///
+/// 定义边框相对于元素边界的放置方式。
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum BorderKind {
+    /// Border is drawn inside the element's bounds, reducing the content area.
+    ///
+    /// 边框在元素边界内部绘制，减少内容区域。
+    #[default]
+    Inside,
+    /// Border is centered on the element's bounds, half inside and half outside.
+    ///
+    /// 边框以元素边界为中心，一半在内部一半在外部。
+    Middle,
+    /// Border is drawn outside the element's bounds, preserving the content area.
+    ///
+    /// 边框在元素边界外部绘制，保持内容区域不变。
+    Outside,
+}
 
 /// Config options for custom rectangles.
 ///

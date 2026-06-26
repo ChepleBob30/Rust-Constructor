@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.11.4-0000CD)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.11.5-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -25,23 +25,20 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- Current version: `v2.11.4 Minor Repairs`.
-  - This update added logging output functionality and performed minor optimizations.
-  - **Utility Changes**
-    - Added `log` dependency, and added extensive logging output in `App`.
-    - Image texture loading now supports multi-threading; it will display after loading is complete and will no longer block the main thread.
-    - Added `background_type_discern` for quickly matching the type corresponding to `BackgroundType`.
-    - Added `build_id` for quick construction of `RustConstructorId` from a string.
-    - Added `ImageLoader` and `LoadedImageData` to assist with multi-threaded image loading.
-    - Added `process_completed_image_loads` method for displaying fully loaded images.
-    - Removed many meaningless comments.
-    - Improved some code sections.
+- The current version is `v2.11.5 Resource Liberation`.
+  - This update fixes some known issues.
+  - **Improvements**
+    - Updated the `egui` dependency;
+    - Improved some code.
   - **Breaking Changes**
-    - Added `image_loader` in `App` for background image loading.
+    - Moved `BorderKind` into `basic_front.rs`;
+    - Adjusted some methods for retrieving window size so they better match the actual window dimensions;
+    - Removed `try`-prefixed methods;
+    - Added an `overall_offset` field to `ResourcePanel` for adjusting resource display position;
     - Modified some content.
   - **Bug Fixes**
-    - Fixed the issue where the `Switch` failed when setting placeholder text.
-    - Fixed several known issues.
+    - Fixed a layout misalignment issue in `ResourcePanel` when resources use different alignments;
+    - Fixed some known issues.
 
 ---
 

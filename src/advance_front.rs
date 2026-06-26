@@ -5,9 +5,9 @@ use crate::{
     DisplayInfo, RustConstructorId, RustConstructorResource,
     basic_front::{CustomRectConfig, ImageConfig, TextConfig},
 };
-#[cfg(feature = "bevy")]
+#[cfg(feature = "rc_bevy")]
 use egui_bevy::PointerButton;
-#[cfg(feature = "standard")]
+#[cfg(feature = "rc_standard")]
 use egui_standard::PointerButton;
 use std::any::Any;
 
@@ -419,6 +419,15 @@ pub struct ResourcePanel {
     /// 面板内资源元数据的存储。
     pub resource_storage: Vec<PanelStorage>,
 
+    /// The overall offset of all resources on the panel.
+    ///
+    /// 面板所有资源整体的偏移量。
+    ///
+    /// It is used to ensure that resources with different alignment methods can all be displayed correctly.
+    ///
+    /// 用于确保不同对齐方式的资源都能正确显示。
+    pub overall_offset: [f32; 2],
+
     /// Key-value pairs for categorization and metadata.
     ///
     /// 用于分类和元数据的键值对标签。
@@ -488,6 +497,7 @@ impl Default for ResourcePanel {
             scrolled: [false, false],
             scroll_bar_alpha: [0, 0],
             resource_storage: Vec::new(),
+            overall_offset: [0_f32, 0_f32],
             tags: Vec::new(),
         }
     }

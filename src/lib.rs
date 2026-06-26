@@ -27,20 +27,20 @@ pub mod advance_front;
 pub mod app;
 pub mod background;
 pub mod basic_front;
-#[cfg(all(feature = "standard", feature = "bevy"))]
+#[cfg(all(feature = "rc_standard", feature = "rc_bevy"))]
 compile_error!(
     "You cannot use both 'bevy' and 'standard' features simultaneously!
     If you are developing using Rust Constructor independently, please select 'standard'; if you are developing using bevy, please select 'bevy'."
 );
-#[cfg(not(any(feature = "standard", feature = "bevy")))]
+#[cfg(not(any(feature = "rc_standard", feature = "rc_bevy")))]
 compile_error!(
     "You must enable at least one of the 'bevy' or 'standard' features!
     If you are developing using Rust Constructor independently, please select 'standard'; if you are developing using bevy, please select 'bevy'."
 );
-use crate::advance_front::BackgroundType;
-#[cfg(feature = "bevy")]
-use egui_bevy::{Context, Ui};
-#[cfg(feature = "standard")]
+use crate::{advance_front::BackgroundType, basic_front::BorderKind};
+#[cfg(feature = "rc_bevy")]
+use egui_bevy::Ui;
+#[cfg(feature = "rc_standard")]
 use egui_standard::Ui;
 use std::{
     any::{Any, type_name, type_name_of_val},
@@ -553,26 +553,6 @@ pub enum VerticalAlign {
     Bottom,
 }
 
-/// Defines the placement of borders relative to the element's bounds.
-///
-/// 定义边框相对于元素边界的放置方式。
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum BorderKind {
-    /// Border is drawn inside the element's bounds, reducing the content area.
-    ///
-    /// 边框在元素边界内部绘制，减少内容区域。
-    #[default]
-    Inside,
-    /// Border is centered on the element's bounds, half inside and half outside.
-    ///
-    /// 边框以元素边界为中心，一半在内部一半在外部。
-    Middle,
-    /// Border is drawn outside the element's bounds, preserving the content area.
-    ///
-    /// 边框在元素边界外部绘制，保持内容区域不变。
-    Outside,
-}
-
 /// Config for rendering.
 ///
 /// 渲染的配置。
@@ -655,80 +635,9 @@ pub enum ListInfoDescribeMethod {
     Simple,
 }
 
-/// Methods for compatibility with different versions of egui.
-///
-/// 用于兼容不同版本egui的方法。
-///
-/// Use when you need to call egui::Context.
-///
-/// 需要调用egui::Context时使用。
-///
-/// # Arguments
-///
-/// * `ui` - The UI context for drawing
-///
-/// # Returns
-///
-/// Return Ui directly.
-///
-/// # 参数
-///
-/// * `ui` - 用于绘制的UI上下文
-///
-/// # 返回值
-///
-/// 直接返回Ui。
-#[cfg(feature = "standard")]
-pub fn ctx_adapter(ui: &mut Ui) -> &mut Ui {
-    ui
-}
-/// Methods for compatibility with different versions of egui.
-///
-/// 用于兼容不同版本egui的方法。
-///
-/// Use when you need to call egui::Context.
-///
-/// 需要调用egui::Context时使用。
-///
-/// # Arguments
-///
-/// * `ui` - The UI context for drawing
-///
-/// # Returns
-///
-/// Return Context.
-///
-/// # 参数
-///
-/// * `ui` - 用于绘制的UI上下文
-///
-/// # 返回值
-///
-/// 返回Context。
-#[cfg(feature = "bevy")]
-pub fn ctx_adapter(ui: &mut Ui) -> &Context {
-    ui.ctx()
-}
-
 /// Obtain the type name of the target resource.
 ///
 /// 获取目标资源的类型名称。
-///
-/// # Arguments
-///
-/// * `target` - Target resource
-///
-/// # Returns
-///
-/// Returns the type name of the target resource.
-///
-/// # 参数
-///
-/// * `target` - 目标资源
-///
-/// # 返回值
-///
-/// 目标资源的类型名称。
 pub fn type_processor(target: &impl RustConstructorResource) -> String {
     let result: Vec<_> = if let Some(list) = type_name_of_val(target).split_once("<") {
         list.0
@@ -743,24 +652,6 @@ pub fn type_processor(target: &impl RustConstructorResource) -> String {
 /// Gets a tag value from the specified tag list by name.
 ///
 /// 从指定标签列表中根据名称获取标签值。
-///
-/// # Arguments
-///
-/// * `tag_name` - The name of the tag to retrieve
-/// * `target` - The list of tags to search through
-///
-/// # Returns
-///
-/// Returns `Some((index, value))` if the tag is found, or `None` if not found.
-///
-/// # 参数
-///
-/// * `tag_name` - 要检索的标签名称
-/// * `target` - 要搜索的标签列表
-///
-/// # 返回值
-///
-/// 如果找到标签则返回`Some((索引, 值))`，否则返回`None`。
 pub fn get_tag(tag_name: &str, target: &[[String; 2]]) -> Option<(usize, String)> {
     target
         .iter()
@@ -776,22 +667,6 @@ pub fn get_tag(tag_name: &str, target: &[[String; 2]]) -> Option<(usize, String)
 /// the reference of the specific type of resource.
 ///
 /// 当采用遍历的方式取出资源时，应和此方法配合来获取具体类型的资源引用。
-///
-/// # Arguments
-///
-/// * `resource` - Reference to resources
-///
-/// # Returns
-///
-/// Return a reference to the specific type of resource on success; otherwise, return `Err(RustConstructorError)`.
-///
-/// # 参数
-///
-/// * `resource` - 资源的引用
-///
-/// # 返回值
-///
-/// 成功时返回具体类型资源的引用，否则返回`Err(RustConstructorError)`。
 pub fn downcast_resource<T: RustConstructorResource + 'static>(
     resource: &dyn RustConstructorResource,
 ) -> Result<&T, RustConstructorError> {
@@ -816,22 +691,6 @@ pub fn downcast_resource<T: RustConstructorResource + 'static>(
 /// the mutable reference of the specific type of resource.
 ///
 /// 当采用遍历的方式取出资源时，应和此方法配合来获取具体类型的资源可变引用。
-///
-/// # Arguments
-///
-/// * `resource` - Mutable reference to resources
-///
-/// # Returns
-///
-/// Return a mutable reference to the specific type of resource on success; otherwise, return `Err(RustConstructorError)`.
-///
-/// # 参数
-///
-/// * `resource` - 资源的可变引用
-///
-/// # 返回值
-///
-/// 成功时返回具体类型资源的可变引用，否则返回`Err(RustConstructorError)`。
 pub fn downcast_resource_mut<T: RustConstructorResource + 'static>(
     resource: &mut dyn RustConstructorResource,
 ) -> Result<&mut T, RustConstructorError> {
@@ -856,39 +715,21 @@ pub fn downcast_resource_mut<T: RustConstructorResource + 'static>(
 /// alignment, and offset calculations for UI resources.
 ///
 /// 此方法处理复杂的定位逻辑，包括基于网格的布局、对齐方式和UI资源的偏移计算。
-///
-/// # Arguments
-///
-/// * `position_size_config` - The configuration for position and size
-/// * `ui` - The UI context for drawing
-///
-/// # Returns
-///
-/// Returns `[position, size]` as computed from the configuration
-///
-/// # 参数
-///
-/// * `position_size_config` - 位置和尺寸的配置
-/// * `ui` - 用于绘制的UI上下文
-///
-/// # 返回值
-///
-/// 返回根据配置计算出的 `[位置, 尺寸]`
 pub fn position_size_processor(position_size_config: PositionSizeConfig, ui: &Ui) -> [[f32; 2]; 2] {
     let mut position = [0_f32, 0_f32];
     let mut size = [0_f32, 0_f32];
-    size[0] = match position_size_config.x_size_grid[0] {
+    size[0] = match position_size_config.x_size_grid[1] {
         0_f32 => position_size_config.origin_size[0],
         _ => {
-            (ui.available_width() / position_size_config.x_size_grid[1]
+            (ui.ctx().content_rect().width() / position_size_config.x_size_grid[1]
                 * position_size_config.x_size_grid[0])
                 + position_size_config.origin_size[0]
         }
     };
-    size[1] = match position_size_config.y_size_grid[0] {
+    size[1] = match position_size_config.y_size_grid[1] {
         0_f32 => position_size_config.origin_size[1],
         _ => {
-            (ui.available_height() / position_size_config.y_size_grid[1]
+            (ui.ctx().content_rect().height() / position_size_config.y_size_grid[1]
                 * position_size_config.y_size_grid[0])
                 + position_size_config.origin_size[1]
         }
@@ -896,7 +737,7 @@ pub fn position_size_processor(position_size_config: PositionSizeConfig, ui: &Ui
     position[0] = match position_size_config.x_location_grid[1] {
         0_f32 => position_size_config.origin_position[0],
         _ => {
-            (ui.available_width() / position_size_config.x_location_grid[1]
+            (ui.ctx().content_rect().width() / position_size_config.x_location_grid[1]
                 * position_size_config.x_location_grid[0])
                 + position_size_config.origin_position[0]
         }
@@ -904,7 +745,7 @@ pub fn position_size_processor(position_size_config: PositionSizeConfig, ui: &Ui
     position[1] = match position_size_config.y_location_grid[1] {
         0_f32 => position_size_config.origin_position[1],
         _ => {
-            (ui.available_height() / position_size_config.y_location_grid[1]
+            (ui.ctx().content_rect().height() / position_size_config.y_location_grid[1]
                 * position_size_config.y_location_grid[0])
                 + position_size_config.origin_position[1]
         }

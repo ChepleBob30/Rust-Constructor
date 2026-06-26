@@ -1,6 +1,6 @@
 [package]
 name = "rust-constructor"
-version = "2.11.4"
+version = "2.11.5"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
 description = "A cross-platform `GUI` framework built on `egui` as well as compatible with `bevy`, the simplest way to develop `GUI` projects with `Rust`."
@@ -16,15 +16,15 @@ name = "rust_constructor"
 path = "src/lib.rs"
 
 [dependencies]
-egui_standard = { package = "egui", version = "0.34.1", default-features = false, optional = true }
-egui_bevy = { package = "egui", version = "0.33.3", default-features = false, optional = true }
+egui_standard = { package = "egui", version = "0.35.0", default-features = false, optional = true }
+egui_bevy = { package = "egui", version = "0.34.3", default-features = false, optional = true }
 image = { version = "0.25.10", default-features = false }
-chrono = { version = "0.4.44", default-features = false }
-bevy_asset = { version = "0.18.1", default-features = false, optional = true }
-bevy_reflect = { version = "0.18.1", default-features = false, optional = true }
-log = { version = "0.4.29", default-features = false, features = ["std"] }
+chrono = { version = "0.4.45", default-features = false }
+bevy_asset = { version = "0.19.0", default-features = false, optional = true }
+bevy_reflect = { version = "0.19.0", default-features = false, optional = true }
+log = { version = "0.4.33", default-features = false, features = ["std"] }
 
 [features]
-default = ["standard"]
-standard = ["egui_standard"]
-bevy = ["egui_bevy", "bevy_asset", "bevy_reflect"]
+default = ["rc_standard"]
+rc_standard = ["egui_standard"]
+rc_bevy = ["egui_bevy", "bevy_asset", "bevy_reflect"]
