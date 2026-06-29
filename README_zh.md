@@ -5,7 +5,7 @@
 [![作者: ChepleBob](https://img.shields.io/badge/作者-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![语言: Rust](https://img.shields.io/badge/语言-Rust-5F4C49)](https://www.rust-lang.org/)
 [![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![版本](https://img.shields.io/badge/版本-v2.11.5-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![版本](https://img.shields.io/badge/版本-v2.12.0-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 [English](./README.md) | 简体中文
 
@@ -25,19 +25,24 @@
 
 ## 版本更新信息
 
-- 当前版本为`v2.11.5 资源大解放`。
-  - 本更新修复了一些已知问题。
+- 当前版本为`v2.12.0 体制改革`。
+  - 本更新引入了全新体制，并添加了一系列实用改动。
   - **实用改动**
-    - 更新了`egui`依赖；
+    - 为所有前端资源添加`Config`类结构体(具体来说，添加了`BackgroundConfig` `ResourcePanelConfig` `SwitchConfig`)；
+    - 添加`Config`特征，用于管理`Config`类结构体；
+    - 添加`FrontResource`特征，包含基本前端资源和高级前端资源，用于管理前端资源；
+    - `BasicFrontResource`和`RustConstructorResource`中添加了一系列实用方法，用于在三种资源间来回转换；
+    - 添加`PanelConfig` `CustomPanelConfig`，用于配置`ResourcePanel`内部资源的显示方式；
+    - `ResourcePanel`中添加了`overall_config`和`custom_config`字段，可以自定义内部资源的显示方式；
+    - 现在`use_resource`额外接收一个`Option<Box<dyn Config>>`参数，可以用来配置所使用资源；
     - 改进了部分代码。
   - **破坏性改动**
-    - `BorderKind`迁移至`basic_front.rs`中；
-    - 调整了部分获取窗口尺寸的方法，使其与实际窗口大小更加贴合；
-    - 移除了`try`类方法；
-    - 为`ResourcePanel`添加`overall_offset`字段，用于调整资源显示位置；
+    - 移除了`Background`的`auto_update`和`use_background_tags`字段；
+    - 移除了`Switch`的`use_switch_tags`字段；
+    - `display_info`和`modify_display_info`迁移到`BasicFrontResource`中；
+    - 所有`Config`类结构体的读取资源创建方法一律重命名为`from_resource`；
     - 对部分内容进行了修改。
   - **漏洞修复**
-    - 修复了`ResourcePanel`资源使用不同对齐方式时排版错乱的问题；
     - 修复了一些已知问题。
 
 ---
@@ -64,7 +69,7 @@ pub struct RcApp {
 
 impl eframe::App for RcApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.label("Hello world");
         });
     }

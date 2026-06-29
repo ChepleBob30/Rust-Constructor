@@ -5,7 +5,7 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.11.5-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.12.0-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
 English | [简体中文](./README_zh.md)
 
@@ -25,19 +25,24 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current version is `v2.11.5 Resource Liberation`.
-  - This update fixes some known issues.
+- The current version is `v2.12.0 Structural Reform`.
+  - This update introduces a new architecture and adds a series of improvements.
   - **Improvements**
-    - Updated the `egui` dependency;
+    - Added `Config` struct types for all frontend resources (specifically, added `BackgroundConfig`, `ResourcePanelConfig`, `SwitchConfig`);
+    - Added the `Config` trait to manage `Config` struct types;
+    - Added the `FrontResource` trait, covering basic frontend resources and advanced frontend resources, for managing frontend resources;
+    - Added a series of utility methods to `BasicFrontResource` and `RustConstructorResource` for converting among the three resource types;
+    - Added `PanelConfig` and `CustomPanelConfig` for configuring how resources inside `ResourcePanel` are displayed;
+    - Added `overall_config` and `custom_config` fields to `ResourcePanel` to customize the display of internal resources;
+    - `use_resource` now accepts an additional `Option<Box<dyn Config>>` parameter, which can be used to configure the resource being used;
     - Improved some code.
   - **Breaking Changes**
-    - Moved `BorderKind` into `basic_front.rs`;
-    - Adjusted some methods for retrieving window size so they better match the actual window dimensions;
-    - Removed `try`-prefixed methods;
-    - Added an `overall_offset` field to `ResourcePanel` for adjusting resource display position;
+    - Removed the `auto_update` and `use_background_tags` fields from `Background`;
+    - Removed the `use_switch_tags` field from `Switch`;
+    - Moved `display_info` and `modify_display_info` into `BasicFrontResource`;
+    - Renamed all resource-reading creation methods of `Config` struct types to `from_resource`;
     - Modified some content.
   - **Bug Fixes**
-    - Fixed a layout misalignment issue in `ResourcePanel` when resources use different alignments;
     - Fixed some known issues.
 
 ---
@@ -64,7 +69,7 @@ pub struct RcApp {
 
 impl eframe::App for RcApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.label("Hello world");
         });
     }

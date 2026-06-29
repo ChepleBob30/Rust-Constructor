@@ -86,21 +86,6 @@ pub trait RustConstructorResource: Debug + Send + Sync {
     /// 当实际类型已知时，允许向下可变转换到具体类型。
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    /// Retrieves the display info field for this resource.
-    ///
-    /// 取出此资源的显示信息字段。
-    ///
-    /// Returns `Some(DisplayInfo)` if the resource has display info field,
-    /// or `None` if it doesn't have display info field.
-    ///
-    /// 如果资源具有显示信息字段则返回`Some(DisplayInfo)`，如果资源没有显示信息字段则返回`None`。
-    fn display_display_info(&self) -> Option<DisplayInfo>;
-
-    /// Updates the display info field for this resource.
-    ///
-    /// 更新此资源的显示信息字段。
-    fn modify_display_info(&mut self, display_info: DisplayInfo);
-
     /// Returns all tags associated with this resource.
     ///
     /// 返回与此资源关联的所有标签。
@@ -114,17 +99,118 @@ pub trait RustConstructorResource: Debug + Send + Sync {
     /// Updates the tags for this resource.
     ///
     /// 更新此资源的标签。
-    ///
-    /// # Arguments
-    ///
-    /// * `replace` - If `true`, replaces all existing tags;
-    ///   if `false`, merges with existing tags.
-    ///
-    /// # 参数
-    ///
-    /// * `replace` - 若为`true`，则替换所有现有的标签；
-    ///   若为`false`，则与现有标签合并。
     fn modify_tags(&mut self, tags: &[[String; 2]], replace: bool);
+
+    /// Convert the specified resource into the front resource form.
+    ///
+    /// 将指定资源转化为前端资源形式。
+    ///
+    /// If the resource is not a front resource, no value is returned.
+    ///
+    /// 如果该资源不是前端资源，则没有返回值。
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>>;
+
+    /// Convert the specified resource into the basic front resource form.
+    ///
+    /// 将指定资源转化为基本前端资源形式。
+    ///
+    /// If the resource is not a basic front resource, no value is returned.
+    ///
+    /// 如果该资源不是基本前端资源，则没有返回值。
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>>;
+
+    /// Convert the specified resource into the front resource form.
+    ///
+    /// 将指定资源转化为前端资源形式。
+    ///
+    /// If the resource is not a front resource, no value is returned.
+    ///
+    /// 如果该资源不是前端资源，则没有返回值。
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource>;
+
+    /// Convert the specified resource into the front resource form.
+    ///
+    /// 将指定资源转化为前端资源形式。
+    ///
+    /// If the resource is not a front resource, no value is returned.
+    ///
+    /// 如果该资源不是前端资源，则没有返回值。
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource>;
+
+    /// Convert the specified resource into the basic front resource form.
+    ///
+    /// 将指定资源转化为基本前端资源形式。
+    ///
+    /// If the resource is not a basic front resource, no value is returned.
+    ///
+    /// 如果该资源不是基本前端资源，则没有返回值。
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource>;
+
+    /// Convert the specified resource into the basic front resource form.
+    ///
+    /// 将指定资源转化为基本前端资源形式。
+    ///
+    /// If the resource is not a basic front resource, no value is returned.
+    ///
+    /// 如果该资源不是基本前端资源，则没有返回值。
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource>;
+}
+
+/// Uniformly manage all front resources that will be rendered in the graphical interface.
+///
+/// 统一管理所有会被渲染在图形化界面中的前端资源。
+pub trait FrontResource: RustConstructorResource {
+    /// Convert the resource into specific config.
+    ///
+    /// 将资源转换为特定配置。
+    fn convert_to_config(&self) -> Box<dyn Config>;
+
+    /// Convert the config into specific resource.
+    ///
+    /// 将配置转换为特定资源。
+    fn convert_from_config(&mut self, config: Box<dyn Config>) -> Option<Box<dyn FrontResource>>;
+
+    /// Convert the specified resource into the original resource form.
+    ///
+    /// 将指定资源转化为原资源形式。
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource>;
+
+    /// Convert the specified resource into the basic front resource form.
+    ///
+    /// 将指定资源转化为基本前端资源形式。
+    ///
+    /// If the resource is not a basic front resource, no value is returned.
+    ///
+    /// 如果该资源不是基本前端资源，则没有返回值。
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>>;
+
+    /// Convert the specified resource into the original resource form.
+    ///
+    /// 将指定资源转化为原资源形式。
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource;
+
+    /// Convert the specified resource into the original resource form.
+    ///
+    /// 将指定资源转化为原资源形式。
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource;
+
+    /// Convert the specified resource into the basic front resource form.
+    ///
+    /// 将指定资源转化为基本前端资源形式。
+    ///
+    /// If the resource is not a basic front resource, no value is returned.
+    ///
+    /// 如果该资源不是基本前端资源，则没有返回值。
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource>;
+
+    /// Convert the specified resource into the basic front resource form.
+    ///
+    /// 将指定资源转化为基本前端资源形式。
+    ///
+    /// If the resource is not a basic front resource, no value is returned.
+    ///
+    /// 如果该资源不是基本前端资源，则没有返回值。
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource>;
 }
 
 /// Trait for managing basic front resources that are displayed to the user.
@@ -135,7 +221,7 @@ pub trait RustConstructorResource: Debug + Send + Sync {
 /// to visual elements.
 ///
 /// 此特征扩展了`RustConstructorResource`，添加了特定视觉元素的方法。
-pub trait BasicFrontResource: RustConstructorResource {
+pub trait BasicFrontResource: FrontResource {
     /// Returns the complete basic resource config.
     ///
     /// 返回完整的基本前端资源配置。
@@ -166,6 +252,11 @@ pub trait BasicFrontResource: RustConstructorResource {
     ///
     /// 如果没有应用裁剪矩形，则返回`None`。
     fn display_clip_rect(&self) -> Option<PositionSizeConfig>;
+
+    /// Retrieves the display info field for this resource.
+    ///
+    /// 取出此资源的显示信息字段。
+    fn display_display_info(&self) -> DisplayInfo;
 
     /// Returns the current display position of the resource.
     ///
@@ -202,6 +293,82 @@ pub trait BasicFrontResource: RustConstructorResource {
     ///
     /// 更新裁剪矩形配置。
     fn modify_clip_rect(&mut self, clip_rect: Option<PositionSizeConfig>);
+
+    /// Updates the display info field for this resource.
+    ///
+    /// 更新此资源的显示信息字段。
+    fn modify_display_info(&mut self, display_info: DisplayInfo);
+
+    /// Convert the specified resource into the original resource form.
+    ///
+    /// 将指定资源转化为原资源形式。
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource>;
+
+    /// Convert the specified resource into the front resource form.
+    ///
+    /// 将指定资源转化为前端资源形式。
+    fn convert_to_front(&self) -> Box<dyn FrontResource>;
+
+    /// Convert the specified resource into the original resource form.
+    ///
+    /// 将指定资源转化为原资源形式。
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource;
+
+    /// Convert the specified resource into the original resource form.
+    ///
+    /// 将指定资源转化为原资源形式。
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource;
+
+    /// Convert the specified resource into the front resource form.
+    ///
+    /// 将指定资源转化为前端资源形式。
+    fn convert_to_front_dyn(&self) -> &dyn FrontResource;
+
+    /// Convert the specified resource into the front resource form.
+    ///
+    /// 将指定资源转化为前端资源形式。
+    fn convert_to_front_dyn_mut(&mut self) -> &mut dyn FrontResource;
+}
+
+/// Integration of all config structures.
+///
+/// 所有配置类结构体的整合。
+///
+/// Used for quickly configuring resources.
+///
+/// 用于快速配置资源。
+pub trait Config: Debug {
+    /// Returns a reference to the config as `Any` for extract the specific type.
+    ///
+    /// 以`Any`返回对配置的引用，用于取出具体类型。
+    ///
+    /// This allows downcasting to the concrete type when the actual type is known.
+    ///
+    /// 当实际类型已知时，允许向下转换到具体类型。
+    fn as_any(&self) -> &dyn Any;
+
+    /// Returns a mutable reference to the config as `Any` for extract the specific type.
+    ///
+    /// 以`Any`返回对配置的可变引用，用于取出具体类型。
+    ///
+    /// This allows mutable downcasting when the actual type is known.
+    ///
+    /// 当实际类型已知时，允许向下可变转换到具体类型。
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Convert the config into specific resource.
+    ///
+    /// 将配置转换为特定资源。
+    fn convert_to_resource(&self) -> Box<dyn FrontResource>;
+
+    /// Convert the resource into specific config.
+    ///
+    /// 将资源转换为特定配置。
+    ///
+    /// If the given resource does not match the resource config, there will be no return value.
+    ///
+    /// 如果给出的资源与资源配置不匹配，则无返回值。
+    fn convert_from_resource(&self, resource: Box<dyn FrontResource>) -> Option<Box<dyn Config>>;
 }
 
 /// Unique identifier for Rust Constructor resources.

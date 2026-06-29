@@ -1,7 +1,7 @@
 //! This file contains backend resources, which can store some key data and be called upon when needed.
 //!
 //! 此文件包含后端资源，后端资源可以存储一些关键数据并在有需要时调用。
-use crate::{DisplayInfo, RustConstructorResource};
+use crate::{BasicFrontResource, FrontResource, RustConstructorResource};
 use std::{any::Any, fmt::Debug};
 
 /// Storage Rust Constructor resource for page-specific data and state management.
@@ -43,12 +43,6 @@ impl RustConstructorResource for PageData {
         self
     }
 
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        None
-    }
-
-    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
-
     fn display_tags(&self) -> Vec<[String; 2]> {
         self.tags.clone()
     }
@@ -64,6 +58,30 @@ impl RustConstructorResource for PageData {
             }
             self.tags.extend(tags.iter().cloned());
         };
+    }
+
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>> {
+        None
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        None
+    }
+
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource> {
+        None
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource> {
+        None
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        None
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        None
     }
 }
 
@@ -126,12 +144,6 @@ impl<T: Debug + Send + Sync + 'static> RustConstructorResource for Variable<T> {
         self
     }
 
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        None
-    }
-
-    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
-
     fn display_tags(&self) -> Vec<[String; 2]> {
         self.tags.clone()
     }
@@ -147,6 +159,30 @@ impl<T: Debug + Send + Sync + 'static> RustConstructorResource for Variable<T> {
             }
             self.tags.extend(tags.iter().cloned());
         };
+    }
+
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>> {
+        None
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        None
+    }
+
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource> {
+        None
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource> {
+        None
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        None
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        None
     }
 }
 
@@ -212,12 +248,6 @@ impl RustConstructorResource for SplitTime {
         self
     }
 
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        None
-    }
-
-    fn modify_display_info(&mut self, _display_info: DisplayInfo) {}
-
     fn display_tags(&self) -> Vec<[String; 2]> {
         self.tags.clone()
     }
@@ -233,6 +263,30 @@ impl RustConstructorResource for SplitTime {
             }
             self.tags.extend(tags.iter().cloned());
         };
+    }
+
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>> {
+        None
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        None
+    }
+
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource> {
+        None
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource> {
+        None
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        None
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        None
     }
 }
 

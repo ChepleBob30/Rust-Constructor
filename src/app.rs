@@ -2,20 +2,19 @@
 //!
 //! 程序主体，包含所有GUI资源和状态管理。
 use crate::{
-    BasicFrontResource, DisplayInfo, HorizontalAlign, ListInfoDescribeMethod, PositionSizeConfig,
-    RenderConfig, RequestMethod, RequestType, RustConstructorError, RustConstructorId,
-    RustConstructorResource, RustConstructorResourceBox, Timer, VerticalAlign,
+    BasicFrontResource, Config, DisplayInfo, HorizontalAlign, ListInfoDescribeMethod,
+    PositionSizeConfig, RenderConfig, RequestMethod, RequestType, RustConstructorError,
+    RustConstructorId, RustConstructorResource, RustConstructorResourceBox, Timer, VerticalAlign,
     advance_front::{
-        Background, BackgroundType, ClickAim, CustomPanelLayout, PanelLocation, PanelMargin,
-        PanelStorage, ResourcePanel, ScrollBarDisplayMethod, ScrollLengthMethod, Switch,
-        SwitchData,
+        Background, BackgroundConfig, BackgroundType, ClickAim, CustomPanelConfig,
+        CustomPanelLayout, PanelLocation, PanelMargin, PanelStorage, ResourcePanel,
+        ScrollBarDisplayMethod, ScrollLengthMethod, Switch, SwitchData,
     },
     background::{PageData, SplitTime, Variable},
     background_type_discern,
-    basic_front::BorderKind,
     basic_front::{
-        CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod, ImageLoader,
-        LoadedImageData, Text,
+        BorderKind, CustomRect, DebugTextureHandle, HyperlinkSelectMethod, Image, ImageLoadMethod,
+        ImageLoader, LoadedImageData, Text,
     },
     build_id, downcast_resource, downcast_resource_mut, get_tag, position_size_processor,
     type_processor,
@@ -130,7 +129,9 @@ unsafe impl Sync for App {}
 
 impl Default for App {
     fn default() -> Self {
-        info!("Rust Constructor v2.11.5 (https://github.com/ChepleBob30/Rust-Constructor)");
+        info!(
+            "Rust Constructor v2.12.0 Hello from Rust Constructor author. (https://github.com/ChepleBob30/Rust-Constructor)"
+        );
         App {
             rust_constructor_resource: Vec::new(),
             tick_interval: 50,
@@ -1549,50 +1550,50 @@ impl App {
         self.render_layer.clear();
         for info in &self.render_list {
             let basic_front_resource = self.get_basic_front_resource(&info.0)?;
-            if let Some(display_info) = basic_front_resource.display_display_info() {
-                self.render_layer.push((
-                    info.0.clone(),
-                    if let Some(clip_rect) = basic_front_resource
-                        .display_basic_front_resource_config()
-                        .clip_rect
-                    {
-                        let [position, size] = position_size_processor(clip_rect, ui);
-                        let [resource_rect, clip_rect] = [
-                            Rect::from_min_max(
-                                basic_front_resource.display_position().into(),
-                                [
-                                    basic_front_resource.display_position()[0]
-                                        + basic_front_resource.display_size()[0],
-                                    basic_front_resource.display_position()[1]
-                                        + basic_front_resource.display_size()[1],
-                                ]
-                                .into(),
-                            ),
-                            Rect::from_min_size(position.into(), size.into()),
-                        ];
-                        let min = resource_rect.min.max(clip_rect.min);
-                        let max = resource_rect.max.min(clip_rect.max);
-
-                        // 检查是否有交集
-                        if min.x < max.x && min.y < max.y {
-                            [min.into(), max.into()]
-                        } else {
-                            [[0_f32, 0_f32], [0_f32, 0_f32]]
-                        }
-                    } else {
-                        [
-                            basic_front_resource.display_position(),
+            self.render_layer.push((
+                info.0.clone(),
+                if let Some(clip_rect) = basic_front_resource
+                    .display_basic_front_resource_config()
+                    .clip_rect
+                {
+                    let [position, size] = position_size_processor(clip_rect, ui);
+                    let [resource_rect, clip_rect] = [
+                        Rect::from_min_max(
+                            basic_front_resource.display_position().into(),
                             [
                                 basic_front_resource.display_position()[0]
                                     + basic_front_resource.display_size()[0],
                                 basic_front_resource.display_position()[1]
                                     + basic_front_resource.display_size()[1],
-                            ],
-                        ]
-                    },
-                    display_info.ignore_render_layer,
-                ));
-            };
+                            ]
+                            .into(),
+                        ),
+                        Rect::from_min_size(position.into(), size.into()),
+                    ];
+                    let min = resource_rect.min.max(clip_rect.min);
+                    let max = resource_rect.max.min(clip_rect.max);
+
+                    // 检查是否有交集
+                    if min.x < max.x && min.y < max.y {
+                        [min.into(), max.into()]
+                    } else {
+                        [[0_f32, 0_f32], [0_f32, 0_f32]]
+                    }
+                } else {
+                    [
+                        basic_front_resource.display_position(),
+                        [
+                            basic_front_resource.display_position()[0]
+                                + basic_front_resource.display_size()[0],
+                            basic_front_resource.display_position()[1]
+                                + basic_front_resource.display_size()[1],
+                        ],
+                    ]
+                },
+                basic_front_resource
+                    .display_display_info()
+                    .ignore_render_layer,
+            ));
         }
         Ok(())
     }
@@ -1844,21 +1845,21 @@ impl App {
                 match &background.background_type {
                     BackgroundType::CustomRect(config) => {
                         let mut custom_rect = CustomRect::default().from_config(config);
-                        if background.use_background_tags {
-                            custom_rect.modify_tags(&background.tags, false);
-                        };
+                        custom_rect.modify_tags(&background.tags, false);
                         self.add_resource(name, custom_rect)
                     }
                     BackgroundType::Image(config) => {
                         let mut image = Image::default().from_config(config);
-                        if background.use_background_tags {
-                            image.modify_tags(&background.tags, false);
-                        };
+                        image.modify_tags(&background.tags, false);
                         self.add_resource(name, image)
                     }
                 }?;
             }
             "Switch" => {
+                resource.modify_tags(
+                    &[["panel_layout_group".to_string(), name.to_string()]],
+                    false,
+                );
                 let switch = downcast_resource_mut::<Switch>(&mut resource)?;
                 let count = 1 + switch.enable_animation.iter().filter(|x| **x).count();
                 if switch.appearance.len() != count * switch.state_amount as usize {
@@ -1904,16 +1905,7 @@ impl App {
                     &format!("{name}Background"),
                     Background::default()
                         .background_type(&switch.background_type)
-                        .auto_update(true)
-                        .use_background_tags(true)
-                        .tags(
-                            if switch.use_switch_tags {
-                                &switch.tags
-                            } else {
-                                &[]
-                            },
-                            false,
-                        )
+                        .tags(&switch.tags, false)
                         .tags(
                             &[
                                 ["citer_name".to_string(), name.to_string()],
@@ -1927,14 +1919,7 @@ impl App {
                     &format!("{name}Text"),
                     Text::default()
                         .from_config(&switch.text_config)
-                        .tags(
-                            if switch.use_switch_tags {
-                                &switch.tags
-                            } else {
-                                &[]
-                            },
-                            false,
-                        )
+                        .tags(&switch.tags, false)
                         .tags(
                             &[
                                 ["citer_name".to_string(), name.to_string()],
@@ -1988,8 +1973,6 @@ impl App {
                     &format!("{name}Background"),
                     Background::default()
                         .background_type(&resource_panel.background)
-                        .auto_update(true)
-                        .use_background_tags(true)
                         .tags(
                             &[
                                 ["citer_name".to_string(), name.to_string()],
@@ -2003,29 +1986,23 @@ impl App {
                 {
                     self.add_resource(
                         &format!("{name}XScroll"),
-                        Background::default()
-                            .auto_update(true)
-                            .use_background_tags(true)
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
+                        Background::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
                     )?;
                     self.add_resource(
                         &format!("{name}YScroll"),
-                        Background::default()
-                            .auto_update(true)
-                            .use_background_tags(true)
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
+                        Background::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
                     )?;
                 };
                 if let ScrollBarDisplayMethod::OnlyScroll(_, _, _) =
@@ -2033,29 +2010,23 @@ impl App {
                 {
                     self.add_resource(
                         &format!("{name}XScroll"),
-                        Background::default()
-                            .auto_update(true)
-                            .use_background_tags(true)
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
+                        Background::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
                     )?;
                     self.add_resource(
                         &format!("{name}YScroll"),
-                        Background::default()
-                            .auto_update(true)
-                            .use_background_tags(true)
-                            .tags(
-                                &[
-                                    ["citer_name".to_string(), name.to_string()],
-                                    ["citer_type".to_string(), discern_type.to_string()],
-                                ],
-                                false,
-                            ),
+                        Background::default().tags(
+                            &[
+                                ["citer_name".to_string(), name.to_string()],
+                                ["citer_type".to_string(), discern_type.to_string()],
+                            ],
+                            false,
+                        ),
                     )?;
                     self.add_resource(
                         &format!("{name}ScrollBarXAlpha"),
@@ -2305,6 +2276,7 @@ impl App {
         &mut self,
         name: &str,
         resource: T,
+        auto_track: Option<Box<dyn Config>>,
         ui: &mut Ui,
     ) -> Result<(), RustConstructorError> {
         let discern_type = &*type_processor(&resource);
@@ -2314,7 +2286,7 @@ impl App {
         {
             self.add_resource(name, resource)
         } else {
-            self.use_resource(&build_id(name, discern_type), ui)
+            self.use_resource(&build_id(name, discern_type), auto_track, ui)
         }
     }
 
@@ -2328,9 +2300,25 @@ impl App {
     pub fn use_resource(
         &mut self,
         id: &RustConstructorId,
+        auto_track: Option<Box<dyn Config>>,
         ui: &mut Ui,
     ) -> Result<(), RustConstructorError> {
         if self.check_resource_exists(id).is_some() {
+            if let Some(auto_track) = auto_track
+                && let Some(mut front_resource) = self.get_box_resource_mut(id)?.convert_to_front()
+            {
+                let owned_resource = if let Some(updated_resource) =
+                    front_resource.convert_from_config(auto_track)
+                {
+                    updated_resource.convert_to_original()
+                } else {
+                    front_resource.convert_to_original()
+                };
+                if let Some(index) = self.check_resource_exists(id) {
+                    self.rust_constructor_resource[index] =
+                        RustConstructorResourceBox::new(&id.name, &id.discern_type, owned_resource);
+                };
+            }
             match &*id.discern_type {
                 "CustomRect" | "Text" | "Image" => {
                     self.add_active_resource(id)?;
@@ -2357,8 +2345,11 @@ impl App {
                     };
                     // 更新资源启用状态。
                     for rcr in &mut self.rust_constructor_resource {
-                        if let Some(display_info) = &mut rcr.content.display_display_info() {
-                            rcr.content.modify_display_info(DisplayInfo {
+                        if let Some(basic_front_resource) =
+                            rcr.content.convert_to_basic_front_dyn_mut()
+                        {
+                            let display_info = basic_front_resource.display_display_info();
+                            basic_front_resource.modify_display_info(DisplayInfo {
                                 enable: true,
                                 hidden: display_info.hidden,
                                 ignore_render_layer: display_info.ignore_render_layer,
@@ -2375,37 +2366,17 @@ impl App {
                 }
                 "Background" => {
                     let background = self.get_resource::<Background>(id)?.clone();
-                    if background.auto_update {
-                        match &background.background_type {
-                            BackgroundType::CustomRect(config) => {
-                                let mut custom_rect = self
-                                    .get_resource::<CustomRect>(&build_id(&id.name, "CustomRect"))?
-                                    .clone()
-                                    .from_config(config);
-                                if background.use_background_tags {
-                                    custom_rect.modify_tags(&background.tags, false);
-                                };
-                                self.replace_resource(&id.name, custom_rect)?;
-                            }
-                            BackgroundType::Image(config) => {
-                                let mut image = self
-                                    .get_resource::<Image>(&build_id(&id.name, "Image"))?
-                                    .clone()
-                                    .from_config(config);
-                                if background.use_background_tags {
-                                    image.modify_tags(&background.tags, false);
-                                };
-                                self.replace_resource(&id.name, image)?;
-                            }
-                        };
-                    };
                     match background.background_type {
-                        BackgroundType::CustomRect(_) => {
-                            self.use_resource(&build_id(&id.name, "CustomRect"), ui)
-                        }
-                        BackgroundType::Image(_) => {
-                            self.use_resource(&build_id(&id.name, "Image"), ui)
-                        }
+                        BackgroundType::CustomRect(config) => self.use_resource(
+                            &build_id(&id.name, "CustomRect"),
+                            Some(Box::new(config)),
+                            ui,
+                        ),
+                        BackgroundType::Image(config) => self.use_resource(
+                            &build_id(&id.name, "Image"),
+                            Some(Box::new(config)),
+                            ui,
+                        ),
                     }?;
                 }
                 "Switch" => {
@@ -2415,17 +2386,12 @@ impl App {
                     let hint_name = format!("{}HintText", &id.name);
                     let start_hover_time = format!("{}StartHoverTime", &id.name);
                     let hint_fade_animation = format!("{}HintFadeAnimation", &id.name);
-                    let background_id = build_id(&background_name, "Background");
-                    let mut background = self.get_resource::<Background>(&background_id)?.clone();
                     let background_resource_type = background_type_discern(&switch.background_type);
                     let background_resource = self.get_basic_front_resource(&build_id(
                         &background_name,
                         background_resource_type,
                     ))?;
                     let display_info = background_resource.display_display_info();
-                    let mut text = self
-                        .get_resource::<Text>(&build_id(text_name.clone(), "Text"))?
-                        .clone();
                     let mut hint_text = self
                         .get_resource::<Text>(&build_id(hint_name.clone(), "Text"))?
                         .clone();
@@ -2442,7 +2408,6 @@ impl App {
                     )) && switch.enable
                         && let Some(mouse_pos) = ui.input(|i| i.pointer.hover_pos())
                         && self.resource_get_focus(index, mouse_pos.into(), true, vec![])
-                        && let Some(display_info) = background_resource.display_display_info()
                         && !display_info.hidden
                     {
                         if !switch.last_frame_hovered {
@@ -2545,79 +2510,66 @@ impl App {
                         };
                     };
 
-                    hint_text.display_info.hidden = hint_text.alpha == 0;
-
-                    // 更新Background样式。
-                    background.background_type = switch.appearance
-                        [switch.state * animation_count + appearance_count]
-                        .background_config
-                        .clone();
-
-                    background.modify_tags(
-                        if switch.use_switch_tags {
-                            &switch.tags
-                        } else {
-                            &[]
-                        },
-                        false,
-                    );
-
-                    // 刷新提示Text。
-                    let alpha = hint_text.alpha;
-                    hint_text = hint_text
-                        .from_config(
-                            &switch.appearance[switch.state * animation_count + appearance_count]
-                                .hint_text_config,
-                        )
-                        .ignore_render_layer(true);
-                    hint_text.background_alpha = alpha;
-                    hint_text.alpha = alpha;
-                    hint_text.display_info.hidden = if let Some(display_info) = display_info
-                        && display_info.hidden
-                    {
-                        true
-                    } else {
-                        hint_text.display_info.hidden
-                    };
-
-                    // 更新Text样式。
-                    text = text
-                        .tags(
-                            if switch.use_switch_tags {
-                                &switch.tags
-                            } else {
-                                &[]
-                            },
-                            false,
-                        )
-                        .from_config(
-                            &switch.appearance[switch.state * animation_count + appearance_count]
-                                .text_config,
-                        );
-
                     switch.last_frame_hovered = hovered;
                     switch.last_frame_clicked = clicked;
 
-                    self.replace_resource(&text_name, text)?;
-                    self.replace_resource(&hint_name, hint_text)?;
-                    self.replace_resource(&id.name, switch)?;
-                    self.replace_resource(&background_name, background)?;
+                    self.replace_resource(&id.name, switch.clone())?;
 
-                    self.use_resource(&build_id(background_name, "Background"), ui)?;
-                    self.use_resource(&build_id(text_name.clone(), "Text"), ui)?;
-                    if alpha != 0 {
-                        if self
-                            .render_list
-                            .iter()
-                            .any(|x| x.0 == build_id(&hint_name, "Text"))
-                        {
-                            self.request_jump_render_list(
-                                RequestMethod::Id(build_id(&hint_name, "Text")),
-                                RequestType::Top,
-                            )?;
-                        };
-                        self.use_resource(&build_id(&hint_name, "Text"), ui)?;
+                    self.use_resource(
+                        &build_id(background_name, "Background"),
+                        Some(Box::new(
+                            BackgroundConfig::default()
+                                .tags(Some(switch.tags.clone()))
+                                .background_type(Some(
+                                    switch.appearance
+                                        [switch.state * animation_count + appearance_count]
+                                        .background_config
+                                        .clone(),
+                                )),
+                        )),
+                        ui,
+                    )?;
+                    self.use_resource(
+                        &build_id(text_name.clone(), "Text"),
+                        Some(Box::new(
+                            switch.appearance[switch.state * animation_count + appearance_count]
+                                .text_config
+                                .clone()
+                                .tags(Some(switch.tags.clone())),
+                        )),
+                        ui,
+                    )?;
+                    if self
+                        .render_list
+                        .iter()
+                        .any(|x| x.0 == build_id(&hint_name, "Text"))
+                    {
+                        self.request_jump_render_list(
+                            RequestMethod::Id(build_id(&hint_name, "Text")),
+                            RequestType::Top,
+                        )?;
                     };
+                    let alpha = hint_text.alpha;
+                    self.use_resource(
+                        &build_id(&hint_name, "Text"),
+                        Some(Box::new(
+                            switch.appearance[switch.state * animation_count + appearance_count]
+                                .hint_text_config
+                                .clone()
+                                .alpha(Some(alpha))
+                                .position_size_config(Some(
+                                    hint_text.basic_front_resource_config.position_size_config,
+                                ))
+                                .background_alpha(Some(alpha))
+                                .hidden(Some(if display_info.hidden {
+                                    true
+                                } else {
+                                    alpha == 0
+                                }))
+                                .ignore_render_layer(Some(true)),
+                        )),
+                        ui,
+                    )?;
                 }
                 "ResourcePanel" => {
                     let mut resource_panel = self
@@ -3720,11 +3672,13 @@ impl App {
                                 .hidden(Some(resource_panel.hidden)),
                         ),
                     };
-                    self.replace_resource(
-                        &background_name,
-                        background.clone().background_type(&background_type).clone(),
+                    self.use_resource(
+                        &build_id(&background_name, "Background"),
+                        Some(Box::new(
+                            BackgroundConfig::default().background_type(Some(background_type)),
+                        )),
+                        ui,
                     )?;
-                    self.use_resource(&build_id(&background_name, "Background"), ui)?;
                     type PointList = Vec<([f32; 2], [f32; 2], [bool; 2], Option<String>)>;
                     let mut resource_point_list: PointList = Vec::new();
                     let mut use_resource_list = Vec::new();
@@ -3774,22 +3728,11 @@ impl App {
                                 .iter()
                                 .any(|x| x.id == rcr.id)
                             {
+                                let display_info = basic_front_resource.display_display_info();
                                 resource_panel.resource_storage.push(PanelStorage {
                                     id: rcr.id.clone(),
-                                    ignore_render_layer: if let Some(display_info) =
-                                        basic_front_resource.display_display_info()
-                                    {
-                                        display_info.ignore_render_layer
-                                    } else {
-                                        false
-                                    },
-                                    hidden: if let Some(display_info) =
-                                        basic_front_resource.display_display_info()
-                                    {
-                                        display_info.hidden
-                                    } else {
-                                        false
-                                    },
+                                    ignore_render_layer: display_info.ignore_render_layer,
+                                    hidden: display_info.hidden,
                                 });
                             };
                             let enable_scrolling = [
@@ -4180,8 +4123,7 @@ impl App {
                                 .origin_position(position[0], position[1]),
                         ));
                         basic_front_resource.modify_display_info({
-                            let mut display_info =
-                                basic_front_resource.display_display_info().unwrap();
+                            let mut display_info = basic_front_resource.display_display_info();
                             display_info.ignore_render_layer =
                                 if resource_panel.last_frame_mouse_status.is_some()
                                     && resource_get_focus[1]
@@ -4203,7 +4145,34 @@ impl App {
                         });
                     }
                     for info in use_resource_list {
-                        self.use_resource(&build_id(&info[0], &info[1]), ui)?;
+                        let mut config = resource_panel.overall_config.clone();
+                        for custom_config in &resource_panel.custom_config {
+                            match custom_config {
+                                CustomPanelConfig::Id(config_id, panel_config) => {
+                                    if build_id(&info[0], &info[1]).cmp(config_id)
+                                        == Ordering::Equal
+                                    {
+                                        config = panel_config.clone();
+                                        break;
+                                    };
+                                }
+                                CustomPanelConfig::Type(config_type, panel_config) => {
+                                    if *config_type == info[1] {
+                                        config = panel_config.clone();
+                                    }
+                                }
+                            };
+                        }
+                        self.use_resource(
+                            &build_id(&info[0], &info[1]),
+                            Some(match &*info[1] {
+                                "CustomRect" => Box::new(config.custom_rect_config.clone()),
+                                "Image" => Box::new(config.image_config.clone()),
+                                "Text" => Box::new(config.text_config.clone()),
+                                _ => Box::new(config.image_config.clone()),
+                            }),
+                            ui,
+                        )?;
                     }
                     let mut point_list = [[None, None], [None, None]];
                     for point in resource_point_list {
@@ -4336,11 +4305,40 @@ impl App {
                                         * (resource_panel.scroll_progress[0]
                                             / resource_panel.scroll_length[0])
                             };
-                            self.replace_resource(
-                                &format!("{}XScroll", &id.name),
-                                background.clone().background_type(&match config.clone() {
-                                    BackgroundType::CustomRect(config) => {
-                                        BackgroundType::CustomRect(
+                            self.use_resource(
+                                &build_id(format!("{}XScroll", &id.name), "Background"),
+                                Some(Box::new(
+                                    BackgroundConfig::default().background_type(Some(match config
+                                        .clone()
+                                    {
+                                        BackgroundType::CustomRect(config) => {
+                                            BackgroundType::CustomRect(
+                                                config
+                                                    .clip_rect(Some(Some(
+                                                        PositionSizeConfig::default()
+                                                            .origin_position(
+                                                                position[0],
+                                                                position[1],
+                                                            )
+                                                            .origin_size(size[0], size[1]),
+                                                    )))
+                                                    .ignore_render_layer(Some(true))
+                                                    .hidden(Some(resource_panel.hidden))
+                                                    .position_size_config(Some(
+                                                        PositionSizeConfig::default()
+                                                            .display_method(
+                                                                HorizontalAlign::Left,
+                                                                VerticalAlign::Bottom,
+                                                            )
+                                                            .origin_position(
+                                                                line_position,
+                                                                position[1] + size[1] - margin[1],
+                                                            )
+                                                            .origin_size(line_length, width),
+                                                    )),
+                                            )
+                                        }
+                                        BackgroundType::Image(config) => BackgroundType::Image(
                                             config
                                                 .clip_rect(Some(Some(
                                                     PositionSizeConfig::default()
@@ -4361,34 +4359,9 @@ impl App {
                                                         )
                                                         .origin_size(line_length, width),
                                                 )),
-                                        )
-                                    }
-                                    BackgroundType::Image(config) => BackgroundType::Image(
-                                        config
-                                            .clip_rect(Some(Some(
-                                                PositionSizeConfig::default()
-                                                    .origin_position(position[0], position[1])
-                                                    .origin_size(size[0], size[1]),
-                                            )))
-                                            .ignore_render_layer(Some(true))
-                                            .hidden(Some(resource_panel.hidden))
-                                            .position_size_config(Some(
-                                                PositionSizeConfig::default()
-                                                    .display_method(
-                                                        HorizontalAlign::Left,
-                                                        VerticalAlign::Bottom,
-                                                    )
-                                                    .origin_position(
-                                                        line_position,
-                                                        position[1] + size[1] - margin[1],
-                                                    )
-                                                    .origin_size(line_length, width),
-                                            )),
-                                    ),
-                                }),
-                            )?;
-                            self.use_resource(
-                                &build_id(format!("{}XScroll", &id.name), "Background"),
+                                        ),
+                                    })),
+                                )),
                                 ui,
                             )?;
                             let line_length = if resource_panel.scroll_length[0] == 0_f32 {
@@ -4415,11 +4388,40 @@ impl App {
                                         * (resource_panel.scroll_progress[1]
                                             / resource_panel.scroll_length[1])
                             };
-                            self.replace_resource(
-                                &format!("{}YScroll", &id.name),
-                                background.background_type(&match config.clone() {
-                                    BackgroundType::CustomRect(config) => {
-                                        BackgroundType::CustomRect(
+                            self.use_resource(
+                                &build_id(format!("{}YScroll", &id.name), "Background"),
+                                Some(Box::new(
+                                    BackgroundConfig::default().background_type(Some(match config
+                                        .clone()
+                                    {
+                                        BackgroundType::CustomRect(config) => {
+                                            BackgroundType::CustomRect(
+                                                config
+                                                    .clip_rect(Some(Some(
+                                                        PositionSizeConfig::default()
+                                                            .origin_position(
+                                                                position[0],
+                                                                position[1],
+                                                            )
+                                                            .origin_size(size[0], size[1]),
+                                                    )))
+                                                    .ignore_render_layer(Some(true))
+                                                    .hidden(Some(resource_panel.hidden))
+                                                    .position_size_config(Some(
+                                                        PositionSizeConfig::default()
+                                                            .display_method(
+                                                                HorizontalAlign::Right,
+                                                                VerticalAlign::Top,
+                                                            )
+                                                            .origin_position(
+                                                                position[0] + size[0] - margin[1],
+                                                                line_position,
+                                                            )
+                                                            .origin_size(width, line_length),
+                                                    )),
+                                            )
+                                        }
+                                        BackgroundType::Image(config) => BackgroundType::Image(
                                             config
                                                 .clip_rect(Some(Some(
                                                     PositionSizeConfig::default()
@@ -4440,34 +4442,9 @@ impl App {
                                                         )
                                                         .origin_size(width, line_length),
                                                 )),
-                                        )
-                                    }
-                                    BackgroundType::Image(config) => BackgroundType::Image(
-                                        config
-                                            .clip_rect(Some(Some(
-                                                PositionSizeConfig::default()
-                                                    .origin_position(position[0], position[1])
-                                                    .origin_size(size[0], size[1]),
-                                            )))
-                                            .ignore_render_layer(Some(true))
-                                            .hidden(Some(resource_panel.hidden))
-                                            .position_size_config(Some(
-                                                PositionSizeConfig::default()
-                                                    .display_method(
-                                                        HorizontalAlign::Right,
-                                                        VerticalAlign::Top,
-                                                    )
-                                                    .origin_position(
-                                                        position[0] + size[0] - margin[1],
-                                                        line_position,
-                                                    )
-                                                    .origin_size(width, line_length),
-                                            )),
-                                    ),
-                                }),
-                            )?;
-                            self.use_resource(
-                                &build_id(format!("{}YScroll", &id.name), "Background"),
+                                        ),
+                                    })),
+                                )),
                                 ui,
                             )?;
                         }
@@ -4538,11 +4515,44 @@ impl App {
                                         * (resource_panel.scroll_progress[0]
                                             / resource_panel.scroll_length[0])
                             };
-                            self.replace_resource(
-                                &format!("{}XScroll", &id.name),
-                                background.clone().background_type(&match config.clone() {
-                                    BackgroundType::CustomRect(config) => {
-                                        BackgroundType::CustomRect(
+                            self.use_resource(
+                                &build_id(format!("{}XScroll", &id.name), "Background"),
+                                Some(Box::new(
+                                    BackgroundConfig::default().background_type(Some(match config
+                                        .clone()
+                                    {
+                                        BackgroundType::CustomRect(config) => {
+                                            BackgroundType::CustomRect(
+                                                config
+                                                    .clip_rect(Some(Some(
+                                                        PositionSizeConfig::default()
+                                                            .origin_position(
+                                                                position[0],
+                                                                position[1],
+                                                            )
+                                                            .origin_size(size[0], size[1]),
+                                                    )))
+                                                    .ignore_render_layer(Some(true))
+                                                    .hidden(Some(resource_panel.hidden))
+                                                    .position_size_config(Some(
+                                                        PositionSizeConfig::default()
+                                                            .display_method(
+                                                                HorizontalAlign::Left,
+                                                                VerticalAlign::Bottom,
+                                                            )
+                                                            .origin_position(
+                                                                line_position,
+                                                                position[1] + size[1] - margin[1],
+                                                            )
+                                                            .origin_size(line_length, width),
+                                                    ))
+                                                    .alpha(Some(resource_panel.scroll_bar_alpha[0]))
+                                                    .border_alpha(Some(
+                                                        resource_panel.scroll_bar_alpha[0],
+                                                    )),
+                                            )
+                                        }
+                                        BackgroundType::Image(config) => BackgroundType::Image(
                                             config
                                                 .clip_rect(Some(Some(
                                                     PositionSizeConfig::default()
@@ -4564,44 +4574,15 @@ impl App {
                                                         .origin_size(line_length, width),
                                                 ))
                                                 .alpha(Some(resource_panel.scroll_bar_alpha[0]))
-                                                .border_alpha(Some(
+                                                .background_alpha(Some(
+                                                    resource_panel.scroll_bar_alpha[0],
+                                                ))
+                                                .overlay_alpha(Some(
                                                     resource_panel.scroll_bar_alpha[0],
                                                 )),
-                                        )
-                                    }
-                                    BackgroundType::Image(config) => BackgroundType::Image(
-                                        config
-                                            .clip_rect(Some(Some(
-                                                PositionSizeConfig::default()
-                                                    .origin_position(position[0], position[1])
-                                                    .origin_size(size[0], size[1]),
-                                            )))
-                                            .ignore_render_layer(Some(true))
-                                            .hidden(Some(resource_panel.hidden))
-                                            .position_size_config(Some(
-                                                PositionSizeConfig::default()
-                                                    .display_method(
-                                                        HorizontalAlign::Left,
-                                                        VerticalAlign::Bottom,
-                                                    )
-                                                    .origin_position(
-                                                        line_position,
-                                                        position[1] + size[1] - margin[1],
-                                                    )
-                                                    .origin_size(line_length, width),
-                                            ))
-                                            .alpha(Some(resource_panel.scroll_bar_alpha[0]))
-                                            .background_alpha(Some(
-                                                resource_panel.scroll_bar_alpha[0],
-                                            ))
-                                            .overlay_alpha(Some(
-                                                resource_panel.scroll_bar_alpha[0],
-                                            )),
-                                    ),
-                                }),
-                            )?;
-                            self.use_resource(
-                                &build_id(format!("{}XScroll", &id.name), "Background"),
+                                        ),
+                                    })),
+                                )),
                                 ui,
                             )?;
                             let line_length = if resource_panel.scroll_length[0] == 0_f32 {
@@ -4628,11 +4609,44 @@ impl App {
                                         * (resource_panel.scroll_progress[1]
                                             / resource_panel.scroll_length[1])
                             };
-                            self.replace_resource(
-                                &format!("{}YScroll", &id.name),
-                                background.clone().background_type(&match config.clone() {
-                                    BackgroundType::CustomRect(config) => {
-                                        BackgroundType::CustomRect(
+                            self.use_resource(
+                                &build_id(format!("{}YScroll", &id.name), "Background"),
+                                Some(Box::new(
+                                    BackgroundConfig::default().background_type(Some(match config
+                                        .clone()
+                                    {
+                                        BackgroundType::CustomRect(config) => {
+                                            BackgroundType::CustomRect(
+                                                config
+                                                    .clip_rect(Some(Some(
+                                                        PositionSizeConfig::default()
+                                                            .origin_position(
+                                                                position[0],
+                                                                position[1],
+                                                            )
+                                                            .origin_size(size[0], size[1]),
+                                                    )))
+                                                    .ignore_render_layer(Some(true))
+                                                    .hidden(Some(resource_panel.hidden))
+                                                    .position_size_config(Some(
+                                                        PositionSizeConfig::default()
+                                                            .display_method(
+                                                                HorizontalAlign::Right,
+                                                                VerticalAlign::Top,
+                                                            )
+                                                            .origin_position(
+                                                                position[0] + size[0] - margin[1],
+                                                                line_position,
+                                                            )
+                                                            .origin_size(width, line_length),
+                                                    ))
+                                                    .alpha(Some(resource_panel.scroll_bar_alpha[1]))
+                                                    .border_alpha(Some(
+                                                        resource_panel.scroll_bar_alpha[1],
+                                                    )),
+                                            )
+                                        }
+                                        BackgroundType::Image(config) => BackgroundType::Image(
                                             config
                                                 .clip_rect(Some(Some(
                                                     PositionSizeConfig::default()
@@ -4654,44 +4668,15 @@ impl App {
                                                         .origin_size(width, line_length),
                                                 ))
                                                 .alpha(Some(resource_panel.scroll_bar_alpha[1]))
-                                                .border_alpha(Some(
+                                                .background_alpha(Some(
+                                                    resource_panel.scroll_bar_alpha[1],
+                                                ))
+                                                .overlay_alpha(Some(
                                                     resource_panel.scroll_bar_alpha[1],
                                                 )),
-                                        )
-                                    }
-                                    BackgroundType::Image(config) => BackgroundType::Image(
-                                        config
-                                            .clip_rect(Some(Some(
-                                                PositionSizeConfig::default()
-                                                    .origin_position(position[0], position[1])
-                                                    .origin_size(size[0], size[1]),
-                                            )))
-                                            .ignore_render_layer(Some(true))
-                                            .hidden(Some(resource_panel.hidden))
-                                            .position_size_config(Some(
-                                                PositionSizeConfig::default()
-                                                    .display_method(
-                                                        HorizontalAlign::Right,
-                                                        VerticalAlign::Top,
-                                                    )
-                                                    .origin_position(
-                                                        position[0] + size[0] - margin[1],
-                                                        line_position,
-                                                    )
-                                                    .origin_size(width, line_length),
-                                            ))
-                                            .alpha(Some(resource_panel.scroll_bar_alpha[1]))
-                                            .background_alpha(Some(
-                                                resource_panel.scroll_bar_alpha[1],
-                                            ))
-                                            .overlay_alpha(Some(
-                                                resource_panel.scroll_bar_alpha[1],
-                                            )),
-                                    ),
-                                }),
-                            )?;
-                            self.use_resource(
-                                &build_id(format!("{}YScroll", &id.name), "Background"),
+                                        ),
+                                    })),
+                                )),
                                 ui,
                             )?;
                         }

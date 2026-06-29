@@ -2,8 +2,8 @@
 //!
 //! 此文件包含基本前端资源。基本前端资源可以单独使用，也可被用于创建高级前端资源。
 use crate::{
-    BasicFrontResource, BasicFrontResourceConfig, DisplayInfo, PositionSizeConfig,
-    RustConstructorResource,
+    BasicFrontResource, BasicFrontResourceConfig, Config, DisplayInfo, FrontResource,
+    PositionSizeConfig, RustConstructorResource,
 };
 #[cfg(feature = "rc_bevy")]
 use egui_bevy::{ColorImage, TextureHandle};
@@ -127,27 +127,47 @@ pub struct CustomRectConfig {
     pub tags: Option<Vec<[String; 2]>>,
 }
 
+impl Config for CustomRectConfig {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn convert_to_resource(&self) -> Box<dyn FrontResource> {
+        Box::new(CustomRect::default().from_config(self))
+    }
+
+    fn convert_from_resource(&self, resource: Box<dyn FrontResource>) -> Option<Box<dyn Config>> {
+        if let Some(resource) = resource.as_any().downcast_ref::<CustomRect>() {
+            Some(Box::new(CustomRectConfig::from_resource(resource)))
+        } else {
+            None
+        }
+    }
+}
+
 impl CustomRectConfig {
-    pub fn from_custom_rect(custom_rect: &CustomRect) -> Self {
+    pub fn from_resource(resource: &CustomRect) -> Self {
         Self {
-            position_size_config: Some(
-                custom_rect.basic_front_resource_config.position_size_config,
-            ),
-            clip_rect: Some(custom_rect.basic_front_resource_config.clip_rect),
-            hidden: Some(custom_rect.display_info.hidden),
-            ignore_render_layer: Some(custom_rect.display_info.ignore_render_layer),
-            rounding: Some(custom_rect.rounding),
-            color: Some(custom_rect.color),
-            alpha: Some(custom_rect.alpha),
-            overlay_color: Some(custom_rect.overlay_color),
-            overlay_alpha: Some(custom_rect.overlay_alpha),
-            border_width: Some(custom_rect.border_width),
-            border_color: Some(custom_rect.border_color),
-            border_alpha: Some(custom_rect.border_alpha),
-            overlay_border_color: Some(custom_rect.overlay_border_color),
-            overlay_border_alpha: Some(custom_rect.overlay_border_alpha),
-            border_kind: Some(custom_rect.border_kind),
-            tags: Some(custom_rect.tags.clone()),
+            position_size_config: Some(resource.basic_front_resource_config.position_size_config),
+            clip_rect: Some(resource.basic_front_resource_config.clip_rect),
+            hidden: Some(resource.display_info.hidden),
+            ignore_render_layer: Some(resource.display_info.ignore_render_layer),
+            rounding: Some(resource.rounding),
+            color: Some(resource.color),
+            alpha: Some(resource.alpha),
+            overlay_color: Some(resource.overlay_color),
+            overlay_alpha: Some(resource.overlay_alpha),
+            border_width: Some(resource.border_width),
+            border_color: Some(resource.border_color),
+            border_alpha: Some(resource.border_alpha),
+            overlay_border_color: Some(resource.overlay_border_color),
+            overlay_border_alpha: Some(resource.overlay_border_alpha),
+            border_kind: Some(resource.border_kind),
+            tags: Some(resource.tags.clone()),
         }
     }
 
@@ -346,14 +366,6 @@ impl RustConstructorResource for CustomRect {
         self
     }
 
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        Some(self.display_info)
-    }
-
-    fn modify_display_info(&mut self, display_info: DisplayInfo) {
-        self.display_info = display_info;
-    }
-
     fn display_tags(&self) -> Vec<[String; 2]> {
         self.tags.clone()
     }
@@ -370,6 +382,68 @@ impl RustConstructorResource for CustomRect {
             self.tags.extend(tags.iter().cloned());
         };
     }
+
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        Some(self)
+    }
+}
+
+impl FrontResource for CustomRect {
+    fn convert_to_config(&self) -> Box<dyn Config> {
+        Box::new(CustomRectConfig::from_resource(self))
+    }
+
+    fn convert_from_config(&mut self, config: Box<dyn Config>) -> Option<Box<dyn FrontResource>> {
+        if let Some(config) = config.as_any().downcast_ref::<CustomRectConfig>() {
+            Some(Box::new(self.clone().from_config(config)))
+        } else {
+            None
+        }
+    }
+
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        Some(self)
+    }
 }
 
 impl BasicFrontResource for CustomRect {
@@ -383,6 +457,10 @@ impl BasicFrontResource for CustomRect {
 
     fn display_clip_rect(&self) -> Option<PositionSizeConfig> {
         self.basic_front_resource_config.clip_rect
+    }
+
+    fn display_display_info(&self) -> DisplayInfo {
+        self.display_info
     }
 
     fn display_position(&self) -> [f32; 2] {
@@ -406,6 +484,34 @@ impl BasicFrontResource for CustomRect {
 
     fn modify_clip_rect(&mut self, clip_rect: Option<PositionSizeConfig>) {
         self.basic_front_resource_config.clip_rect = clip_rect;
+    }
+
+    fn modify_display_info(&mut self, display_info: DisplayInfo) {
+        self.display_info = display_info;
+    }
+
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_front(&self) -> Box<dyn FrontResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_front_dyn(&self) -> &dyn FrontResource {
+        self
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> &mut dyn FrontResource {
+        self
+    }
+
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource {
+        self
     }
 }
 
@@ -479,8 +585,8 @@ impl CustomRect {
         if let Some(border_kind) = config.border_kind {
             self.border_kind = border_kind;
         };
-        if let Some(tags) = config.tags.clone() {
-            self.tags = tags;
+        if let Some(ref tags) = config.tags {
+            self.tags = tags.clone();
         };
         self
     }
@@ -720,22 +826,44 @@ pub struct ImageConfig {
     pub tags: Option<Vec<[String; 2]>>,
 }
 
+impl Config for ImageConfig {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn convert_to_resource(&self) -> Box<dyn FrontResource> {
+        Box::new(Image::default().from_config(self))
+    }
+
+    fn convert_from_resource(&self, resource: Box<dyn FrontResource>) -> Option<Box<dyn Config>> {
+        if let Some(resource) = resource.as_any().downcast_ref::<Image>() {
+            Some(Box::new(ImageConfig::from_resource(resource)))
+        } else {
+            None
+        }
+    }
+}
+
 impl ImageConfig {
-    pub fn from_image(image: &Image) -> Self {
+    pub fn from_resource(resource: &Image) -> Self {
         Self {
-            position_size_config: Some(image.basic_front_resource_config.position_size_config),
-            clip_rect: Some(image.basic_front_resource_config.clip_rect),
-            hidden: Some(image.display_info.hidden),
-            ignore_render_layer: Some(image.display_info.ignore_render_layer),
-            alpha: Some(image.alpha),
-            overlay_color: Some(image.overlay_color),
-            overlay_alpha: Some(image.overlay_alpha),
-            background_color: Some(image.background_color),
-            background_alpha: Some(image.background_alpha),
-            rotate_angle: Some(image.rotate_angle),
-            rotate_center: Some(image.rotate_center),
-            image_load_method: Some(image.image_load_method.clone()),
-            tags: Some(image.tags.clone()),
+            position_size_config: Some(resource.basic_front_resource_config.position_size_config),
+            clip_rect: Some(resource.basic_front_resource_config.clip_rect),
+            hidden: Some(resource.display_info.hidden),
+            ignore_render_layer: Some(resource.display_info.ignore_render_layer),
+            alpha: Some(resource.alpha),
+            overlay_color: Some(resource.overlay_color),
+            overlay_alpha: Some(resource.overlay_alpha),
+            background_color: Some(resource.background_color),
+            background_alpha: Some(resource.background_alpha),
+            rotate_angle: Some(resource.rotate_angle),
+            rotate_center: Some(resource.rotate_center),
+            image_load_method: Some(resource.image_load_method.clone()),
+            tags: Some(resource.tags.clone()),
         }
     }
 
@@ -911,14 +1039,6 @@ impl RustConstructorResource for Image {
         self
     }
 
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        Some(self.display_info)
-    }
-
-    fn modify_display_info(&mut self, display_info: DisplayInfo) {
-        self.display_info = display_info;
-    }
-
     fn display_tags(&self) -> Vec<[String; 2]> {
         self.tags.clone()
     }
@@ -935,6 +1055,68 @@ impl RustConstructorResource for Image {
             self.tags.extend(tags.iter().cloned());
         };
     }
+
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        Some(self)
+    }
+}
+
+impl FrontResource for Image {
+    fn convert_to_config(&self) -> Box<dyn Config> {
+        Box::new(ImageConfig::from_resource(self))
+    }
+
+    fn convert_from_config(&mut self, config: Box<dyn Config>) -> Option<Box<dyn FrontResource>> {
+        if let Some(config) = config.as_any().downcast_ref::<ImageConfig>() {
+            Some(Box::new(self.clone().from_config(config)))
+        } else {
+            None
+        }
+    }
+
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        Some(self)
+    }
 }
 
 impl BasicFrontResource for Image {
@@ -948,6 +1130,10 @@ impl BasicFrontResource for Image {
 
     fn display_clip_rect(&self) -> Option<PositionSizeConfig> {
         self.basic_front_resource_config.clip_rect
+    }
+
+    fn display_display_info(&self) -> DisplayInfo {
+        self.display_info
     }
 
     fn display_position(&self) -> [f32; 2] {
@@ -971,6 +1157,34 @@ impl BasicFrontResource for Image {
 
     fn modify_clip_rect(&mut self, clip_rect: Option<PositionSizeConfig>) {
         self.basic_front_resource_config.clip_rect = clip_rect;
+    }
+
+    fn modify_display_info(&mut self, display_info: DisplayInfo) {
+        self.display_info = display_info;
+    }
+
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_front(&self) -> Box<dyn FrontResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_front_dyn(&self) -> &dyn FrontResource {
+        self
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> &mut dyn FrontResource {
+        self
     }
 }
 
@@ -1031,11 +1245,11 @@ impl Image {
         if let Some(rotate_center) = config.rotate_center {
             self.rotate_center = rotate_center;
         };
-        if let Some(image_load_method) = config.image_load_method.clone() {
-            self.image_load_method = image_load_method;
+        if let Some(ref image_load_method) = config.image_load_method {
+            self.image_load_method = image_load_method.clone();
         };
-        if let Some(tags) = config.tags.clone() {
-            self.tags = tags;
+        if let Some(ref tags) = config.tags {
+            self.tags = tags.clone();
         };
         self
     }
@@ -1226,25 +1440,47 @@ pub struct TextConfig {
     pub tags: Option<Vec<[String; 2]>>,
 }
 
+impl Config for TextConfig {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn convert_to_resource(&self) -> Box<dyn FrontResource> {
+        Box::new(Text::default().from_config(self))
+    }
+
+    fn convert_from_resource(&self, resource: Box<dyn FrontResource>) -> Option<Box<dyn Config>> {
+        if let Some(resource) = resource.as_any().downcast_ref::<Text>() {
+            Some(Box::new(TextConfig::from_resource(resource)))
+        } else {
+            None
+        }
+    }
+}
+
 impl TextConfig {
-    pub fn from_text(text: &Text) -> Self {
+    pub fn from_resource(resource: &Text) -> Self {
         Self {
-            position_size_config: Some(text.basic_front_resource_config.position_size_config),
-            clip_rect: Some(text.basic_front_resource_config.clip_rect),
-            hidden: Some(text.display_info.hidden),
-            ignore_render_layer: Some(text.display_info.ignore_render_layer),
-            content: Some(text.content.clone()),
-            font_size: Some(text.font_size),
-            color: Some(text.color),
-            alpha: Some(text.alpha),
-            background_color: Some(text.background_color),
-            background_alpha: Some(text.background_alpha),
-            background_rounding: Some(text.background_rounding),
-            font: Some(text.font.clone()),
-            selectable: Some(text.selectable),
-            hyperlink_text: Some(text.hyperlink_text.clone()),
-            auto_fit: Some(text.auto_fit),
-            tags: Some(text.tags.clone()),
+            position_size_config: Some(resource.basic_front_resource_config.position_size_config),
+            clip_rect: Some(resource.basic_front_resource_config.clip_rect),
+            hidden: Some(resource.display_info.hidden),
+            ignore_render_layer: Some(resource.display_info.ignore_render_layer),
+            content: Some(resource.content.clone()),
+            font_size: Some(resource.font_size),
+            color: Some(resource.color),
+            alpha: Some(resource.alpha),
+            background_color: Some(resource.background_color),
+            background_alpha: Some(resource.background_alpha),
+            background_rounding: Some(resource.background_rounding),
+            font: Some(resource.font.clone()),
+            selectable: Some(resource.selectable),
+            hyperlink_text: Some(resource.hyperlink_text.clone()),
+            auto_fit: Some(resource.auto_fit),
+            tags: Some(resource.tags.clone()),
         }
     }
 
@@ -1471,14 +1707,6 @@ impl RustConstructorResource for Text {
         self
     }
 
-    fn display_display_info(&self) -> Option<DisplayInfo> {
-        Some(self.display_info)
-    }
-
-    fn modify_display_info(&mut self, display_info: DisplayInfo) {
-        self.display_info = display_info;
-    }
-
     fn display_tags(&self) -> Vec<[String; 2]> {
         self.tags.clone()
     }
@@ -1495,6 +1723,68 @@ impl RustConstructorResource for Text {
             self.tags.extend(tags.iter().cloned());
         };
     }
+
+    fn convert_to_front(&self) -> Option<Box<dyn FrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_front_dyn(&self) -> Option<&dyn FrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> Option<&mut dyn FrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        Some(self)
+    }
+}
+
+impl FrontResource for Text {
+    fn convert_to_config(&self) -> Box<dyn Config> {
+        Box::new(TextConfig::from_resource(self))
+    }
+
+    fn convert_from_config(&mut self, config: Box<dyn Config>) -> Option<Box<dyn FrontResource>> {
+        if let Some(config) = config.as_any().downcast_ref::<TextConfig>() {
+            Some(Box::new(self.clone().from_config(config)))
+        } else {
+            None
+        }
+    }
+
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_basic_front(&self) -> Option<Box<dyn BasicFrontResource>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_basic_front_dyn(&self) -> Option<&dyn BasicFrontResource> {
+        Some(self)
+    }
+
+    fn convert_to_basic_front_dyn_mut(&mut self) -> Option<&mut dyn BasicFrontResource> {
+        Some(self)
+    }
 }
 
 impl BasicFrontResource for Text {
@@ -1508,6 +1798,10 @@ impl BasicFrontResource for Text {
 
     fn display_clip_rect(&self) -> Option<PositionSizeConfig> {
         self.basic_front_resource_config.clip_rect
+    }
+
+    fn display_display_info(&self) -> DisplayInfo {
+        self.display_info
     }
 
     fn display_position(&self) -> [f32; 2] {
@@ -1531,6 +1825,34 @@ impl BasicFrontResource for Text {
 
     fn modify_clip_rect(&mut self, clip_rect: Option<PositionSizeConfig>) {
         self.basic_front_resource_config.clip_rect = clip_rect;
+    }
+
+    fn modify_display_info(&mut self, display_info: DisplayInfo) {
+        self.display_info = display_info;
+    }
+
+    fn convert_to_original(&self) -> Box<dyn RustConstructorResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_front(&self) -> Box<dyn FrontResource> {
+        Box::new(self.clone())
+    }
+
+    fn convert_to_original_dyn(&self) -> &dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_original_dyn_mut(&mut self) -> &mut dyn RustConstructorResource {
+        self
+    }
+
+    fn convert_to_front_dyn(&self) -> &dyn FrontResource {
+        self
+    }
+
+    fn convert_to_front_dyn_mut(&mut self) -> &mut dyn FrontResource {
+        self
     }
 }
 
@@ -1576,8 +1898,8 @@ impl Text {
         if let Some(ignore_render_layer) = config.ignore_render_layer {
             self.display_info.ignore_render_layer = ignore_render_layer;
         };
-        if let Some(content) = config.content.clone() {
-            self.content = content;
+        if let Some(ref content) = config.content {
+            self.content = content.clone();
         };
         if let Some(font_size) = config.font_size {
             self.font_size = font_size;
@@ -1597,20 +1919,20 @@ impl Text {
         if let Some(background_rounding) = config.background_rounding {
             self.background_rounding = background_rounding;
         };
-        if let Some(font) = config.font.clone() {
-            self.font = font;
+        if let Some(ref font) = config.font {
+            self.font = font.clone();
         };
         if let Some(selectable) = config.selectable {
             self.selectable = selectable;
         };
-        if let Some(hyperlink_text) = config.hyperlink_text.clone() {
-            self.hyperlink_text = hyperlink_text;
+        if let Some(ref hyperlink_text) = config.hyperlink_text {
+            self.hyperlink_text = hyperlink_text.clone();
         };
         if let Some(auto_fit) = config.auto_fit {
             self.auto_fit = auto_fit;
         };
-        if let Some(tags) = config.tags.clone() {
-            self.tags = tags;
+        if let Some(ref tags) = config.tags {
+            self.tags = tags.clone();
         };
         self
     }
