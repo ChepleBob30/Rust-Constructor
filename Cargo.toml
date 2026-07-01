@@ -10,11 +10,11 @@ keywords = ["develop", "gui"]
 repository = "https://github.com/ChepleBob30/Rust-Constructor"
 categories = ["gui", "development-tools", "game-development"]
 homepage = "https://github.com/ChepleBob30/Rust-Constructor"
+include = ["src/**/*", "Cargo.toml"]
 
 [lib]
 name = "rust_constructor"
 path = "src/lib.rs"
-include = ["src/**/*", "Cargo.toml"]
 
 [dependencies]
 egui_standard = { package = "egui", version = "0.35.0", default-features = false, optional = true }
