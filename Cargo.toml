@@ -1,6 +1,6 @@
 [package]
 name = "rust-constructor"
-version = "2.12.0"
+version = "2.12.1"
 edition = "2024"
 authors = ["ChepleBob <Cheple_Bob@outlook.com>"]
 description = "A cross-platform `GUI` framework built on `egui` as well as compatible with `bevy`, the simplest way to develop `GUI` projects with `Rust`."
@@ -14,6 +14,7 @@ homepage = "https://github.com/ChepleBob30/Rust-Constructor"
 [lib]
 name = "rust_constructor"
 path = "src/lib.rs"
+include = ["src/**/*", "Cargo.toml"]
 
 [dependencies]
 egui_standard = { package = "egui", version = "0.35.0", default-features = false, optional = true }

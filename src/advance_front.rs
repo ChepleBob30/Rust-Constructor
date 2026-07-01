@@ -1635,12 +1635,6 @@ impl Switch {
     }
 
     #[inline]
-    pub fn state(mut self, state: usize) -> Self {
-        self.state = state;
-        self
-    }
-
-    #[inline]
     pub fn tags(mut self, tags: &[[String; 2]], replace: bool) -> Self {
         if replace {
             self.tags = tags.to_owned();

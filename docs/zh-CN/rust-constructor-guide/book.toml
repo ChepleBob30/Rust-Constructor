@@ -1,0 +1,15 @@
+[book]
+title = "Rust Constructor 指南"
+authors = ["ChepleBob"]
+language = "zh-CN"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/ChepleBob30/Rust-Constructor"
+
+[output.html.playground]
+runnable = false

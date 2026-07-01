@@ -698,18 +698,15 @@ impl CustomRect {
 ///
 /// 支持Debug特征派生的TextureHandle包装器。
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct DebugTextureHandle(pub TextureHandle);
+pub struct DebugTextureHandle {
+    pub path: String,
+    pub texture_handle: TextureHandle,
+}
 
 impl Debug for DebugTextureHandle {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         // 只输出类型信息，不输出具体纹理数据
         f.debug_struct("DebugTextureHandle").finish()
-    }
-}
-
-impl DebugTextureHandle {
-    pub fn new(texture_handle: &TextureHandle) -> Self {
-        Self(texture_handle.clone())
     }
 }
 
@@ -721,6 +718,11 @@ impl DebugTextureHandle {
 /// 后台工作线程完成图片加载后返回的结果。
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct LoadedImageData {
+    /// The path of the image file.
+    ///
+    /// 图片的路径。
+    pub path: String,
+
     /// Decoded image data ready for texture upload on the main thread.
     ///
     /// 已解码的图像数据，可在主线程直接上传为纹理。
@@ -1019,6 +1021,11 @@ pub struct Image {
     /// 用于加载图像的方法。
     pub image_load_method: ImageLoadMethod,
 
+    /// A storage list of all loaded textures.
+    ///
+    /// 所有已加载纹理的存储列表。
+    pub texture_list: Vec<DebugTextureHandle>,
+
     /// The path for loading the image in the previous frame.
     ///
     /// 上一帧加载图片的路径。
@@ -1204,6 +1211,7 @@ impl Default for Image {
             rotate_angle: 0_f32,
             rotate_center: [0_f32, 0_f32],
             image_load_method: ImageLoadMethod::ByPath((String::new(), [false, false])),
+            texture_list: Vec::new(),
             last_frame_path: String::new(),
             tags: Vec::new(),
         }

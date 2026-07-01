@@ -130,7 +130,7 @@ unsafe impl Sync for App {}
 impl Default for App {
     fn default() -> Self {
         info!(
-            "Rust Constructor v2.12.0 Hello from Rust Constructor author. (https://github.com/ChepleBob30/Rust-Constructor)"
+            "Rust Constructor v2.12.1 Hello from Rust Constructor author. (https://github.com/ChepleBob30/Rust-Constructor)"
         );
         App {
             rust_constructor_resource: Vec::new(),
@@ -184,7 +184,10 @@ impl App {
             }
             let texture =
                 ui.load_texture(&id.name, loaded_data.color_image, TextureOptions::LINEAR);
-            let handle = DebugTextureHandle::new(&texture);
+            let handle = DebugTextureHandle {
+                path: loaded_data.path,
+                texture_handle: texture,
+            };
             if let Ok(image) = self.get_resource_mut::<Image>(&id) {
                 image.texture = Some(handle);
                 info!("Loaded texture for image '{}'.", id.name);
@@ -220,64 +223,83 @@ impl App {
                         match image.image_load_method {
                             ImageLoadMethod::ByPath((ref path, flip)) => {
                                 if *path != image.last_frame_path {
-                                    image.last_frame_path = path.clone();
-                                    let resource_name = render_resource.0.name.clone();
-                                    let path_clone = path.clone();
-                                    let flip_val = flip;
-                                    let completed_arc = Arc::clone(&self.image_loader.completed);
-                                    thread::spawn(move || {
-                                        const MAX_TEXTURE_SIDE: u32 = 8192;
-                                        match std::fs::read(&path_clone) {
-                                            Ok(bytes) => {
-                                                if let Ok(img) = image::load_from_memory(&bytes) {
-                                                    let (w, h) = (img.width(), img.height());
-                                                    let img = if w > MAX_TEXTURE_SIDE
-                                                        || h > MAX_TEXTURE_SIDE
+                                    if let Some(texture) =
+                                        image.texture_list.iter().find(|x| x.path == *path)
+                                    {
+                                        image.texture = Some(texture.clone())
+                                    } else {
+                                        image.last_frame_path = path.clone();
+                                        let resource_name = render_resource.0.name.clone();
+                                        let path_clone = path.clone();
+                                        let flip_val = flip;
+                                        let completed_arc =
+                                            Arc::clone(&self.image_loader.completed);
+                                        thread::spawn(move || {
+                                            const MAX_TEXTURE_SIDE: u32 = 8192;
+                                            match std::fs::read(&path_clone) {
+                                                Ok(bytes) => {
+                                                    if let Ok(img) = image::load_from_memory(&bytes)
                                                     {
-                                                        let scale = MAX_TEXTURE_SIDE as f64
-                                                            / w.max(h) as f64;
-                                                        let new_w =
-                                                            (w as f64 * scale).round() as u32;
-                                                        let new_h =
-                                                            (h as f64 * scale).round() as u32;
-                                                        img.resize(
+                                                        let (w, h) = (img.width(), img.height());
+                                                        let img = if w > MAX_TEXTURE_SIDE
+                                                            || h > MAX_TEXTURE_SIDE
+                                                        {
+                                                            let scale = MAX_TEXTURE_SIDE as f64
+                                                                / w.max(h) as f64;
+                                                            let new_w =
+                                                                (w as f64 * scale).round() as u32;
+                                                            let new_h =
+                                                                (h as f64 * scale).round() as u32;
+                                                            img.resize(
                                                             new_w,
                                                             new_h,
                                                             image::imageops::FilterType::Triangle,
                                                         )
-                                                    } else {
-                                                        img
-                                                    };
-                                                    let color_data = match flip_val {
-                                                        [true, true] => {
-                                                            img.fliph().flipv().into_rgba8()
-                                                        }
-                                                        [true, false] => img.fliph().into_rgba8(),
-                                                        [false, true] => img.flipv().into_rgba8(),
-                                                        _ => img.into_rgba8(),
-                                                    };
-                                                    let color_image =
-                                                        ColorImage::from_rgba_unmultiplied(
-                                                            [
-                                                                color_data.width() as usize,
-                                                                color_data.height() as usize,
-                                                            ],
-                                                            &color_data.into_raw(),
+                                                        } else {
+                                                            img
+                                                        };
+                                                        let color_data = match flip_val {
+                                                            [true, true] => {
+                                                                img.fliph().flipv().into_rgba8()
+                                                            }
+                                                            [true, false] => {
+                                                                img.fliph().into_rgba8()
+                                                            }
+                                                            [false, true] => {
+                                                                img.flipv().into_rgba8()
+                                                            }
+                                                            _ => img.into_rgba8(),
+                                                        };
+                                                        let color_image =
+                                                            ColorImage::from_rgba_unmultiplied(
+                                                                [
+                                                                    color_data.width() as usize,
+                                                                    color_data.height() as usize,
+                                                                ],
+                                                                &color_data.into_raw(),
+                                                            );
+                                                        completed_arc.lock().unwrap().insert(
+                                                            resource_name,
+                                                            LoadedImageData {
+                                                                path: path_clone,
+                                                                color_image,
+                                                            },
                                                         );
-                                                    completed_arc.lock().unwrap().insert(
-                                                        resource_name,
-                                                        LoadedImageData { color_image },
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    warn!(
+                                                        "[ImageLoadFailed]draw_resource_by_index: Failed to load an image from the path '{path_clone}': {e}",
                                                     );
                                                 }
                                             }
-                                            Err(e) => {
-                                                warn!(
-                                                    "[ImageLoadFailed]draw_resource_by_index: Failed to load an image from the path '{path_clone}': {e}",
-                                                );
-                                            }
-                                        }
-                                    });
-                                }
+                                        });
+                                    }
+                                } else if let Some(ref texture) = image.texture
+                                    && !image.texture_list.iter().any(|x| x.path == *path)
+                                {
+                                    image.texture_list.push(texture.clone());
+                                };
                             }
                             ImageLoadMethod::ByTexture(ref texture) => {
                                 image.texture = Some(texture.clone());
@@ -296,7 +318,10 @@ impl App {
                                 loaded.color_image,
                                 TextureOptions::LINEAR,
                             );
-                            image.texture = Some(DebugTextureHandle::new(&texture));
+                            image.texture = Some(DebugTextureHandle {
+                                path: loaded.path,
+                                texture_handle: texture,
+                            });
                         }
                         [image.position, image.size] = position_size_processor(
                             image.basic_front_resource_config.position_size_config,
@@ -314,7 +339,7 @@ impl App {
                                 );
 
                                 // 直接绘制图片
-                                Img::new(ImageSource::Texture((&texture.0).into()))
+                                Img::new(ImageSource::Texture((&texture.texture_handle).into()))
                                     .tint(Color32::from_rgba_unmultiplied(
                                         image.overlay_color[0],
                                         image.overlay_color[1],

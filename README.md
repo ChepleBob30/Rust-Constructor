@@ -5,9 +5,9 @@
 [![Author: ChepleBob](https://img.shields.io/badge/Author-ChepleBob-00B4D8)](https://github.com/ChepleBob30)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-5F4C49)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-v2.12.0-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
+[![Version](https://img.shields.io/badge/Version-v2.12.1-7F1C13)](https://github.com/ChepleBob30/Rust-Constructor/releases)
 
-English | [简体中文](./README_zh.md)
+English | [简体中文](./docs/zh-CN/README_zh-CN.md)
 
 ---
 
@@ -25,24 +25,18 @@ English | [简体中文](./README_zh.md)
 
 ## Version Update Information
 
-- The current version is `v2.12.0 Structural Reform`.
-  - This update introduces a new architecture and adds a series of improvements.
+- The current version is `v2.12.1`.
+  - This update fixes some known issues.
   - **Improvements**
-    - Added `Config` struct types for all frontend resources (specifically, added `BackgroundConfig`, `ResourcePanelConfig`, `SwitchConfig`);
-    - Added the `Config` trait to manage `Config` struct types;
-    - Added the `FrontResource` trait, covering basic frontend resources and advanced frontend resources, for managing frontend resources;
-    - Added a series of utility methods to `BasicFrontResource` and `RustConstructorResource` for converting among the three resource types;
-    - Added `PanelConfig` and `CustomPanelConfig` for configuring how resources inside `ResourcePanel` are displayed;
-    - Added `overall_config` and `custom_config` fields to `ResourcePanel` to customize the display of internal resources;
-    - `use_resource` now accepts an additional `Option<Box<dyn Config>>` parameter, which can be used to configure the resource being used;
     - Improved some code.
   - **Breaking Changes**
-    - Removed the `auto_update` and `use_background_tags` fields from `Background`;
-    - Removed the `use_switch_tags` field from `Switch`;
-    - Moved `display_info` and `modify_display_info` into `BasicFrontResource`;
-    - Renamed all resource-reading creation methods of `Config` struct types to `from_resource`;
+    - Removed the `state` method from `Switch`;
+    - `DebugTextureHandle` has been extended with a `path` field, and the original field has been renamed to `texture_handle`;
+    - `LoadedImageData` has been extended with a `path` field;
+    - `Image` has been extended with a `texture_list` field for storing all loaded textures;
     - Modified some content.
   - **Bug Fixes**
+    - Fixed the issue where textures were reloaded every time the image path was toggled;
     - Fixed some known issues.
 
 ---
@@ -59,7 +53,7 @@ English | [简体中文](./README_zh.md)
 
 - To introduce `Rust Constructor`, please add `rust_constructor = "x.y.z"` (please replace xyz as needed) to your `toml`.
 - If you want to launch an `App` and perform some simple operations, it is recommended to refer to the [official documentation of egui](https://github.com/emilk/egui).
-- You can refer to the official tutorial of `Rust Constructor` (not necessarily up-to-date) [Rust Constructor Guide](https://github.com/ChepleBob30/Rust-Constructor-Guide).
+- You can refer to the official documentation of `Rust Constructor` (not necessarily up-to-date) [Rust Constructor Guide](./docs/en/rust-constructor-guide/src/introduction.md).
 - Here is a simple example:
 
 ```rust
@@ -125,17 +119,13 @@ eframe::run_native(
 
 - A7: Of course you can. However, `Rust Constructor`'s advanced front-end resources do provide some practical functions that may not be replaceable.
 
-- Q8: How to view the official documentation of `Rust Constructor`?
+- Q8: Under what form is `Rust Constructor` open-sourced? How to contribute?
 
-- A8: What you are seeing now is the core content of the documentation. If you still have questions, please check [`Rust Constructor Guide`](https://github.com/ChepleBob30/Rust-Constructor-Guide). This is the official tutorial of `Rust Constructor`, but it may not be up-to-date.
+- A8: The source code of `Rust Constructor` is open-sourced under the `MIT` license. Due to personal reasons, I do not recommend contributing to this project. If you have any ideas, please fork this project and maintain it yourself.
 
-- Q9: Under what form is `Rust Constructor` open-sourced? How to contribute?
+- Q9: I still have unresolved issues, what should I do?
 
-- A9: The source code of `Rust Constructor` is open-sourced under the `MIT` license. Due to personal reasons, I do not recommend contributing to this project. If you have any ideas, please fork this project and maintain it yourself.
-
-- Q10: I still have unresolved issues, what should I do?
-
-- A10: Please raise an [`issue`](https://github.com/ChepleBob30/Rust-Constructor/issues) in this project repository, and I will try my best to solve all problems.
+- A9: Please raise an [`issue`](https://github.com/ChepleBob30/Rust-Constructor/issues) in this project repository, and I will try my best to solve all problems.
 
 ---
 
